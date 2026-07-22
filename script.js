@@ -1103,14 +1103,21 @@ class HarmoBoxApp {
             if (e.target.id === 'settings-overlay') this.closeSettings(); // clic sur le fond, pas la fenêtre
         });
 
-        // Menu contextuel (clic droit / appui long) : Renommer / Supprimer, réutilisés pour les
-        // morceaux et les dossiers (voir attachContextMenuTrigger, appelé depuis renderFilesPanel).
+        // Menu contextuel (clic droit / appui long) : Renommer/Modifier, Dupliquer (accords
+        // uniquement), Supprimer — réutilisé pour les morceaux, les dossiers ET les accords de la
+        // grille (voir attachContextMenuTrigger, appelé depuis renderFilesPanel et loadProgression).
         document.querySelector('[data-ctx-action="rename"]').onclick = () => {
             const t = this.contextMenuTarget;
             this.closeContextMenu();
             if (!t) return;
             if (t.type === 'song') this.startInlineRenameSong(t.id);
             else if (t.type === 'folder') this.startInlineRenameFolder(t.name);
+            else if (t.type === 'chord') this.editChord(t.section, t.index);
+        };
+        document.querySelector('[data-ctx-action="duplicate"]').onclick = () => {
+            const t = this.contextMenuTarget;
+            this.closeContextMenu();
+            if (t && t.type === 'chord') this.duplicateChord(t.section, t.index);
         };
         document.querySelector('[data-ctx-action="delete"]').onclick = () => {
             const t = this.contextMenuTarget;
@@ -1118,6 +1125,10 @@ class HarmoBoxApp {
             if (!t) return;
             if (t.type === 'song') this.deleteSongById(t.id);
             else if (t.type === 'folder') this.deleteFolder(t.name);
+            // Contrairement à Suppr au clavier (rapide, protégé par Ctrl+Z) : ce chemin est le SEUL
+            // moyen de supprimer un accord sur tactile (plus de petit bouton dédié), une confirmation
+            // évite qu'un appui long malheureux n'efface un accord sans qu'on s'en rende compte.
+            else if (t.type === 'chord') { if (confirm('Supprimer cet accord ?')) this.removeChord(t.section, t.index); }
         };
         document.addEventListener('pointerdown', (e) => {
             const menu = document.getElementById('context-menu');
@@ -1694,21 +1705,12 @@ class HarmoBoxApp {
                     if (s.span === 1) cls += ' sz1'; else if (s.span === 2) cls += ' sz2';
                     const style = `grid-column: ${s.col + 1} / span ${s.span}; grid-row: ${s.row + 1};`;
 
-                    // Boutons (modifier + dupliquer) et méta uniquement sur le premier segment
-                    const actions = s.isFirst ? `
-                        <div class="cell-actions">
-                            <button class="cell-edit" onclick="event.stopPropagation(); app.editChord(${si}, ${s.index})"
-                                    title="Modifier cet accord" aria-label="Modifier cet accord">${svgIcon('pencil')}</button>
-                            <button class="cell-dup" onclick="event.stopPropagation(); app.duplicateChord(${si}, ${s.index})"
-                                    title="Dupliquer cet accord" aria-label="Dupliquer cet accord">${svgIcon('duplicate')}</button>
-                        </div>` : '';
                     const romanEl = s.isFirst ? `<span class="cell-roman">${roman}</span>` : '';
                     const metaEl = s.isFirst ? `<span class="cell-meta">${styleLabel}</span>` : '';
                     const contFlag = (s.split && !s.isFirst) ? ' <span class="cell-cont">↩</span>' : '';
 
                     return `
-                    <div class="${cls}" data-section="${si}" data-index="${s.index}" style="${style}" title="Toucher pour écouter · glisser pour déplacer">
-                        ${actions}
+                    <div class="${cls}" data-section="${si}" data-index="${s.index}" style="${style}" title="Toucher pour écouter · double-clic/double-tap pour modifier · clic droit/appui long pour plus d'options">
                         ${romanEl}
                         <span class="cell-sym">${sym}${contFlag}</span>
                         ${metaEl}
@@ -1745,6 +1747,13 @@ class HarmoBoxApp {
         });
         host.querySelectorAll('.prog-section-duplicate').forEach(btn => {
             btn.onclick = (e) => { e.stopPropagation(); this.duplicateSection(+btn.dataset.section); };
+        });
+        // Clic droit (ordinateur) / appui long (tactile) sur un accord : menu Modifier/Dupliquer/
+        // Supprimer — remplace les petits boutons ✎/⧉ jusque-là superposés à la case (illisibles et
+        // quasi impossibles à toucher précisément au doigt sur téléphone).
+        host.querySelectorAll('.grid-cell').forEach(cell => {
+            const section = +cell.dataset.section, index = +cell.dataset.index;
+            this.attachContextMenuTrigger(cell, () => ({ type: 'chord', section, index }));
         });
 
         this.updateSaveButtons();
@@ -2550,8 +2559,25 @@ class HarmoBoxApp {
     }
 
     openContextMenu(x, y, target) {
+        // Un appui long sur une case de la grille ouvre ce menu AVANT le relâchement du doigt : le
+        // glisser/tap de la grille (this.drag, voir onGridPointerDown) est encore armé sur ce même
+        // geste et déclencherait sinon AUSSI une sélection/écoute au pointerup qui suit. On l'annule
+        // ici plutôt que d'entremêler cette logique dans attachContextMenuTrigger (générique, aussi
+        // utilisé pour les morceaux/dossiers, qui n'ont pas ce système de glisser).
+        if (this.drag) {
+            window.removeEventListener('pointermove', this._onMove);
+            window.removeEventListener('pointerup', this._onUp);
+            window.removeEventListener('pointercancel', this._onUp);
+            this.drag = null;
+        }
+
         this.contextMenuTarget = target;
         const menu = document.getElementById('context-menu');
+        // Libellé et actions disponibles diffèrent selon le type de cible (morceau/dossier : Renommer
+        // + Supprimer ; accord : Modifier + Dupliquer + Supprimer).
+        const isChord = target && target.type === 'chord';
+        menu.querySelector('[data-ctx-action="rename"] .ctx-label').textContent = isChord ? 'Modifier' : 'Renommer';
+        menu.querySelector('[data-ctx-action="duplicate"]').hidden = !isChord;
         menu.hidden = false;
         const pad = 8;
         const left = Math.min(x, window.innerWidth - menu.offsetWidth - pad);
@@ -2970,7 +2996,7 @@ class HarmoBoxApp {
         const section = +gridEl.dataset.section;
 
         const cell = e.target.closest('.grid-cell');
-        if (cell && !e.target.closest('.cell-actions')) {
+        if (cell) {
             const rect = cell.getBoundingClientRect();
             this.drag = {
                 section,
@@ -3039,12 +3065,10 @@ class HarmoBoxApp {
 
         if (!d.moved) {
             const now = Date.now();
-            const touch = d.pointerType === 'touch';
             const isSecondTap = this._lastTap && this._lastTap.section === d.section && this._lastTap.index === d.index && (now - this._lastTap.time) < 350;
             if (isSecondTap) {
                 this._lastTap = null;
-                if (touch) this.removeChord(d.section, d.index); // double-tap (tactile) = supprimer
-                else this.editChord(d.section, d.index);         // double-clic (souris/stylet) = modifier
+                this.editChord(d.section, d.index); // double-clic/double-tap = modifier
             } else {
                 this._lastTap = { section: d.section, index: d.index, time: now };
                 this.selectChord(d.section, d.index); // simple tap/clic = écouter
@@ -3576,12 +3600,14 @@ class HarmoBoxApp {
         // Les préréglages rythmiques (Tenu, Noire...) se choisissent désormais uniquement via le
         // menu déroulant Lecture ; cette rangée ne garde que l'écoute directe et le nettoyage.
         const hasSelection = this.seqSelections.length > 0;
-        const delSelLabel = this.seqSelections.length > 1 ? `sélection (${this.seqSelections.length})` : 'sélection';
+        const countSuffix = this.seqSelections.length > 1 ? ` (${this.seqSelections.length})` : '';
         html += `<div class="seq-presets">
             <button type="button" id="seq-play" class="btn-prog">${svgIcon('play')} Lecture</button>
             <button type="button" id="seq-stop" class="btn-stop">${svgIcon('stop')} Stop</button>
             <button type="button" data-preset="clear" class="seq-delete-btn">${svgIcon('trash')} tout</button>
-            <button type="button" id="seq-delete-selection" class="seq-delete-btn" ${hasSelection ? '' : 'disabled'}>${svgIcon('trash')} ${delSelLabel}</button>
+            <button type="button" id="seq-delete-selection" class="seq-delete-btn" ${hasSelection ? '' : 'disabled'}>${svgIcon('trash')}
+                <span class="lbl-full">sélection${countSuffix}</span><span class="lbl-short">Sélect.${countSuffix}</span>
+            </button>
         </div>`;
         host.innerHTML = html;
 

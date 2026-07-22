@@ -59,7 +59,7 @@ body {
     flex: none;
     vertical-align: -3px;
 }
-button, .icon-btn, .prog-section-del, .cell-edit, .cell-dup, .seq-presets button, .seq-delete-btn {
+button, .icon-btn, .prog-section-del, .seq-presets button, .seq-delete-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -529,9 +529,12 @@ main {
    renversement/drop/octave. minmax(0,1fr) laisse les colonnes se réduire ensemble plutôt que
    déborder si le contenu est plus large que prévu. Les boutons « ⋯ »/basse vivent désormais dans
    .card-head-actions (en-tête de la carte), plus dans la grille elle-même. */
+/* Mobile : 2 colonnes (3 lignes) — 3 colonnes serrées tronquaient le texte des select (ex. "1 mesure"
+   -> "1 mesur", "Sans drop" -> "Sans dro"). Repasse à 3 colonnes sur grand écran (voir plus bas),
+   où le clavier/souris tolère mieux des select plus étroits. */
 .accord-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
 }
 .accord-grid select { min-width: 0; }
@@ -588,8 +591,13 @@ select:disabled {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: wrap;
     gap: 8px;
 }
+/* Sur écran étroit, "Tempo : 120 BPM" + TAP + 🔔 ne tiennent pas sur une ligne : mieux vaut que le
+   libellé bascule entier à la ligne (flex-wrap ci-dessus) plutôt que de laisser son propre texte se
+   couper au milieu ("Tempo : 120" / "BPM" sur deux lignes séparées, illisible). */
+.bpm-head label { white-space: nowrap; }
 
 /* Bouton tap tempo : compact, à côté du libellé BPM ; un bref flash confirme chaque tap pris en compte */
 .tap-tempo-btn {
@@ -970,8 +978,6 @@ button:active { transform: translateY(1px); }
     box-shadow: inset 0 0 0 2px var(--accent);
     z-index: 2;
 }
-.grid-cell.drag-placeholder .cell-actions { visibility: hidden; }
-
 /* Clone flottant qui suit le doigt / la souris */
 .grid-cell.drag-ghost {
     position: fixed;
@@ -1024,49 +1030,6 @@ button:active { transform: translateY(1px); }
     white-space: nowrap;
     overflow: hidden;
     padding: 0 4px;
-}
-
-/* Boutons ✎ / suppr en haut à droite de chaque case */
-.cell-actions {
-    position: absolute;
-    top: 3px;
-    right: 4px;
-    display: flex;
-    gap: 3px;
-}
-
-.cell-edit,
-.cell-dup {
-    flex: none;
-    min-width: 0;
-    padding: 3px 5px;
-    line-height: 1;
-    background: rgba(10,10,10,0.6);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    color: var(--text-muted);
-    opacity: 0.55;
-    transition: all 0.15s ease;
-}
-.cell-edit .icon, .cell-dup .icon { width: 11px; height: 11px; vertical-align: 0; }
-
-.grid-cell:hover .cell-edit,
-.grid-cell:hover .cell-dup,
-.grid-cell.selected .cell-edit,
-.grid-cell.selected .cell-dup,
-.grid-cell.editing .cell-edit,
-.grid-cell.editing .cell-dup { opacity: 1; }
-
-.cell-edit:hover {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: #000;
-}
-
-.cell-dup:hover {
-    background: #2f81f7;
-    border-color: #2f81f7;
-    color: #fff;
 }
 
 /* Police réduite pour les segments courts */
@@ -1288,10 +1251,16 @@ select.song-select-narrow {
 .mode-field select { flex: 4; min-width: 0; }
 .mode-field .icon-btn { flex: 1; min-width: 24px; width: auto; height: auto; padding: 0; }
 
+/* Libellé de bouton en deux versions (ex. "sélection" / "Sélect.") : la version courte ne s'affiche
+   que sur écran étroit, là où la version complète ne rentre pas (voir #seq-delete-selection). */
+.lbl-short { display: none; }
+
 @media (max-width: 480px) {
     .chord-grid { --row-h: 56px; }
     .cell-sym { font-size: var(--fs-md); }
     .seq-cell { height: 30px; }
+    .lbl-full { display: none; }
+    .lbl-short { display: inline; }
 }
 
 /* ============================================================
@@ -1341,7 +1310,7 @@ select.song-select-narrow {
     .control-card h2 { font-size: var(--fs-sm); margin-bottom: 8px; }
     .select-group { gap: 8px; }
     .select-group + .select-group { margin-top: 8px; }
-    .accord-grid { gap: 8px; }
+    .accord-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
     select { padding: 9px 10px; font-size: var(--fs-select); min-width: 0; }
     button { padding: 10px; font-size: var(--fs-base); }
     .bpm-group { margin-top: 10px; gap: 6px; }
