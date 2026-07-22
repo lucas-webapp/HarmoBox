@@ -53,6 +53,9 @@ const CHORD_INTERVALS = {
     m7b5: [{ semi: 0, degree: 0, role: 'root' }, { semi: 3, degree: 2, role: 'third' }, { semi: 6, degree: 4, role: 'fifth' }, { semi: 10, degree: 6, role: 'seventh' }],
     aug:  [{ semi: 0, degree: 0, role: 'root' }, { semi: 4, degree: 2, role: 'third' }, { semi: 8, degree: 4, role: 'fifth' }],
     add9: [{ semi: 0, degree: 0, role: 'root' }, { semi: 4, degree: 2, role: 'third' }, { semi: 7, degree: 4, role: 'fifth' }, { semi: 14, degree: 1, role: 'ext' }],
+    // add11 : garde la tierce (contrairement à dom11, qui l'omet) puisqu'il n'y a pas de 7e pour
+    // épaissir le mélange tierce/11e — 11e placée au-dessus de l'octave, comme la 9e d'add9.
+    add11: [{ semi: 0, degree: 0, role: 'root' }, { semi: 4, degree: 2, role: 'third' }, { semi: 7, degree: 4, role: 'fifth' }, { semi: 17, degree: 3, role: 'ext' }],
     maj9: [{ semi: 0, degree: 0, role: 'root' }, { semi: 4, degree: 2, role: 'third' }, { semi: 7, degree: 4, role: 'fifth' }, { semi: 11, degree: 6, role: 'seventh' }, { semi: 14, degree: 1, role: 'ext' }],
     m9:   [{ semi: 0, degree: 0, role: 'root' }, { semi: 3, degree: 2, role: 'third' }, { semi: 7, degree: 4, role: 'fifth' }, { semi: 10, degree: 6, role: 'seventh' }, { semi: 14, degree: 1, role: 'ext' }],
     dom9: [{ semi: 0, degree: 0, role: 'root' }, { semi: 4, degree: 2, role: 'third' }, { semi: 7, degree: 4, role: 'fifth' }, { semi: 10, degree: 6, role: 'seventh' }, { semi: 14, degree: 1, role: 'ext' }],
@@ -67,7 +70,7 @@ const QUALITY_LABEL = {
     maj: '', min: 'm', maj7: 'maj7', min7: 'm7', dom7: '7',
     sus2: 'sus2', sus4: 'sus4', '6': '6', m6: 'm6',
     dim: 'dim', dim7: 'dim7', m7b5: 'm7b5', aug: 'aug',
-    add9: 'add9', maj9: 'maj9', m9: 'm9', dom9: '9', dom11: '11', dom13: '13'
+    add9: 'add9', add11: 'add11', maj9: 'maj9', m9: 'm9', dom9: '9', dom11: '11', dom13: '13'
 };
 
 // Tonalités majeures qui s'écrivent conventionnellement avec des bémols (Db, Eb, F, Ab, Bb) :
@@ -1210,10 +1213,16 @@ class HarmoBoxApp {
 
         // Révèle/masque les accords moins courants (diminués, augmentés, enrichis...) dans le
         // menu Qualité, sans les faire disparaître de la valeur déjà choisie si elle en fait partie.
+        // Retire/réinsère réellement les <option> du DOM (voir toggleSelectOptions) plutôt que de
+        // jouer sur `hidden`, qui n'est pas fiable sur tous les navigateurs (Safari iOS notamment
+        // continue d'afficher des <option hidden> dans le sélecteur natif).
+        const qualitySelect = document.getElementById('quality');
+        this._complexQualityOptions = Array.from(qualitySelect.querySelectorAll('option.opt-complex'));
+        this.toggleSelectOptions(qualitySelect, this._complexQualityOptions, false); // masqué par défaut
         document.getElementById('toggle-complex-quality').onclick = (e) => {
             const btn = e.currentTarget;
             const show = !btn.classList.contains('active');
-            document.querySelectorAll('#quality option.opt-complex').forEach(o => { o.hidden = !show; });
+            this.toggleSelectOptions(qualitySelect, this._complexQualityOptions, show);
             btn.classList.toggle('active', show);
         };
 
@@ -1232,10 +1241,12 @@ class HarmoBoxApp {
         // qui ne les connaît pas) ; une fois les 5 autres modes affichés, ils reprennent leur vrai nom
         // (ionien/éolien) pour rester cohérents avec le reste de la liste.
         const modeSelect = document.getElementById('global-mode');
+        this._complexModeOptions = Array.from(modeSelect.querySelectorAll('option.opt-mode'));
+        this.toggleSelectOptions(modeSelect, this._complexModeOptions, false); // masqué par défaut
         document.getElementById('toggle-complex-mode').onclick = (e) => {
             const btn = e.currentTarget;
             const show = !btn.classList.contains('active');
-            document.querySelectorAll('#global-mode option.opt-mode').forEach(o => { o.hidden = !show; });
+            this.toggleSelectOptions(modeSelect, this._complexModeOptions, show);
             modeSelect.querySelector('option[value="maj"]').textContent = show ? 'Ionien' : 'Majeur';
             modeSelect.querySelector('option[value="min"]').textContent = show ? 'Éolien' : 'Mineur';
             btn.classList.toggle('active', show);
@@ -1376,6 +1387,43 @@ class HarmoBoxApp {
         document.getElementById('guitar-prev').onclick = () => this.cycleGuitarFingering(-1);
         document.getElementById('guitar-next').onclick = () => this.cycleGuitarFingering(1);
         this.applyVizVisibility();
+    }
+
+    // Bascule la visibilité de certaines <option> d'un <select> en les retirant/réinsérant réellement
+    // du DOM (plutôt que de jouer sur l'attribut `hidden`, qui n'est pas fiable dans tous les
+    // navigateurs pour des <option> — certaines versions de Safari iOS continuent de les afficher
+    // dans le sélecteur natif). Ne retire jamais l'option actuellement sélectionnée, pour ne pas
+    // changer silencieusement la valeur en cours. `options` doit lister les <option> dans leur ordre
+    // d'origine (elles sont réinsérées dans cet ordre, à la fin du select).
+    toggleSelectOptions(select, options, show) {
+        options.forEach(o => {
+            if (show) {
+                if (!o.isConnected) select.appendChild(o);
+            } else if (o.value !== select.value && o.isConnected) {
+                select.removeChild(o);
+            }
+        });
+    }
+
+    // Révèle le menu Qualité/Mode complet AVANT d'y affecter une valeur venue de données sauvegardées
+    // (accord ou morceau enregistré avec une qualité/un mode moins courant) — sinon, l'option
+    // correspondante n'existe pas encore dans le DOM (voir toggleSelectOptions) et l'affectation
+    // échouerait silencieusement. Même principe que pour la basse différente (voir editChord).
+    revealComplexQualityIfNeeded(quality) {
+        const btn = document.getElementById('toggle-complex-quality');
+        if (btn.classList.contains('active') || !this._complexQualityOptions.some(o => o.value === quality)) return;
+        this.toggleSelectOptions(document.getElementById('quality'), this._complexQualityOptions, true);
+        btn.classList.add('active');
+    }
+
+    revealComplexModeIfNeeded(mode) {
+        const btn = document.getElementById('toggle-complex-mode');
+        if (btn.classList.contains('active') || !this._complexModeOptions.some(o => o.value === mode)) return;
+        const modeSelect = document.getElementById('global-mode');
+        this.toggleSelectOptions(modeSelect, this._complexModeOptions, true);
+        modeSelect.querySelector('option[value="maj"]').textContent = 'Ionien';
+        modeSelect.querySelector('option[value="min"]').textContent = 'Éolien';
+        btn.classList.add('active');
     }
 
     // Lit les réglages de l'interface et renvoie un Chord
@@ -1852,6 +1900,7 @@ class HarmoBoxApp {
         this.activeSection = section;
 
         document.getElementById('root').value = d.root;
+        this.revealComplexQualityIfNeeded(d.quality);
         document.getElementById('quality').value = d.quality;
         document.getElementById('duration').value = String(beatsFromData(d));
         document.getElementById('octave').value = String(octaveFromData(d));
@@ -1927,8 +1976,8 @@ class HarmoBoxApp {
             const ROMAN_SUFFIX = {
                 maj7: '7', dom7: '7', min7: '7',
                 '6': '6', m6: '6',
-                add9: '9', maj9: '9', m9: '9', dom9: '9',
-                dom11: '11', dom13: '13'
+                add9: '9', m9: '9', dom9: '9',
+                add11: '11', dom11: '11', dom13: '13'
             };
             if (ROMAN_SUFFIX[chordQuality]) numeral += ROMAN_SUFFIX[chordQuality];
         }
@@ -2266,6 +2315,7 @@ class HarmoBoxApp {
         if (!song) return;
         setCurrentSongId(id);
         document.getElementById('global-root').value = song.root || 'C';
+        this.revealComplexModeIfNeeded(song.mode || 'maj');
         document.getElementById('global-mode').value = song.mode || 'maj';
         document.getElementById('time-sig').value = song.timeSig || '4/4';
         document.getElementById('groove').value = song.groove || 'straight';

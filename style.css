@@ -346,6 +346,7 @@ button, .icon-btn, .prog-section-del, .seq-presets button, .seq-delete-btn {
     position: relative;
     flex: none;
     width: 38px;
+    min-width: 0; /* sinon la règle générique button{min-width:120px} l'emporte sur width */
     height: 20px;
     border-radius: 999px;
     border: 1px solid #333;
