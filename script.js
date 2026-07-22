@@ -1037,6 +1037,7 @@ const METRONOME_VOLUME_KEY = 'harmoboxMetronomeVolume';
 const METRONOME_SOUND_KEY = 'harmoboxMetronomeSound';
 const GENERAL_VOLUME_KEY = 'harmoboxGeneralVolume';
 const AUTOPLAY_SELECT_KEY = 'harmoboxAutoplaySelect';
+const METRONOME_COUNTIN_KEY = 'harmoboxMetronomeCountIn';
 
 // Curseurs de volume (0-100, plus intuitif qu'une valeur en décibels) : 0 = silence, 100 = 0 dB
 // (plein volume « normal »), avec un plancher à -40 dB pour que même « presque muet » reste audible
@@ -1220,6 +1221,11 @@ class HarmoBoxApp {
         // Lecture automatique d'un accord de la grille dès qu'on clique dessus pour le sélectionner
         // (activée par défaut, comme le comportement historique) — désactivable dans Paramètres > Son.
         this.autoplaySelect = localStorage.getItem(AUTOPLAY_SELECT_KEY) !== '0';
+
+        // Clics du décompte avant le début de la lecture de la grille (activés par défaut) —
+        // distinct du métronome PENDANT la lecture (this.metronomeDuringPlayback, bouton dédié) :
+        // désactivable séparément dans Paramètres > Son (voir playProgression).
+        this.metronomeCountIn = localStorage.getItem(METRONOME_COUNTIN_KEY) !== '0';
 
         // Chaque accord choisit sa propre banque de son (voir data.instrument) : plusieurs
         // instruments Tone.js peuvent donc jouer simultanément. Construits à la demande et mis en
@@ -2040,9 +2046,13 @@ class HarmoBoxApp {
             Tone.Transport.schedule((t) => {
                 // Un filet à chaque callback programmé sur le transport (voir schedulePlayback) : une
                 // seule exception, n'importe où, bloquait silencieusement tout le reste de la lecture.
-                try {
-                    this.playMetronomeClick(accent, t);
-                } catch (e) { console.warn('Clic de décompte ignoré :', e.message); }
+                // metronomeCountIn (Paramètres > Son) ne coupe QUE le son : le décompte visuel et le
+                // délai avant le premier accord restent identiques, pour ne rien changer au timing.
+                if (this.metronomeCountIn) {
+                    try {
+                        this.playMetronomeClick(accent, t);
+                    } catch (e) { console.warn('Clic de décompte ignoré :', e.message); }
+                }
                 Tone.Draw.schedule(() => {
                     disp.innerHTML = `Décompte<span class="chord-notes">${label} / ${COUNT_IN}</span>`;
                 }, t);
@@ -2886,6 +2896,12 @@ class HarmoBoxApp {
                     <span class="switch-thumb"></span>
                 </button>
             </div>
+            <div class="settings-toggle-row">
+                <label for="toggle-metronome-countin">Clics du décompte avant la lecture de la grille</label>
+                <button type="button" id="toggle-metronome-countin" class="switch" role="switch" aria-checked="${this.metronomeCountIn}" aria-label="Clics du décompte avant la lecture de la grille">
+                    <span class="switch-thumb"></span>
+                </button>
+            </div>
             <div class="settings-slider-hint">Le volume général s'applique en plus des deux réglages spécifiques ci-dessus, sans changer leur équilibre l'un par rapport à l'autre. Le tempo se règle dans la carte « Morceau » (cliquer sur sa valeur permet de la saisir directement au clavier).</div>`;
 
         document.getElementById('general-volume').oninput = (e) => this.setGeneralVolume(+e.target.value);
@@ -2893,12 +2909,20 @@ class HarmoBoxApp {
         document.getElementById('metronome-volume').oninput = (e) => this.setMetronomeVolume(+e.target.value);
         document.getElementById('metronome-sound').onchange = (e) => this.setMetronomeSound(e.target.value);
         document.getElementById('toggle-autoplay-select').onclick = () => this.setAutoplaySelect(!this.autoplaySelect);
+        document.getElementById('toggle-metronome-countin').onclick = () => this.setMetronomeCountIn(!this.metronomeCountIn);
     }
 
     setAutoplaySelect(on) {
         this.autoplaySelect = on;
         localStorage.setItem(AUTOPLAY_SELECT_KEY, on ? '1' : '0');
         const btn = document.getElementById('toggle-autoplay-select');
+        if (btn) btn.setAttribute('aria-checked', on);
+    }
+
+    setMetronomeCountIn(on) {
+        this.metronomeCountIn = on;
+        localStorage.setItem(METRONOME_COUNTIN_KEY, on ? '1' : '0');
+        const btn = document.getElementById('toggle-metronome-countin');
         if (btn) btn.setAttribute('aria-checked', on);
     }
 
