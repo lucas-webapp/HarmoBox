@@ -895,7 +895,7 @@ class HarmoBoxApp {
         this.metronome.volume.value = percentToDb(this.metronomeVolumePercent);
 
         this.activeSection = 0;    // partie (couplet/refrain/...) ciblée par les contrôles courants
-        this.loopActiveSection = false; // boucle la partie active au lieu de jouer toute la grille (bouton Progression)
+        this.loopActiveSection = false; // boucle la partie active au lieu de jouer toute la grille (bouton Grille)
         this.selectedIndex = null; // accord sélectionné dans la grille (au sein de la partie active)
         this.editingIndex = null;  // accord en cours de modification (au sein de la partie active)
         this.drag = null;          // état de glisser-déposer
@@ -976,7 +976,7 @@ class HarmoBoxApp {
             localStorage.setItem(METRONOME_KEY, this.metronomeDuringPlayback ? '1' : '0');
         };
 
-        // Boucle la partie active (bouton Progression) au lieu de jouer toute la grille — pratique
+        // Boucle la partie active (bouton Grille) au lieu de jouer toute la grille — pratique
         // pour retravailler un couplet/refrain en boucle sans tout rejouer depuis le début à chaque
         // fois. Se désactive-t-elle en cours de lecture : la boucle en cours va jusqu'à son terme
         // naturel plutôt que de couper brutalement (voir playProgression).
@@ -2899,7 +2899,7 @@ class HarmoBoxApp {
         const generalVolumePercent = this.generalVolumePercent;
         const chordVolumePercent = this.chordVolumePercent;
 
-        return Tone.Offline(() => {
+        return Tone.Offline(async () => {
             Tone.Destination.volume.value = percentToDb(generalVolumePercent);
             const volumeNode = new Tone.Volume(percentToDb(chordVolumePercent)).toDestination();
             const instruments = new Map(); // clé instrument -> instance dédiée à ce rendu
@@ -2908,6 +2908,15 @@ class HarmoBoxApp {
                 if (!instruments.has(key)) instruments.set(key, INSTRUMENT_BANKS[key].build().connect(volumeNode));
                 return instruments.get(key);
             };
+
+            // Construit d'abord tous les instruments réellement utilisés dans la grille, PUIS attend
+            // qu'ils soient prêts avant de déclencher la moindre note. Indispensable pour le Piano
+            // (Tone.Sampler) : ses fichiers audio se chargent de façon asynchrone depuis le réseau, et
+            // triggerAttackRelease à un instant absolu s'exécute IMMÉDIATEMENT (contrairement à
+            // Tone.Transport.schedule, différé) — sans cette attente, les accords joués au Piano
+            // restaient silencieux (ou levaient une erreur), le temps que le chargement se termine.
+            sections.forEach(sec => sec.chords.forEach(data => instrumentFor(data.instrument || 'piano')));
+            await Tone.loaded();
 
             let timeOffset = lead;
             sections.forEach(sec => {
