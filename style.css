@@ -1,0 +1,1466 @@
+:root {
+    --bg: #0a0a0a;
+    --card-bg: #161616;
+    --text-main: #e0e0e0;
+    --text-muted: #a0a0a0;
+    --accent: #00e676;
+    --accent-hover: #00c853;
+    --border: #333;
+    --radius: 12px;
+    --font: 'Plus Jakarta Sans', sans-serif;
+
+    /* Échelle typographique unique : toute taille de texte de l'appli s'y réfère (voir plus bas),
+       pour éviter la dérive de valeurs ad hoc (0.56rem, 0.58rem, 0.66rem, 0.78rem, 0.82rem...) qui
+       s'était accumulée au fil des ajouts successifs. */
+    --fs-2xs: 0.66rem;
+    --fs-xs: 0.72rem;
+    --fs-sm: 0.8rem;
+    --fs-base: 0.88rem;
+    --fs-md: 0.95rem;
+    --fs-lg: 1.05rem;
+    --fs-xl: 1.35rem;
+    --fs-2xl: 1.85rem;
+
+    /* Taille dédiée au texte des menus déroulants (<select>) uniquement — légèrement plus petite que
+       --fs-sm, pour que les libellés longs (« 1er renv. », noms de mode...) respirent un peu plus
+       sans toucher à la taille des boutons ni du reste de l'interface. */
+    --fs-select: 0.75rem;
+}
+
+* { box-sizing: border-box; }
+
+/* Règle universelle et définitive : [hidden] doit TOUJOURS masquer l'élément, quel que soit le
+   display (flex, inline-flex, grid...) posé ailleurs sur ce même élément — sans ça, une règle
+   d'auteur qui fixe un display l'emporte sur le masquage par défaut du navigateur pour [hidden]
+   (même à spécificité égale, une règle d'auteur bat toujours la feuille de style native). C'est
+   la cause exacte des bugs déjà rencontrés (fenêtre Paramètres, menu contextuel) : plutôt que de
+   corriger chaque cas un par un à mesure qu'il se manifeste, cette seule règle les couvre tous,
+   présents et à venir. */
+[hidden] { display: none !important; }
+
+body {
+    background: var(--bg);
+    color: var(--text-main);
+    font-family: var(--font);
+    margin: 0;
+    padding: 0;
+    line-height: 1.5;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+/* Icônes en ligne (SVG trait, currentColor) : une seule taille de base, ajustée au cas par cas via
+   les classes ci-dessous plutôt que des tailles éparses. Les boutons pleine largeur (icône + texte)
+   passent en inline-flex pour les aligner proprement avec le libellé. */
+.icon {
+    width: 15px;
+    height: 15px;
+    flex: none;
+    vertical-align: -3px;
+}
+button, .icon-btn, .prog-section-del, .cell-edit, .cell-dup, .seq-presets button, .seq-delete-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+/* Barre haute fixe : bouton Paramètres + mini-logo, groupés en haut à droite (sans bandeau) */
+.top-bar {
+    position: fixed;
+    top: 12px;
+    right: 14px;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.settings-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 999px;
+    background: rgba(22, 22, 22, 0.7);
+    border: 1px solid var(--border);
+    backdrop-filter: blur(6px);
+    color: var(--text-muted);
+}
+.settings-btn:hover { color: var(--text-main); border-color: #454b54; }
+.settings-btn.active { color: var(--accent); border-color: var(--accent); }
+
+.logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 10px 5px 6px;
+    border-radius: 999px;
+    background: rgba(22, 22, 22, 0.7);
+    border: 1px solid var(--border);
+    backdrop-filter: blur(6px);
+    text-decoration: none;
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
+    font-weight: 700;
+    letter-spacing: 0.01em;
+}
+.logo-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 7px;
+    background: var(--accent);
+    color: #000;
+    line-height: 1;
+}
+.logo-mark .icon { width: 13px; height: 13px; vertical-align: 0; }
+.logo-text { color: var(--text-main); font-weight: 800; }
+
+/* ============================================================
+   PARAMÈTRES (fenêtre modale) — bâtie pour grandir : une nav de
+   sections à gauche (une seule pour l'instant : Fichiers) et un
+   panneau de contenu à droite. Ajouter une section plus tard =
+   un bouton de nav + un panneau, rien d'autre à repenser.
+   ============================================================ */
+/* Menu contextuel (clic droit / appui long) : Renommer / Supprimer, réutilisé pour les morceaux et
+   les dossiers de la fenêtre Fichiers. Positionné en JS (openContextMenu) au point du clic/appui. */
+.context-menu {
+    position: fixed;
+    z-index: 200;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    padding: 6px;
+    min-width: 160px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.context-menu button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: flex-start;
+    width: 100%;
+    padding: 9px 10px;
+    background: none;
+    border: none;
+    border-radius: 7px;
+    color: var(--text-main);
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    cursor: pointer;
+    text-align: left;
+}
+.context-menu button:hover { background: #1e2027; }
+.context-menu button[data-ctx-action="delete"] { color: #ff6b6b; }
+.context-menu button[data-ctx-action="delete"]:hover { background: rgba(255, 90, 80, 0.12); }
+
+/* Édition en ligne des titres (morceaux, dossiers) : remplace l'ancien prompt() natif — un simple
+   champ texte à la place du nom, dans son contexte d'origine. */
+.inline-rename-input {
+    background: #1c1e24;
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    color: var(--text-main);
+    font: inherit;
+    padding: 2px 6px;
+    width: 100%;
+    box-sizing: border-box;
+}
+.new-folder-inline { display: inline-flex; flex: 1; }
+.new-folder-inline .inline-rename-input { width: 100%; }
+
+.settings-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(3px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.settings-modal {
+    width: 100%;
+    max-width: 640px;
+    max-height: 82vh;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.settings-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 18px;
+    border-bottom: 1px solid var(--border);
+    flex: none;
+}
+.settings-header h2 { margin: 0; font-size: var(--fs-lg); }
+
+.settings-body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+}
+
+.settings-content {
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+    padding: 18px 20px;
+}
+
+/* Une seule vue qui défile, sans onglet : chaque section a son titre, puis son contenu */
+.settings-section-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 14px;
+    font-size: var(--fs-sm);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-muted);
+}
+.settings-section-sep { height: 1px; background: var(--border); margin: 22px 0; }
+
+/* ---- Panneau Fichiers ---- */
+.files-empty { color: var(--text-muted); font-size: var(--fs-sm); text-align: center; padding: 30px 10px; }
+
+/* Barre d'outils : créer un dossier à gauche, annuler/rétablir à droite */
+.files-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+.files-toolbar-spacer { flex: 1; }
+.files-toolbar .btn-sec { flex: none; padding: 8px 12px; font-size: var(--fs-sm); }
+
+.file-group { margin-bottom: 10px; }
+.file-group summary {
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 6px;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: var(--fs-sm);
+    color: var(--text-main);
+}
+.file-group summary::-webkit-details-marker { display: none; }
+.file-group summary:hover { background: #1e2027; }
+.file-group summary:hover .file-group-actions,
+.file-group summary:focus-within .file-group-actions { opacity: 1; }
+.file-group summary .chev { transition: transform 0.15s ease; flex: none; }
+.file-group[open] summary .chev { transform: rotate(90deg); }
+.file-group summary .count { color: var(--text-muted); font-weight: 400; }
+.file-group-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Actions du dossier (renommer/supprimer) : discrètes, révélées au survol de la rangée seulement,
+   pour ne pas alourdir visuellement chaque en-tête de dossier en permanence */
+.file-group-actions { display: flex; gap: 4px; flex: none; opacity: 0; transition: opacity 0.12s ease; }
+.file-group-actions .icon-btn { width: 24px; height: 24px; }
+.file-group-empty { color: var(--text-muted); font-size: var(--fs-xs); padding: 4px 6px 8px 26px; font-style: italic; }
+
+.file-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 6px 8px 26px;
+    border-radius: 8px;
+}
+.file-row:hover { background: #1c1e24; }
+.file-info { flex: 1; min-width: 0; }
+.file-name {
+    display: block;
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.file-meta { display: block; font-size: var(--fs-xs); color: var(--text-muted); margin-top: 1px; }
+.file-actions { display: flex; align-items: center; gap: 4px; flex: none; }
+.file-folder-select {
+    min-width: 0;
+    width: 108px;
+    padding: 5px 6px;
+    font-size: var(--fs-xs);
+    border-radius: 6px;
+}
+.file-actions .icon-btn { width: 26px; height: 26px; }
+
+/* ---- Panneau Son ---- */
+.settings-slider-row { margin-bottom: 22px; }
+.settings-slider-row:last-child { margin-bottom: 0; }
+.settings-slider-sep { height: 1px; background: var(--border); margin: 0 0 22px; }
+.settings-slider-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    color: var(--text-muted);
+}
+.settings-slider-head .val { color: var(--accent); font-weight: 700; min-width: 2.4em; text-align: right; }
+
+.settings-select-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 22px;
+}
+.settings-select-row label { font-size: var(--fs-sm); font-weight: 600; color: var(--text-muted); }
+.settings-select-row select { flex: none; width: auto; min-width: 160px; padding: 8px 10px; font-size: var(--fs-sm); }
+
+.settings-slider-hint { font-size: var(--fs-xs); color: var(--text-muted); margin-top: 16px; line-height: 1.5; }
+
+@media (max-width: 640px) {
+    .file-actions { flex-wrap: wrap; justify-content: flex-end; }
+    .file-folder-select { width: 92px; }
+}
+
+main {
+    flex: 1;
+    width: 100%;
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 56px 20px 20px;   /* marge du haut dégagée pour ne jamais passer sous le logo fixe */
+    min-height: 0;
+    /* Base mobile : une colonne. Les panneaux "s'aplatissent" pour ordonner les éléments. */
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+/* Sur mobile, on ignore les conteneurs de colonnes : leurs enfants sont ordonnés dans main */
+.col-left, .col-right { display: contents; }
+
+.panel-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+.panel-controls .control-card { margin-bottom: 0; }
+
+/* Ajouter / À la suite / Annuler : actions d'édition de la grille, groupées juste au-dessus de la
+   carte Morceau (pas dans la barre de lecture collante en bas, réservée à Accord/Progression/Stop) */
+.edit-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.edit-actions button {
+    min-width: 0;
+    flex: 1 1 0;
+    padding: 13px 10px;
+    font-size: var(--fs-base);
+}
+
+/* Ordre : réglages → grille → indicateur (accord/notes) → piano → (barre de lecture collante) */
+.panel-controls { order: 1; }
+.history-section { order: 2; }
+#current-chord-display { order: 3; }
+.viz-wrap { order: 4; }
+.transport { order: 5; }
+
+.transport {
+    position: sticky;
+    bottom: 0;
+    z-index: 20;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 10px 20px;
+    margin: 5px -20px -20px;
+    background: rgba(10, 10, 10, 0.95);
+    backdrop-filter: blur(6px);
+    border-top: 1px solid var(--border);
+}
+.transport button {
+    min-width: 0;
+    flex: 1 1 0;
+    padding: 13px 10px;
+    font-size: var(--fs-base);
+}
+
+#current-chord-display {
+    text-align: center;
+    font-size: var(--fs-2xl);
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 0;
+    min-height: 48px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+}
+
+/* Chaque note est son propre "chip" : l'espace généreux (gap) ne sépare QUE les notes entre elles,
+   jamais les caractères à l'intérieur d'une même note (le ♭ doit rester collé à sa lettre) — d'où
+   l'abandon du letter-spacing, qui espaçait tout uniformément. */
+.chord-notes {
+    display: inline-flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px 14px;
+    font-size: var(--fs-md);
+    font-weight: 400;
+    color: var(--text-muted);
+}
+.chord-note { white-space: nowrap; }
+
+/* Le glyphe ♭ a une chasse large dans cette police (espace « intégré » au caractère, pas un
+   espacement CSS) : même un rapprochement de boîte ne suffit pas seul, il faut resserrer franchement
+   des deux côtés pour qu'il paraisse collé à sa lettre. */
+.flat { margin: 0 -0.12em; }
+
+.control-card {
+    background: var(--card-bg);
+    border-radius: var(--radius);
+    padding: 15px;
+    margin-bottom: 15px;
+    border: 1px solid var(--border);
+}
+
+.global-key-card {
+    border: 1px solid var(--accent);
+    background: #0f1c14;
+}
+
+.control-card h2 {
+    margin: 0 0 10px 0;
+    font-size: var(--fs-md);
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+/* En-tête de carte avec actions compactes à droite du titre (séquenceur, morceau...) */
+.card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+.card-head h2 { margin-bottom: 0; }
+
+.card-head-actions {
+    display: flex;
+    gap: 6px;
+    flex: none;
+}
+
+.icon-btn {
+    flex: none;
+    width: 28px;
+    height: 28px;
+    min-width: 0;
+    padding: 0;
+    background: linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0) 50%), #1c2027;
+    color: var(--text-muted);
+    border: 1px solid #333;
+    border-radius: 7px;
+    font-size: var(--fs-sm);
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.03);
+}
+.icon-btn:hover { background: linear-gradient(180deg, rgba(255,255,255,0.09), rgba(255,255,255,0) 50%), #262b33; border-color: #454b54; color: var(--text-main); }
+.icon-btn:active { transform: translateY(1px); box-shadow: inset 0 1px 3px rgba(0,0,0,0.4); }
+
+/* État "actif" (ex. panneau séquenceur ouvert) */
+.icon-btn.active {
+    background: linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0) 50%), rgba(0, 230, 118, 0.14);
+    color: var(--accent);
+    border-color: rgba(0, 230, 118, 0.45);
+}
+
+/* Action mise en avant (Enregistrer) : reste verte même au repos */
+.icon-btn-accent {
+    background: linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0) 50%), rgba(0, 230, 118, 0.10);
+    color: var(--accent);
+    border-color: rgba(0, 230, 118, 0.35);
+}
+.icon-btn-accent:hover { background: linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0) 50%), rgba(0, 230, 118, 0.18); }
+
+.icon-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.icon-btn:disabled:active { transform: none; box-shadow: 0 1px 2px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.03); }
+
+.select-group {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.select-group + .select-group { margin-top: 10px; }
+
+/* Carte Accord : grille à 3 colonnes partagée par les deux rangées (au lieu de deux .select-group
+   indépendants) pour que chaque colonne s'aligne pile d'une rangée à l'autre — note/qualité/durée,
+   renversement/drop/octave. minmax(0,1fr) laisse les colonnes se réduire ensemble plutôt que
+   déborder si le contenu est plus large que prévu. Les boutons « ⋯ »/basse vivent désormais dans
+   .card-head-actions (en-tête de la carte), plus dans la grille elle-même. */
+.accord-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+}
+.accord-grid select { min-width: 0; }
+
+/* Sélecteur de basse différente (accord « sur » une note), masqué par défaut — voir toggle-bass.
+   Même principe que .groove-group : une étiquette + un select, sur une rangée dédiée sous la grille. */
+.bass-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 10px;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+.bass-row select {
+    flex: none;
+    width: auto;
+    min-width: 150px;
+}
+
+select {
+    flex: 1;
+    min-width: 120px;
+    padding: 14px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0) 40%), #222;
+    color: var(--text-main);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: var(--fs-select);
+    font-family: inherit;
+    cursor: pointer;
+}
+
+select:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+select:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.bpm-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 15px;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+.bpm-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.groove-group {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 12px;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+.groove-group select {
+    flex: none;
+    width: auto;
+    min-width: 150px;
+}
+
+/* Valeur du tempo éditable au clavier : se fond dans le texte du libellé tant qu'on n'y touche pas
+   (pas de bordure pleine, pas de fond), mais reste clairement un champ de saisie au survol/focus. */
+.bpm-val-input {
+    width: 2.6em;
+    background: none;
+    border: none;
+    border-bottom: 1px dashed var(--border);
+    color: var(--accent);
+    font: inherit;
+    font-weight: 700;
+    text-align: center;
+    padding: 0 2px;
+    border-radius: 0;
+    cursor: text;
+    -moz-appearance: textfield;
+}
+.bpm-val-input:hover { border-bottom-color: var(--accent); }
+.bpm-val-input:focus { outline: none; border-bottom-style: solid; border-bottom-color: var(--accent); }
+.bpm-val-input::-webkit-inner-spin-button,
+.bpm-val-input::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+input[type=range] {
+    width: 100%;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+/* (l'ancienne .button-group est remplacée par .transport, voir plus haut) */
+
+button {
+    flex: 1;
+    min-width: 120px;
+    padding: 16px;
+    border: none;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: var(--fs-md);
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.1s ease, transform 0.1s ease;
+}
+button:active { transform: translateY(1px); }
+
+/* Boutons : palette homogène et moderne (vert plein = lecture principale,
+   contour vert = progression, contours neutres = secondaires / stop). Chacun reçoit un léger dégradé
+   de surface (reflet du haut) + une ombre portée douce pour une texture plus tactile/« pro » qu'un
+   simple aplat, et perd son ombre au clic pour un vrai retour d'appui. */
+.btn-main {
+    background: linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0) 55%), var(--accent);
+    color: #04160c;
+    border: 1px solid var(--accent);
+    box-shadow: 0 2px 6px rgba(0, 230, 118, 0.25), inset 0 1px 0 rgba(255,255,255,0.25);
+}
+.btn-main:hover { background: linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0) 55%), var(--accent-hover); border-color: var(--accent-hover); }
+.btn-main:active { box-shadow: inset 0 1px 4px rgba(0,0,0,0.2); }
+
+.btn-prog {
+    background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0) 50%), rgba(0, 230, 118, 0.10);
+    color: var(--accent);
+    border: 1px solid rgba(0, 230, 118, 0.45);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+.btn-prog:hover { background: linear-gradient(180deg, rgba(255,255,255,0.1), rgba(255,255,255,0) 50%), rgba(0, 230, 118, 0.18); border-color: var(--accent); }
+.btn-prog:active { box-shadow: inset 0 1px 3px rgba(0,0,0,0.3); }
+
+/* Actions d'édition de la grille (Ajouter/À la suite) : même traitement que .btn-prog, en bleu
+   plutôt qu'en vert, pour rester distinctes des actions de lecture */
+.btn-blue {
+    background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0) 50%), rgba(47, 129, 247, 0.10);
+    color: #2f81f7;
+    border: 1px solid rgba(47, 129, 247, 0.45);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+.btn-blue:hover { background: linear-gradient(180deg, rgba(255,255,255,0.1), rgba(255,255,255,0) 50%), rgba(47, 129, 247, 0.18); border-color: #2f81f7; }
+.btn-blue:active { box-shadow: inset 0 1px 3px rgba(0,0,0,0.3); }
+
+.btn-sec {
+    background: linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0) 50%), #1c2027;
+    color: var(--text-main);
+    border: 1px solid #333;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.03);
+}
+.btn-sec:hover { background: linear-gradient(180deg, rgba(255,255,255,0.09), rgba(255,255,255,0) 50%), #262b33; border-color: #454b54; }
+.btn-sec:active { box-shadow: inset 0 1px 3px rgba(0,0,0,0.35); }
+
+.btn-stop {
+    background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0) 50%), rgba(255, 90, 80, 0.06);
+    color: #ff7a6e;
+    border: 1px solid rgba(255, 90, 80, 0.40);
+}
+.btn-stop:hover { background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0) 50%), rgba(255, 90, 80, 0.14); border-color: #ff5a50; }
+.btn-stop:active { box-shadow: inset 0 1px 3px rgba(0,0,0,0.3); }
+
+/* ---------- Clavier ---------- */
+.piano-container {
+    position: relative;
+    display: flex;
+    justify-content: flex-start;
+    margin: 8px auto 0;
+    width: 100%;          /* max-width posé dynamiquement en JS pour des touches réalistes */
+    height: 48px;         /* 50% de la taille d'origine (96px), pour mettre en valeur la grille d'accords */
+    padding: 0;
+    user-select: none;
+}
+
+.key {
+    transition: background 0.08s ease, transform 0.08s ease;
+}
+
+.key.white {
+    flex: 1 1 0;          /* toutes les blanches de largeur égale */
+    background: #fafafa;
+    border: 1px solid #3a3a3a;
+    border-radius: 0 0 5px 5px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.35);
+    z-index: 1;
+}
+
+.key.black {
+    position: absolute;
+    top: 0;
+    /* largeur et position (≈62% d'une blanche) posées en JS pour rester proportionnelles */
+    height: 62%;
+    background: #141414;
+    border: 1px solid #000;
+    border-radius: 0 0 4px 4px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.6), inset 0 -2px 3px rgba(255,255,255,0.08);
+    z-index: 2;
+}
+
+/* La touche active se décale légèrement ; la couleur vient de la classe de rôle */
+.key.white.active { transform: translateY(2px); }
+.key.black.active { transform: translateY(1px); }
+
+/* Code couleur par fonction dans l'accord */
+.key.active.role-root    { background: #00e676; } /* fondamentale — vert */
+.key.active.role-third   { background: #2f81f7; } /* tierce — bleu */
+.key.active.role-fifth   { background: #ff3b30; } /* quinte — rouge */
+.key.active.role-seventh { background: #ffb300; } /* septième — orange */
+.key.active.role-ext     { background: #e0b0ff; } /* extensions (9, 11, sus…) — mauve clair */
+
+/* Légende du code couleur sous le clavier */
+.piano-legend {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px 16px;
+    margin-top: 14px;
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+}
+.piano-legend .lg {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.piano-legend .dot {
+    width: 11px;
+    height: 11px;
+    border-radius: 3px;
+    display: inline-block;
+}
+.dot-root    { background: #00e676; }
+.dot-third   { background: #2f81f7; }
+.dot-fifth   { background: #ff3b30; }
+.dot-seventh { background: #ffb300; }
+.dot-ext     { background: #e0b0ff; }
+
+/* Bouton d'export PDF, ancré en bas à droite du bloc piano */
+.viz-wrap {
+    position: relative;
+    padding-bottom: 34px;
+}
+.export-pdf-btn {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 30px;
+    height: 30px;
+}
+.export-midi-btn {
+    position: absolute;
+    right: 36px;
+    bottom: 0;
+    width: 30px;
+    height: 30px;
+}
+.toggle-vl-btn {
+    position: absolute;
+    right: 72px;
+    bottom: 0;
+    width: 30px;
+    height: 30px;
+}
+
+/* ---------- Progression ---------- */
+.history-section { margin-top: 30px; }
+.history-section h2 {
+     color: var(--text-muted);
+     font-size: var(--fs-md);
+     font-weight: 700;
+     text-transform: uppercase;
+     letter-spacing: 0.03em;
+     margin-bottom: 15px;
+}
+/* Une partie de la chanson (couplet, refrain, ...) : titre éditable + sa propre grille.
+   Un fin liseré d'accent signale celle qui est active (ciblée par Ajouter/Modifier/Suppr). */
+.prog-section {
+    margin-bottom: 22px;
+    padding-left: 10px;
+    border-left: 2px solid transparent;
+    transition: border-color 0.15s ease;
+}
+.prog-section.active { border-left-color: var(--accent); }
+
+.prog-section-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.prog-title {
+    flex: 1;
+    min-width: 0;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid transparent;
+    color: var(--text-main);
+    font-family: inherit;
+    font-size: var(--fs-md);
+    font-weight: 600;
+    padding: 4px 2px;
+}
+.prog-title::placeholder { color: var(--text-muted); font-weight: 400; }
+.prog-title:hover { border-bottom-color: var(--border); }
+.prog-title:focus {
+    outline: none;
+    border-bottom-color: var(--accent);
+}
+
+.prog-section-del {
+    flex: none;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid transparent;
+    border-radius: 6px;
+    line-height: 1;
+    cursor: pointer;
+}
+.prog-section-del .icon { width: 13px; height: 13px; }
+.prog-section-del:hover {
+    color: #ff7a6e;
+    border-color: rgba(255, 90, 80, 0.4);
+    background: rgba(255, 90, 80, 0.1);
+}
+
+.add-section-btn {
+    width: 100%;
+    margin-top: 4px;
+}
+
+/* Grille d'accords façon lead sheet */
+.chord-grid {
+    --row-h: 64px;
+    display: grid;
+    grid-template-columns: repeat(16, 1fr); /* par défaut (grille vide) ; posé dynamiquement en JS sinon,
+                                                selon la signature rythmique du morceau */
+    grid-auto-rows: var(--row-h);
+    gap: 0;
+    padding: 0;
+    background: #0d0d0d;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    min-height: var(--row-h);
+    /* Le repère de mesure vient uniquement de .grid-cell.bar-start (bordure) : le nombre de
+       colonnes variant avec la signature rythmique, un fond à pourcentages fixes serait faux. */
+}
+
+.empty-hint {
+    grid-column: 1 / -1;
+    color: var(--text-muted);
+    font-size: var(--fs-base);
+    padding: 20px;
+    text-align: center;
+}
+
+.grid-cell {
+    position: relative;
+    background: var(--card-bg);
+    border: 1px solid #2a2a2a;
+    padding: 4px 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: grab;
+    touch-action: none;
+    overflow: hidden;
+    user-select: none;
+    transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* Barre de mesure : bord gauche plus marqué en début de mesure */
+.grid-cell.bar-start { border-left: 2px solid #5c5c5c; }
+
+/* Segments d'un accord scindé : bord de coupe en pointillé */
+.grid-cell.seg-first { border-right: 1px dashed #5a5a5a; }
+.grid-cell.seg-mid   { border-left: 1px dashed #5a5a5a; border-right: 1px dashed #5a5a5a; }
+.grid-cell.seg-last  { border-left: 1px dashed #5a5a5a; }
+
+.grid-cell:hover { background: #1c1c1c; border-color: #555; z-index: 1; }
+
+.grid-cell.selected {
+    background: #0f1c14;
+    border-color: var(--accent);
+    box-shadow: inset 0 0 0 1px var(--accent);
+    z-index: 2;
+}
+
+.grid-cell.editing {
+    background: #20180a;
+    border-color: #ffb300;
+    box-shadow: inset 0 0 0 1px #ffb300;
+    z-index: 2;
+}
+
+/* Accord en cours de lecture : vert légèrement plus foncé que la sélection, bord accent plus épais */
+.grid-cell.playing {
+    background: #0a1a0f;
+    box-shadow: inset 0 0 0 2px var(--accent);
+    z-index: 3;
+}
+
+/* Emplacement où l'accord déplacé va se poser */
+.grid-cell.drag-placeholder {
+    opacity: 0.4;
+    background: #12241a;
+    box-shadow: inset 0 0 0 2px var(--accent);
+    z-index: 2;
+}
+.grid-cell.drag-placeholder .cell-actions { visibility: hidden; }
+
+/* Clone flottant qui suit le doigt / la souris */
+.grid-cell.drag-ghost {
+    position: fixed;
+    margin: 0;
+    z-index: 999;
+    pointer-events: none;
+    cursor: grabbing;
+    opacity: 0.95;
+    border-radius: 6px;
+    transform: scale(1.03);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.7);
+    border-color: var(--accent);
+}
+
+.cell-cont { font-size: var(--fs-xs); color: var(--text-muted); font-weight: 400; }
+
+.cell-roman {
+    position: absolute;
+    top: 3px;
+    left: 6px;
+    font-size: var(--fs-2xs);
+    font-weight: 700;
+    color: var(--accent);
+    opacity: 0.85;
+    letter-spacing: 0.02em;
+}
+
+.cell-sym {
+    font-size: var(--fs-lg);
+    font-weight: 700;
+    color: var(--text-main);
+    line-height: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+.grid-cell.selected .cell-sym { color: var(--accent); }
+
+.cell-meta {
+    position: absolute;
+    bottom: 3px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: var(--fs-2xs);
+    color: var(--text-muted);
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    overflow: hidden;
+    padding: 0 4px;
+}
+
+/* Boutons ✎ / suppr en haut à droite de chaque case */
+.cell-actions {
+    position: absolute;
+    top: 3px;
+    right: 4px;
+    display: flex;
+    gap: 3px;
+}
+
+.cell-edit,
+.cell-dup {
+    flex: none;
+    min-width: 0;
+    padding: 3px 5px;
+    line-height: 1;
+    background: rgba(10,10,10,0.6);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-muted);
+    opacity: 0.55;
+    transition: all 0.15s ease;
+}
+.cell-edit .icon, .cell-dup .icon { width: 11px; height: 11px; vertical-align: 0; }
+
+.grid-cell:hover .cell-edit,
+.grid-cell:hover .cell-dup,
+.grid-cell.selected .cell-edit,
+.grid-cell.selected .cell-dup,
+.grid-cell.editing .cell-edit,
+.grid-cell.editing .cell-dup { opacity: 1; }
+
+.cell-edit:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #000;
+}
+
+.cell-dup:hover {
+    background: #2f81f7;
+    border-color: #2f81f7;
+    color: #fff;
+}
+
+/* Accord hors-tonalité (dissonant) : liseré rouge en haut + pictogramme */
+.grid-cell.out-of-key::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: #ff6b3d;
+    z-index: 3;
+}
+.cell-warn { color: #ff6b3d; margin-left: 2px; }
+.cell-warn .icon, .cell-hint .icon { width: 12px; height: 12px; vertical-align: -2px; }
+
+/* Suggestion de conduite des voix : simple infobulle, jamais rien d'imposé */
+.cell-hint { color: #ffd23d; margin-left: 2px; opacity: 0.85; cursor: pointer; }
+
+/* Police réduite pour les segments courts */
+.grid-cell.sz2 .cell-sym { font-size: var(--fs-base); }
+.grid-cell.sz1 .cell-sym { font-size: var(--fs-xs); }
+.grid-cell.sz1 .cell-roman,
+.grid-cell.sz1 .cell-meta { display: none; } /* trop étroit : on masque les annexes */
+
+/* Toast (copier / coller) */
+.toast {
+    position: fixed;
+    left: 50%;
+    bottom: 84px;
+    transform: translateX(-50%) translateY(8px);
+    background: rgba(22, 22, 22, 0.96);
+    border: 1px solid var(--border);
+    color: var(--text-main);
+    padding: 10px 16px;
+    border-radius: 999px;
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    z-index: 100;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* Séquenceur pas-à-pas */
+.arp-seq {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+}
+
+/* Défile horizontalement plutôt que d'écraser les cases quand l'accord dure plusieurs mesures */
+.seq-scroll {
+    overflow-x: auto;
+    padding-bottom: 2px;
+}
+
+.seq-grid {
+    display: grid;
+    gap: 4px 0; /* espacement vertical normal ; l'horizontal est géré case par case (voir .seq-cell-b) */
+    align-items: center;
+    min-width: 100%;
+}
+
+.seq-label {
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+    text-align: right;
+    padding-right: 4px;
+    white-space: nowrap;
+}
+
+.seq-cell {
+    height: 26px;
+    background: #202020;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background 0.1s ease, box-shadow 0.1s ease;
+    /* Autorise le scroll vertical de la page, mais laisse le JS gérer le glissé horizontal
+       (étirer une note) sans que le doigt ne déclenche le scroll natif du navigateur. */
+    touch-action: pan-y;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* Chaque rectangle de croche est en réalité deux cases (double-croches) collées l'une à l'autre :
+   pas de bordure/arrondi entre les deux, pas de gap non plus (repoussé après la 2e moitié) — pour
+   qu'elles se lisent comme UN SEUL rectangle tant qu'une note n'utilise pas cette finesse. */
+.seq-cell-a { border-right: none; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.seq-cell-b { border-left: none; border-top-left-radius: 0; border-bottom-left-radius: 0; margin-right: 4px; }
+
+/* Repère visuel du début de chaque temps (4 double-croches) */
+.seq-cell.beat-start { border-left: 2px solid #3a3a3a; }
+
+.seq-cell:hover { background: #2c2c2c; }
+
+/* Croche de bord d'une note existante : curseur discret indiquant qu'un glissé depuis là
+   étire/raccourcit la note (pas de poignée visible séparée, juste cet indice au survol). */
+.seq-cell-edge:hover { cursor: ew-resize; }
+
+/* État transitoire pendant un glissé (avant que renderSequencer() ne redessine la forme finale) */
+.seq-cell.on {
+    background: rgba(0, 230, 118, 0.38);
+    border-color: rgba(0, 230, 118, 0.85);
+    box-shadow: 0 0 8px rgba(0, 230, 118, 0.3);
+}
+
+/* Note posée sur la grille (au-dessus des cases, qui restent les zones de clic/glisser en dessous).
+   Deux formes bien distinctes : un petit carré arrondi pour une note isolée (touchée une fois),
+   une pilule continue pour une note étirée au glissé — sa largeur seule raconte sa durée.
+   Remplissage légèrement transparent (le fond de la case se devine dessous) mais un contour bien
+   saturé garde chaque note nette et lisible même à côté d'une autre. */
+.seq-note {
+    position: relative;
+    align-self: stretch;
+    pointer-events: none;
+    cursor: pointer;
+    transition: box-shadow 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+}
+
+.seq-note.single {
+    border-radius: 4px;
+}
+
+.seq-note.run {
+    border-radius: 4px; /* rectangle bien arrondi, sans aller jusqu'à la capsule complète */
+}
+
+/* Code couleur par fonction dans l'accord — mêmes teintes que les touches du piano */
+.seq-note.role-root {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.20), rgba(255, 255, 255, 0) 60%), rgba(0, 230, 118, 0.38);
+    border: 1.5px solid rgba(0, 230, 118, 0.85);
+    box-shadow: 0 0 8px rgba(0, 230, 118, 0.25);
+}
+.seq-note.role-third {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.20), rgba(255, 255, 255, 0) 60%), rgba(47, 129, 247, 0.38);
+    border: 1.5px solid rgba(47, 129, 247, 0.85);
+    box-shadow: 0 0 8px rgba(47, 129, 247, 0.25);
+}
+.seq-note.role-fifth {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.20), rgba(255, 255, 255, 0) 60%), rgba(255, 59, 48, 0.38);
+    border: 1.5px solid rgba(255, 59, 48, 0.85);
+    box-shadow: 0 0 8px rgba(255, 59, 48, 0.25);
+}
+.seq-note.role-seventh {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.20), rgba(255, 255, 255, 0) 60%), rgba(255, 179, 0, 0.38);
+    border: 1.5px solid rgba(255, 179, 0, 0.85);
+    box-shadow: 0 0 8px rgba(255, 179, 0, 0.25);
+}
+.seq-note.role-ext {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.20), rgba(255, 255, 255, 0) 60%), rgba(224, 176, 255, 0.38);
+    border: 1.5px solid rgba(224, 176, 255, 0.85);
+    box-shadow: 0 0 8px rgba(224, 176, 255, 0.25);
+}
+
+/* Note sélectionnée : liseré blanc net, prête à être supprimée (Suppr) ou redimensionnée (← → ou poignées).
+   Placée après les règles de rôle ci-dessus pour l'emporter sur leur bordure/ombre (même spécificité). */
+.seq-note.selected {
+    border-color: rgba(255, 255, 255, 0.85);
+    box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.7), 0 0 6px rgba(0, 230, 118, 0.35);
+}
+
+.seq-presets {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+}
+
+/* Uniquement la mise en page ici : chaque bouton de cette rangée porte désormais sa propre couleur
+   sémantique (.btn-prog/.btn-stop/.seq-delete-btn) — un style gris générique ferait doublon et,
+   pire, l'emporterait sur elles par spécificité CSS (".seq-presets button" > ".btn-prog" seul). */
+.seq-presets button {
+    flex: 1;
+    min-width: 0;
+    padding: 9px 8px;
+    font-size: var(--fs-sm);
+}
+
+/* Bouton dédié : supprime uniquement les notes sélectionnées, sans toucher au reste du motif */
+.seq-delete-btn:not(:disabled) {
+    background: linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0) 50%), rgba(255, 90, 80, 0.16);
+    border: 1px solid rgba(255, 90, 80, 0.45);
+    color: #ff7a6e;
+}
+.seq-delete-btn:not(:disabled):hover {
+    background: linear-gradient(180deg, rgba(255,255,255,0.09), rgba(255,255,255,0) 50%), rgba(255, 90, 80, 0.26);
+    border-color: #ff5a50;
+}
+.seq-delete-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* Sélecteur de morceau enregistré (actions nouveau/enregistrer/renommer/supprimer : voir .card-head) */
+.song-select-full {
+    width: 100%;
+    margin-bottom: 8px;
+}
+
+/* Tonalité + mode + signature, sur une même ligne compacte dans la carte Morceau */
+.song-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+select.compact {
+    flex: 1;
+    min-width: 0;
+    padding: 9px 10px;
+    font-size: var(--fs-select);
+}
+/* Trois select côte à côte (tonalité, mode, signature) : plus étroits qu'un .compact seul.
+   Sélecteur "select.song-select-narrow" (et non ".song-select-narrow" seul) : il faut au moins
+   la même spécificité que "select.compact" ci-dessus pour que ce padding réduit s'applique
+   vraiment (les deux classes sont posées ensemble sur ces select) plutôt que de rester lettre
+   morte face à la règle plus spécifique. */
+select.song-select-narrow {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 9px 4px;
+    font-size: var(--fs-select);
+    text-align: center;
+    text-align-last: center;
+}
+
+/* Mode + bouton « ⋯ » (modes moins courants) groupés comme un seul élément dans .song-row : select
+   et bouton se partagent la largeur d'une même colonne compacte (5:1). */
+.mode-field {
+    display: flex;
+    flex: 1 1 0;
+    min-width: 0;
+    gap: 4px;
+}
+.mode-field select { flex: 4; min-width: 0; }
+.mode-field .icon-btn { flex: 1; min-width: 24px; width: auto; height: auto; padding: 0; }
+
+@media (max-width: 480px) {
+    .chord-grid { --row-h: 56px; }
+    .cell-sym { font-size: var(--fs-md); }
+    .seq-cell { height: 30px; }
+}
+
+/* ============================================================
+   DISPOSITION RESPONSIVE
+   Mobile (base ci-dessus) : une colonne + barre de lecture collante.
+   Ordinateur : deux colonnes, hauteur d'écran, sans scroll de page.
+   ============================================================ */
+
+/* Dégagement pour que la grille ne passe pas sous la barre collante sur mobile */
+@media (max-width: 899px) {
+    .history-section { margin-top: 10px; padding-bottom: 8px; }
+    main { padding-bottom: 0; }
+}
+
+@media (min-width: 900px) {
+    html, body { height: 100%; }
+    body { overflow: hidden; }              /* la page ne défile pas ; chaque colonne défile seule */
+
+    main {
+        flex-direction: row;
+        align-items: stretch;
+        gap: 28px;
+        min-height: 0;
+        overflow: hidden;
+        padding-bottom: 20px;
+    }
+
+    /* Les colonnes redeviennent de vrais conteneurs (fin de l'aplatissement mobile) */
+    .col-left, .col-right { display: flex; }
+
+    .col-left {
+        flex-direction: column;
+        width: 360px;
+        flex: none;
+        min-height: 0;
+    }
+    .panel-controls {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;       /* si les réglages dépassent, seul ce panneau défile */
+        padding-right: 6px;
+        gap: 10px;
+    }
+
+    /* Contrôles plus denses : pensés pour la souris, pas pour le doigt — moins de scroll à clic égal */
+    .control-card { padding: 12px 14px; }
+    .control-card h2 { font-size: var(--fs-sm); margin-bottom: 8px; }
+    .select-group { gap: 8px; }
+    .select-group + .select-group { margin-top: 8px; }
+    .accord-grid { gap: 8px; }
+    select { padding: 9px 10px; font-size: var(--fs-select); min-width: 0; }
+    button { padding: 10px; font-size: var(--fs-base); }
+    .bpm-group { margin-top: 10px; gap: 6px; }
+    .add-section-btn { margin-top: 8px; }
+
+    .col-right {
+        flex-direction: column;
+        flex: 1;
+        min-width: 0;
+        min-height: 0;
+        gap: 16px;
+    }
+    #current-chord-display { flex: none; }
+    .viz-wrap { flex: none; }
+    .history-section {
+        flex: 1;
+        min-height: 0;
+        margin-top: 0;
+        overflow-y: auto;       /* la grille défile de son côté */
+    }
+
+    /* Barre de lecture ancrée en bas de la colonne de gauche (plus besoin de "collant"). Même
+       padding-right que .panel-controls (réservé à sa scrollbar) pour que ses boutons s'alignent
+       pile avec ceux de .edit-actions au-dessus, largeur identique de bout en bout. */
+    .transport {
+        position: static;
+        flex: none;
+        margin: 15px 0 0;
+        padding: 0 6px 0 0;
+        background: none;
+        backdrop-filter: none;
+        border-top: none;
+    }
+    .transport button { padding: 11px 10px; font-size: var(--fs-base); }
+    .edit-actions button { padding: 11px 10px; font-size: var(--fs-base); }
+}
+
+/* Grand écran : on laisse respirer et on limite la largeur du piano */
+@media (min-width: 1300px) {
+    main { gap: 36px; }
+}
+
+/* ============================================================
+   EXPORT PDF (via l'impression du navigateur)
+   Le conteneur est injecté avec le contenu au clic sur le bouton, invisible à l'écran,
+   et devient le SEUL contenu visible lors de l'impression (déclenchée par window.print()).
+   ============================================================ */
+.print-export { display: none; }
+
+@media print {
+    body * { visibility: hidden; }
+    .print-export, .print-export * { visibility: visible; }
+    .print-export {
+        display: block;
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+    }
+    @page { margin: 14mm; }
+}
+
+.print-page {
+    background: #fff;
+    color: #111;
+    font-family: var(--font);
+    break-after: page;
+}
+.print-page:last-child { break-after: auto; }
+
+.print-title {
+    font-size: var(--fs-xl);
+    font-weight: 800;
+    margin: 0 0 4px;
+}
+.print-meta {
+    font-size: var(--fs-sm);
+    color: #555;
+    margin-bottom: 18px;
+}
+.print-section-title {
+    font-size: var(--fs-md);
+    font-weight: 700;
+    margin: 16px 0 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #ccc;
+}
+.print-empty { color: #888; font-size: var(--fs-sm); margin-bottom: 10px; }
+
+.print-chord-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+.print-chord-cell {
+    flex-grow: 1;
+    flex-basis: 60px;
+    border: 1px solid #999;
+    border-radius: 6px;
+    padding: 6px 8px;
+    text-align: center;
+}
+.print-chord-roman {
+    display: block;
+    font-size: var(--fs-2xs);
+    color: #00913f;
+    font-weight: 700;
+    margin-bottom: 2px;
+}
+.print-chord-sym {
+    display: block;
+    font-size: var(--fs-md);
+    font-weight: 700;
+}
+
+.print-piano-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px 10px;
+}
+.print-piano-item {
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 8px;
+    text-align: center;
+}
+.print-piano-label {
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    margin-bottom: 6px;
+}
+.print-piano-item svg { max-width: 100%; height: auto; }

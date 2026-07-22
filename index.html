@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>HarmoBox</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+</head>
+<body>
+    <div class="top-bar">
+        <button type="button" id="open-settings" class="icon-btn settings-btn" title="Paramètres" aria-label="Paramètres">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.04.05a2 2 0 1 1-2.83 2.83l-.05-.04a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.05.04a2 2 0 1 1-2.83-2.83l.04-.05a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.04-.05a2 2 0 1 1 2.83-2.83l.05.04a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82.33l.05-.04a2 2 0 1 1 2.83 2.83l-.04.05a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>
+            </svg>
+        </button>
+        <a class="logo" href="#" onclick="return false" title="HarmoBox" aria-label="HarmoBox">
+            <span class="logo-mark">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>
+                </svg>
+            </span>
+            <span class="logo-text">HarmoBox</span>
+        </a>
+    </div>
+
+    <div id="context-menu" class="context-menu" hidden>
+        <button type="button" data-ctx-action="rename">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+            Renommer
+        </button>
+        <button type="button" data-ctx-action="delete">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+            Supprimer
+        </button>
+    </div>
+
+    <div id="settings-overlay" class="settings-overlay" hidden>
+        <div class="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+            <div class="settings-header">
+                <h2 id="settings-title">Paramètres</h2>
+                <button type="button" id="settings-close" class="icon-btn" title="Fermer" aria-label="Fermer">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <div class="settings-body">
+                <div class="settings-content">
+                    <section class="settings-section">
+                        <h3 class="settings-section-title">
+                            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>
+                            Son
+                        </h3>
+                        <div id="settings-panel-audio" class="settings-panel"></div>
+                    </section>
+                    <div class="settings-section-sep"></div>
+                    <section class="settings-section">
+                        <h3 class="settings-section-title">
+                            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>
+                            Fichiers
+                        </h3>
+                        <div id="settings-panel-files" class="settings-panel"></div>
+                    </section>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <main>
+        <div class="col-left">
+            <div class="panel-controls">
+                <section class="control-card">
+                    <div class="card-head">
+                        <h2>Accord</h2>
+                        <div class="card-head-actions">
+                            <button type="button" id="toggle-complex-quality" class="icon-btn" title="Afficher plus d'accords (diminués, augmentés, enrichis...)" aria-label="Afficher plus d'accords">
+                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>
+                            </button>
+                            <button type="button" id="toggle-bass" class="icon-btn" title="Choisir une note de basse différente (accord « sur » une note)" aria-label="Choisir une note de basse différente">
+                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v10"/><path d="M8 9l4 4 4-4"/><circle cx="12" cy="19" r="2.2" fill="currentColor" stroke="none"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="accord-grid">
+                        <select id="root">
+                            <option value="C">C</option><option value="C#">C#</option><option value="D">D</option><option value="D#">D#</option>
+                            <option value="E">E</option><option value="F">F</option><option value="F#">F#</option><option value="G">G</option>
+                            <option value="G#">G#</option><option value="A">A</option><option value="A#">A#</option><option value="B">B</option>
+                        </select>
+                        <select id="quality">
+                            <option value="maj">Majeur</option><option value="min">Mineur</option>
+                            <option value="sus2">Sus2</option><option value="sus4">Sus4</option>
+                            <option value="maj7">Maj 7</option><option value="min7">Min 7</option>
+                            <option value="dom7">Dom 7</option>
+                            <option value="6" class="opt-complex" hidden>6</option>
+                            <option value="m6" class="opt-complex" hidden>Min 6</option>
+                            <option value="dim" class="opt-complex" hidden>Dim</option>
+                            <option value="dim7" class="opt-complex" hidden>Dim 7</option>
+                            <option value="m7b5" class="opt-complex" hidden>m7b5</option>
+                            <option value="aug" class="opt-complex" hidden>Aug</option>
+                            <option value="add9" class="opt-complex" hidden>Add9</option>
+                            <option value="maj9" class="opt-complex" hidden>Maj 9</option>
+                            <option value="m9" class="opt-complex" hidden>Min 9</option>
+                            <option value="dom9" class="opt-complex" hidden>9</option>
+                            <option value="dom11" class="opt-complex" hidden>11</option>
+                            <option value="dom13" class="opt-complex" hidden>13</option>
+                        </select>
+                        <select id="duration">
+                            <option value="1">Noire</option>
+                            <option value="2">Blanche</option>
+                            <option value="4" selected>1 mesure</option>
+                            <option value="8">2 mesures</option>
+                            <option value="16">4 mesures</option>
+                        </select>
+                        <select id="inversion">
+                            <option value="0">Fond.</option><option value="1">1er renv.</option><option value="2">2e renv.</option>
+                            <option value="3">3e renv.</option>
+                        </select>
+                        <select id="drop">
+                            <option value="none">Sans drop</option><option value="drop2">Drop 2</option><option value="drop3">Drop 3</option>
+                        </select>
+                        <select id="octave">
+                            <option value="2">Octave 2</option>
+                            <option value="3" selected>Octave 3</option>
+                            <option value="4">Octave 4</option>
+                            <option value="5">Octave 5</option>
+                        </select>
+                    </div>
+                    <div class="bass-row" id="bass-row" hidden>
+                        <label for="bass">Basse</label>
+                        <select id="bass">
+                            <option value="">Aucune (fondamentale)</option>
+                            <option value="C">C</option><option value="C#">C#</option><option value="D">D</option><option value="D#">D#</option>
+                            <option value="E">E</option><option value="F">F</option><option value="F#">F#</option><option value="G">G</option>
+                            <option value="G#">G#</option><option value="A">A</option><option value="A#">A#</option><option value="B">B</option>
+                        </select>
+                    </div>
+                </section>
+
+                <section class="control-card">
+                    <div class="card-head">
+                        <h2>Lecture</h2>
+                        <div class="card-head-actions">
+                            <button type="button" id="seq-undo-btn" class="icon-btn" title="Annuler dans le séquenceur (Ctrl+Z)" aria-label="Annuler dans le séquenceur" disabled>
+                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
+                            </button>
+                            <button type="button" id="seq-redo-btn" class="icon-btn" title="Rétablir dans le séquenceur (Ctrl+Y)" aria-label="Rétablir dans le séquenceur" disabled>
+                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>
+                            </button>
+                            <button type="button" id="toggle-sequencer" class="icon-btn" title="Séquenceur" aria-label="Séquenceur">
+                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v9M12 4v9M17 4v9"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="select-group">
+                        <select id="playStyle">
+                            <option value="held">Tenu</option>
+                            <optgroup label="Maintenu (soutenu)">
+                                <option value="ronde_maintenu">Ronde</option>
+                                <option value="blanche_maintenu">Blanche</option>
+                                <option value="noire_maintenu">Noire</option>
+                                <option value="croche_maintenu">Croche</option>
+                            </optgroup>
+                            <optgroup label="Staccato (détaché)">
+                                <option value="ronde_staccato">Ronde</option>
+                                <option value="blanche_staccato">Blanche</option>
+                                <option value="noire_staccato">Noire</option>
+                                <option value="croche_staccato">Croche</option>
+                            </optgroup>
+                            <option value="arpeggio">Arpège (manuel)</option>
+                        </select>
+                        <select id="instrument">
+                            <option value="piano">Piano</option>
+                            <option value="epiano">Piano élec.</option>
+                            <option value="pad">Nappe</option>
+                            <option value="strings">Cordes synth.</option>
+                            <option value="organ">Orgue/Lead</option>
+                            <option value="bell">Synthé chaud</option>
+                        </select>
+                    </div>
+                    <input type="hidden" id="arpPattern" value="">
+                    <div id="arp-sequencer" class="arp-seq" hidden></div>
+                </section>
+
+                <div class="edit-actions">
+                    <button id="save" class="btn-blue"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg> Ajouter</button>
+                    <button id="save-insert" class="btn-blue" hidden><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg> À la suite</button>
+                    <button id="cancel-edit" class="btn-stop" hidden><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg> Annuler</button>
+                </div>
+
+                <section class="control-card">
+                    <div class="card-head">
+                        <h2>Morceau</h2>
+                        <div class="card-head-actions">
+                            <button type="button" id="undo-btn" class="icon-btn" title="Annuler (Ctrl+Z)" aria-label="Annuler" disabled>
+                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
+                            </button>
+                            <button type="button" id="redo-btn" class="icon-btn" title="Rétablir (Ctrl+Y)" aria-label="Rétablir" disabled>
+                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>
+                            </button>
+                            <button type="button" id="song-new" class="icon-btn" title="Nouveau morceau" aria-label="Nouveau morceau">
+                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                            </button>
+                            <button type="button" id="song-save" class="icon-btn icon-btn-accent" title="Enregistrer" aria-label="Enregistrer">
+                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <select id="song-select" class="compact song-select-full"></select>
+                    <div class="song-row">
+                        <select id="global-root" class="compact song-select-narrow" title="Tonalité">
+                            <option value="C">C</option><option value="C#">C#</option><option value="D">D</option><option value="D#">D#</option>
+                            <option value="E">E</option><option value="F">F</option><option value="F#">F#</option><option value="G">G</option>
+                            <option value="G#">G#</option><option value="A">A</option><option value="A#">A#</option><option value="B">B</option>
+                        </select>
+                        <div class="mode-field">
+                            <select id="global-mode" class="compact song-select-narrow" title="Mode">
+                                <option value="maj">Majeur</option><option value="min">Mineur</option>
+                                <option value="dorian" class="opt-mode" hidden>Dorien</option>
+                                <option value="phrygian" class="opt-mode" hidden>Phrygien</option>
+                                <option value="lydian" class="opt-mode" hidden>Lydien</option>
+                                <option value="mixolydian" class="opt-mode" hidden>Mixolydien</option>
+                                <option value="locrian" class="opt-mode" hidden>Locrien</option>
+                            </select>
+                            <button type="button" id="toggle-complex-mode" class="icon-btn" title="Afficher plus de modes (dorien, phrygien, lydien...)" aria-label="Afficher plus de modes">
+                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>
+                            </button>
+                        </div>
+                        <select id="time-sig" class="compact song-select-narrow" title="Signature rythmique">
+                            <option value="2/4">2/4</option>
+                            <option value="3/4">3/4</option>
+                            <option value="4/4" selected>4/4</option>
+                            <option value="5/4">5/4</option>
+                            <option value="6/8">6/8</option>
+                            <option value="7/8">7/8</option>
+                            <option value="9/8">9/8</option>
+                            <option value="12/8">12/8</option>
+                        </select>
+                    </div>
+                    <div class="bpm-group">
+                        <div class="bpm-head">
+                            <label for="bpm">Tempo : <input type="number" id="bpm-val" class="bpm-val-input" min="60" max="240" value="120" title="Cliquer pour saisir une valeur précise"> BPM</label>
+                            <button type="button" id="toggle-metronome" class="icon-btn" title="Garder le métronome pendant la lecture de la grille" aria-label="Garder le métronome pendant la lecture de la grille">
+                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <path d="M7 20h10L14 5h-4L7 20Z"/>
+                                    <path d="M12 15V8"/>
+                                    <circle cx="12" cy="6" r="1" fill="currentColor" stroke="none"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <input type="range" id="bpm" min="60" max="240" value="120">
+                    </div>
+                    <div class="groove-group">
+                        <label for="groove">Groove</label>
+                        <select id="groove" class="compact">
+                            <option value="straight" selected>Droit</option>
+                            <option value="shuffle">Shuffle léger</option>
+                            <option value="ternary">Ternaire (triolet)</option>
+                        </select>
+                    </div>
+                </section>
+            </div>
+
+            <div class="transport">
+                <button id="play" class="btn-prog"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg> Accord</button>
+                <button id="play-prog" class="btn-prog"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg> Progression</button>
+                <button id="stop" class="btn-stop"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg> Stop</button>
+            </div>
+        </div>
+
+        <div class="col-right">
+            <div id="current-chord-display">--</div>
+
+            <section class="history-section">
+                <h2>Grille d'accords</h2>
+                <div id="progression-sections"></div>
+                <button type="button" id="add-section" class="btn-sec add-section-btn"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg> Ajouter une partie</button>
+            </section>
+
+            <div class="viz-wrap">
+                <section id="piano-viz" class="piano-container"></section>
+                <div class="piano-legend">
+                    <span class="lg"><span class="dot dot-root"></span>1</span>
+                    <span class="lg"><span class="dot dot-third"></span>3</span>
+                    <span class="lg"><span class="dot dot-fifth"></span>5</span>
+                    <span class="lg"><span class="dot dot-seventh"></span>7</span>
+                    <span class="lg"><span class="dot dot-ext"></span>Autres</span>
+                </div>
+                <button type="button" id="toggle-voice-leading" class="icon-btn toggle-vl-btn" title="Afficher les suggestions de conduite des voix dans la grille" aria-label="Afficher les suggestions de conduite des voix">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2Z"/></svg>
+                </button>
+                <button type="button" id="export-midi" class="icon-btn export-midi-btn" title="Exporter en MIDI (pour un DAW type GarageBand)" aria-label="Exporter en MIDI">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/>
+                        <path d="M11.3 17V9.3l4.4-1.1v7.3"/>
+                        <circle cx="9.8" cy="17.3" r="1.7" fill="currentColor" stroke="none"/>
+                        <circle cx="14.2" cy="15.8" r="1.7" fill="currentColor" stroke="none"/>
+                    </svg>
+                </button>
+                <button type="button" id="export-pdf" class="icon-btn export-pdf-btn" title="Exporter en PDF" aria-label="Exporter en PDF">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/></svg>
+                </button>
+            </div>
+        </div>
+    </main>
+    <div id="print-export" class="print-export"></div>
+    <script src="script.js"></script>
+</body>
+</html>
