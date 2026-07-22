@@ -1175,6 +1175,13 @@ button:active { transform: translateY(1px); }
     box-shadow: inset 0 0 0 2px var(--accent);
     z-index: 2;
 }
+/* Emplacement où la COPIE va s'insérer (Ctrl+glisser / appui long+glisser, voir onGridPointerMove) :
+   l'accord survolé reste normalement affiché (rien n'est déplacé avant le dépôt), juste entouré
+   d'un liséré bleu distinct du vert (sélection/lecture), de l'orange (édition) et du doré (boucle). */
+.grid-cell.drop-target-copy {
+    box-shadow: inset 0 0 0 2px #2f81f7;
+    z-index: 2;
+}
 /* Clone flottant qui suit le doigt / la souris */
 .grid-cell.drag-ghost {
     position: fixed;

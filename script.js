@@ -2474,7 +2474,10 @@ class HarmoBoxApp {
 
                     let cls = 'grid-cell';
                     if (dragging && this.drag.section === si && s.index === this.drag.index) {
-                        cls += ' drag-placeholder';
+                        // Copie (Ctrl+glisser / appui long+glisser, voir onGridPointerDown) : l'original
+                        // reste en place, seule la case survolée (là où la copie s'insérerait) est
+                        // signalée — contrairement au déplacement, qui hollow-out la case déplacée.
+                        cls += this.drag.copy ? ' drop-target-copy' : ' drag-placeholder';
                     } else {
                         if (isActive && s.index === this.selectedIndex) cls += ' selected';
                         if (isActive && s.index === this.editingIndex) cls += ' editing';
@@ -3416,15 +3419,12 @@ class HarmoBoxApp {
     openContextMenu(x, y, target) {
         // Un appui long sur une case de la grille ouvre ce menu AVANT le relâchement du doigt : le
         // glisser/tap de la grille (this.drag, voir onGridPointerDown) est encore armé sur ce même
-        // geste et déclencherait sinon AUSSI une sélection/écoute au pointerup qui suit. On l'annule
-        // ici plutôt que d'entremêler cette logique dans attachContextMenuTrigger (générique, aussi
-        // utilisé pour les morceaux/dossiers, qui n'ont pas ce système de glisser).
-        if (this.drag) {
-            window.removeEventListener('pointermove', this._onMove);
-            window.removeEventListener('pointerup', this._onUp);
-            window.removeEventListener('pointercancel', this._onUp);
-            this.drag = null;
-        }
+        // geste. Plutôt que l'annuler complètement (ce qui empêcherait tout glisser ENSUITE), on le
+        // laisse vivant avec un simple repère (menuShown) : si le doigt bouge avant le relâchement,
+        // onGridPointerMove referme ce menu et reprend le geste comme un glisser-copie (l'appui était
+        // déjà assez long) ; s'il se relâche SANS bouger, onGridPointerUp ne fait rien de plus (pas de
+        // tap-sélection ni de double-tap), le menu reste normalement affiché.
+        if (this.drag) this.drag.menuShown = true;
 
         this.contextMenuTarget = target;
         const menu = document.getElementById('context-menu');
@@ -4025,11 +4025,17 @@ class HarmoBoxApp {
                 index: parseInt(cell.dataset.index),   // position vivante de l'accord déplacé
                 origIndex: parseInt(cell.dataset.index),
                 startX: e.clientX, startY: e.clientY,
+                startTime: Date.now(),
                 offsetX: e.clientX - rect.left,        // pour que le fantôme ne saute pas sous le doigt
                 offsetY: e.clientY - rect.top,
                 width: rect.width, height: rect.height,
                 moved: false, ghost: null, cell,
-                pointerType: e.pointerType || 'mouse'
+                pointerType: e.pointerType || 'mouse',
+                // Copier au lieu de déplacer (voir onGridPointerMove/onGridPointerUp) : Ctrl/Cmd+glisser
+                // à la souris, connu tout de suite ; au doigt, seulement un appui déjà un peu long
+                // (voir le seuil dans onGridPointerMove) SUIVI d'un glisser — un tap-glisser immédiat
+                // reste un déplacement, comme avant.
+                copy: e.ctrlKey || e.metaKey,
             };
             this._onMove = (ev) => this.onGridPointerMove(ev);
             this._onUp = (ev) => this.onGridPointerUp(ev);
@@ -4049,7 +4055,22 @@ class HarmoBoxApp {
         const dx = e.clientX - d.startX, dy = e.clientY - d.startY;
         if (!d.moved && Math.hypot(dx, dy) < 6) return; // seuil : distinguer tap et glisser
 
+        if (d.menuShown) {
+            // Le menu contextuel s'est ouvert PENDANT cet appui (voir openContextMenu) mais le doigt
+            // bouge avant d'être relâché : on referme le menu, l'appui était déjà assez long pour
+            // qu'on considère la suite comme un glisser-copie plutôt qu'un déplacement.
+            this.closeContextMenu();
+            d.menuShown = false;
+            d.copy = true;
+        }
+
         if (!d.moved) {
+            // Au doigt (pas Ctrl/Cmd, déjà tranché au clic) : un appui déjà tenu un moment avant que le
+            // glisser ne commence bascule en copie — un tap-glisser immédiat reste un déplacement,
+            // comme avant. Seuil sous les ~550ms du menu contextuel (voir attachContextMenuTrigger) :
+            // le glisser aura déjà dépassé son propre seuil de 10px à ce moment-là, annulant le minuteur
+            // du menu contextuel avant qu'il ne se déclenche.
+            if (!d.copy && d.pointerType !== 'mouse' && (Date.now() - d.startTime) > 450) d.copy = true;
             d.moved = true;
             this.pushUndo(loadProgressionSections()); // un seul snapshot pour tout le geste de glisser
             d.ghost = this.createDragGhost(d.cell, d.width, d.height); // cloner tant que la case est attachée
@@ -4068,8 +4089,11 @@ class HarmoBoxApp {
         if (overCell && +overCell.dataset.section === d.section) {
             const targetIndex = parseInt(overCell.dataset.index);
             if (!isNaN(targetIndex) && targetIndex !== d.index) {
-                // Réagencement VIVANT : on déplace l'accord et la grille se réorganise (droite / ligne suivante)
-                this.moveChordLive(d.section, d.index, targetIndex);
+                // Copie : l'original reste à sa place jusqu'au dépôt (voir onGridPointerUp,
+                // duplicateChordTo) — seul le repère de case survolée (d.index) avance. Déplacement :
+                // réagencement VIVANT comme avant, la grille se réorganise à chaque case survolée.
+                if (!d.copy) this.moveChordLive(d.section, d.index, targetIndex);
+                else this.loadProgression();
                 d.index = targetIndex;
             }
         }
@@ -4085,6 +4109,11 @@ class HarmoBoxApp {
 
         if (d.ghost) d.ghost.remove();
 
+        // Relâché sans bouger APRÈS que le menu contextuel s'est ouvert sur ce même appui (voir
+        // openContextMenu/onGridPointerMove) : rien de plus à faire, pas de tap-sélection, le menu
+        // reste normalement affiché pour qu'on y choisisse une action.
+        if (d.menuShown && !d.moved) return;
+
         if (!d.moved) {
             const now = Date.now();
             const isSecondTap = this._lastTap && this._lastTap.section === d.section && this._lastTap.index === d.index && (now - this._lastTap.time) < 420;
@@ -4097,9 +4126,32 @@ class HarmoBoxApp {
             }
             return;
         }
+        if (d.copy) {
+            // Rien n'a encore bougé (voir onGridPointerMove) : insère la copie à l'endroit déposé.
+            this.duplicateChordTo(d.section, d.origIndex, d.index);
+            return;
+        }
         // La grille est déjà dans l'ordre final ; on répercute le déplacement sur sélection/édition
         this.selectedIndex = this._shiftIndex(this.selectedIndex, d.origIndex, d.index);
         this.editingIndex = this._shiftIndex(this.editingIndex, d.origIndex, d.index);
+        this.loadProgression();
+    }
+
+    // Insère une COPIE de l'accord `fromIndex` à la position `toIndex` (voir onGridPointerUp,
+    // Ctrl+glisser / appui long+glisser) — contrairement à moveChordLive, l'original reste en place ;
+    // tout le reste (y compris l'original s'il est après le point d'insertion) décale d'un cran.
+    // N'appelle PAS pushUndo : cette méthode n'est utilisée qu'en fin de glisser (onGridPointerUp),
+    // dont le début (onGridPointerMove) a déjà pris l'unique instantané du geste — comme moveChordLive.
+    duplicateChordTo(section, fromIndex, toIndex) {
+        const sections = loadProgressionSections();
+        const history = sections[section] && sections[section].chords;
+        if (!history || !history[fromIndex]) return;
+        const copy = { ...history[fromIndex] };
+        const insertAt = Math.max(0, Math.min(toIndex, history.length));
+        history.splice(insertAt, 0, copy);
+        saveProgressionSections(sections);
+        if (this.editingIndex != null && this.editingIndex >= insertAt) this.editingIndex++;
+        this.selectedIndex = insertAt; // sélectionne la copie, comme duplicateChord (menu contextuel)
         this.loadProgression();
     }
 
