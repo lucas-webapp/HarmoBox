@@ -12,6 +12,7 @@ const ICONS = {
     down: '<path d="M12 5v14"/><path d="m5 12 7 7 7-7"/>',
     'chevron-left': '<path d="m15 18-6-6 6-6"/>',
     'chevron-right': '<path d="m9 18 6-6-6-6"/>',
+    loop: '<path d="M17 2 21 6 17 10"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22 3 18 7 14"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>',
     play: '<path d="M8 5v14l11-7z" fill="currentColor" stroke="none"/>',
     stop: '<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none"/>'
 };
@@ -1220,6 +1221,7 @@ class HarmoBoxApp {
         this.seqSelections = []; // notes du séquenceur sélectionnées : [{ voice, start, end }, ...]
         this.seqDrag = null;       // état de glisser en cours sur le séquenceur
         this.seqPage = 0;          // mesure(s) affichée(s) pour un accord qui en dure plusieurs (voir seqPageBars)
+        this.seqLoopPlay = false;  // « Lecture » du séquenceur reboucle indéfiniment (voir playCurrent)
 
         // Garder le métronome pendant la lecture de la grille (pas seulement au décompte) : une
         // préférence d'usage, mémorisée d'une session à l'autre comme le choix d'instrument.
@@ -1780,6 +1782,7 @@ class HarmoBoxApp {
         this.clearGuitarViz();
         this.highlightPlaying(null, null);
         this.isPlaying = false;
+        this.updateSeqPlayhead(null);
     }
 
     // Instrument Tone.js pour cette banque, construit puis mis en cache au premier accord qui s'en
@@ -1798,7 +1801,7 @@ class HarmoBoxApp {
     // même voix en une seule note tenue plutôt que de rejouer une attaque à chaque croche — c'est ce
     // qui permet à un motif « tout allumé » de sonner comme un accord soutenu (Maintenu), tout en
     // restant un motif éditable case par case comme un vrai séquenceur pas-à-pas.
-    schedulePlayback(notes, midis, seqPattern, seqTie, secPerBeat, timeOffset, roleMap = {}, instrumentKey = 'piano', chord = null) {
+    schedulePlayback(notes, midis, seqPattern, seqTie, secPerBeat, timeOffset, roleMap = {}, instrumentKey = 'piano', chord = null, trackPlayhead = false) {
         const instrument = this.getInstrument(instrumentKey);
         const stepDur = secPerBeat / SEQ_STEPS_PER_BEAT;
         const steps = seqPattern.length;
@@ -1807,13 +1810,17 @@ class HarmoBoxApp {
         const ratio = this.grooveRatio();
         const stepTime = (s) => timeOffset + grooveStepOffset(s, stepDur, ratio);
 
-        // Surbrillance clavier : à chaque croche, affiche les voix actives à cet instant précis
+        // Surbrillance clavier : à chaque croche, affiche les voix actives à cet instant précis.
+        // trackPlayhead (uniquement pour playCurrent, jamais pour la lecture de toute la grille où
+        // l'accord affiché dans le panneau n'est pas forcément celui qui sonne) anime en plus le
+        // curseur de lecture du séquenceur, s'il est ouvert sur cet accord.
         for (let s = 0; s < steps; s++) {
             const activeMidis = seqPattern[s].map(v => midis[v]);
             Tone.Transport.schedule((t) => {
                 Tone.Draw.schedule(() => {
                     this.ensurePianoWindow(midis); this.updateViz(activeMidis, roleMap);
                     if (chord) this.ensureGuitarDiagram(chord);
+                    if (trackPlayhead) this.updateSeqPlayhead(s);
                 }, t);
             }, stepTime(s));
         }
@@ -1855,11 +1862,18 @@ class HarmoBoxApp {
         const secPerBeat = 60 / bpm;
         const instrumentKey = document.getElementById('instrument').value;
 
-        this.schedulePlayback(notes, chord.getMidiNotes(), seqPattern, seqTie, secPerBeat, 0.1, chord.getRoleMap(), instrumentKey, chord);
+        this.schedulePlayback(notes, chord.getMidiNotes(), seqPattern, seqTie, secPerBeat, 0.1, chord.getRoleMap(), instrumentKey, chord, true);
         this.isPlaying = true;
 
+        // Bouton « Boucle » du séquenceur : au lieu de s'arrêter, rejoue aussitôt depuis le début —
+        // pratique pour tester un rythme en continu sans avoir à rappuyer sur Lecture. Stop (qui
+        // annule tout ce qui est programmé sur le transport) coupe la boucle net à tout moment.
         Tone.Transport.schedule((t) => {
-            Tone.Draw.schedule(() => { this.refreshPreview(); this.isPlaying = false; }, t); // ré-affiche l'accord complet en fin de lecture
+            Tone.Draw.schedule(() => {
+                this.refreshPreview();
+                if (this.seqLoopPlay) this.playCurrent();
+                else { this.isPlaying = false; this.updateSeqPlayhead(null); }
+            }, t);
         }, 0.1 + (chord.beats * secPerBeat));
 
         Tone.Transport.start();
@@ -4352,7 +4366,9 @@ class HarmoBoxApp {
         // largeur d'écran — un plancher, même modeste, suffisait à forcer un débordement (et donc un
         // vrai scroll tactile) sur les téléphones étroits pour une simple mesure en 4/4, ce qui
         // recréait exactement le conflit scroll/étirement que la pagination visait à éliminer.
-        let html = `<div class="seq-scroll"><div class="seq-grid" style="grid-template-columns: max-content repeat(${pageSteps}, 1fr);">`;
+        // data-page-start/steps : lus par updateSeqPlayhead pour savoir si le pas en cours de lecture
+        // tombe dans la page affichée (et à quelle colonne), sans dupliquer ce calcul côté lecture.
+        let html = `<div class="seq-scroll"><div class="seq-grid" data-page-start="${pageStart}" data-page-steps="${pageSteps}" style="grid-template-columns: max-content repeat(${pageSteps}, 1fr);">`;
 
         // Cases de la grille : zones de clic/glisser (toujours présentes, sous les notes visuelles).
         // Placement explicite (grid-row/grid-column) sur TOUT le monde : les notes ci-dessous se
@@ -4426,7 +4442,12 @@ class HarmoBoxApp {
                 // occupe toute la piste) dépasserait légèrement de ce rectangle de fond. Pas de
                 // retrait si la note est coupée par la page : elle doit occuper toute la largeur.
                 const trimEnd = (!clipEnd && runEnd % 2 === 1) ? ' margin-right:4px;' : '';
-                notesHtml += `<div class="seq-note ${shape} role-${role}${sel}${clipCls}" data-voice="${r}" data-start="${runStart}" data-end="${trueRunEnd}" style="grid-row:${rowIndex}; grid-column:${runStart - pageStart + 2} / span ${runLen};${trimEnd}"></div>`;
+                // Petit repère à l'attaque (le tout début de la pilule, là où la note est réellement
+                // pincée) pour la distinguer de sa partie tenue — seulement sur une vraie note (pas une
+                // croche isolée, rien à distinguer) dont le début est réellement visible sur cette page
+                // (une note coupée par la page — voir clip-start — n'attaque pas ici, juste continue).
+                const headEl = (shape === 'run' && !clipStart) ? '<span class="seq-note-head"></span>' : '';
+                notesHtml += `<div class="seq-note ${shape} role-${role}${sel}${clipCls}" data-voice="${r}" data-start="${runStart}" data-end="${trueRunEnd}" style="grid-row:${rowIndex}; grid-column:${runStart - pageStart + 2} / span ${runLen};${trimEnd}">${headEl}</div>`;
             }
         }
         html += notesHtml;
@@ -4441,6 +4462,10 @@ class HarmoBoxApp {
             beatLabelsHtml += `<div class="seq-beat-label" style="grid-row:${beatRow}; grid-column:${s - pageStart + 2};">${beatNum}</div>`;
         }
         html += beatLabelsHtml;
+
+        // Curseur de lecture (masqué par défaut, positionné/affiché par updateSeqPlayhead pendant la
+        // lecture) : ne couvre que les rangées de voix, pas celle des numéros de temps en dessous.
+        html += `<div class="seq-playhead" style="grid-row: 1 / span ${voices}; grid-column: 2 / span 1;"></div>`;
 
         html += `</div></div>`;
 
@@ -4464,6 +4489,7 @@ class HarmoBoxApp {
         const countSuffix = this.seqSelections.length > 1 ? ` (${this.seqSelections.length})` : '';
         html += `<div class="seq-presets">
             <button type="button" id="seq-play" class="btn-prog">${svgIcon('play')} Lecture</button>
+            <button type="button" id="seq-loop-play" class="icon-btn${this.seqLoopPlay ? ' active' : ''}" title="Rejouer en boucle" aria-label="Rejouer en boucle">${svgIcon('loop')}</button>
             <button type="button" id="seq-stop" class="btn-stop">${svgIcon('stop')} Stop</button>
             <button type="button" data-preset="clear" class="seq-delete-btn">${svgIcon('trash')} tout</button>
             <button type="button" id="seq-delete-selection" class="seq-delete-btn" ${hasSelection ? '' : 'disabled'}>${svgIcon('trash')}
@@ -4492,6 +4518,11 @@ class HarmoBoxApp {
         if (playBtn) playBtn.onclick = () => this.playCurrent();
         const stopBtn = document.getElementById('seq-stop');
         if (stopBtn) stopBtn.onclick = () => this.stopAll();
+        const loopBtn = document.getElementById('seq-loop-play');
+        if (loopBtn) loopBtn.onclick = (e) => {
+            this.seqLoopPlay = !this.seqLoopPlay;
+            e.currentTarget.classList.toggle('active', this.seqLoopPlay);
+        };
 
         // Navigation par page : saut direct d'une mesure (ou groupe de mesures) à l'autre, jamais de
         // scroll continu (voir le commentaire plus haut sur le conflit avec l'étirement tactile).
@@ -4499,6 +4530,22 @@ class HarmoBoxApp {
         if (prevBtn) prevBtn.onclick = () => { this.seqPage--; this.renderSequencer(); };
         const nextBtn = document.getElementById('seq-page-next');
         if (nextBtn) nextBtn.onclick = () => { this.seqPage++; this.renderSequencer(); };
+    }
+
+    // Déplace le curseur de lecture (petite ligne verticale) du séquenceur au pas `step` en cours ;
+    // `null` le masque (arrêt, ou pas hors de la page affichée). Ne fait rien si le panneau est fermé
+    // ou déjà démonté — la lecture continue même quand le séquenceur n'est pas ouvert (voir playCurrent).
+    updateSeqPlayhead(step) {
+        const host = document.getElementById('arp-sequencer');
+        if (!host || host.hidden) return;
+        const grid = host.querySelector('.seq-grid');
+        const ph = host.querySelector('.seq-playhead');
+        if (!grid || !ph) return;
+        if (step == null) { ph.style.display = 'none'; return; }
+        const pageStart = +grid.dataset.pageStart, pageSteps = +grid.dataset.pageSteps;
+        if (step < pageStart || step >= pageStart + pageSteps) { ph.style.display = 'none'; return; }
+        ph.style.display = 'block';
+        ph.style.gridColumn = `${step - pageStart + 2} / span 1`;
     }
 
     // Clic sur une case : sélectionne (surbrillance) + écoute l'accord, sauf si l'utilisateur a

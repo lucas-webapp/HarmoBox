@@ -1387,6 +1387,36 @@ button:active { transform: translateY(1px); }
 .seq-note.clip-start { border-top-left-radius: 0; border-bottom-left-radius: 0; }
 .seq-note.clip-end { border-top-right-radius: 0; border-bottom-right-radius: 0; }
 
+/* Repère d'attaque : fine bande plus claire au tout début d'une pilule tenue, pour distinguer d'un
+   coup d'œil où la note est réellement « pincée » de sa partie tenue ensuite (jamais sur une croche
+   isolée, ni sur une note coupée par la page qui n'attaque pas ici — voir renderSequencer). */
+.seq-note-head {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: rgba(255, 255, 255, 0.5);
+    border-top-left-radius: inherit;
+    border-bottom-left-radius: inherit;
+}
+
+/* Curseur de lecture : toute la colonne du pas en cours (pas juste un trait) reçoit un léger lavis +
+   un liseré des deux côtés, pour rester bien visible quelle que soit la couleur en dessous (case vide,
+   note colorée...) — parcourt le séquenceur pas par pas pendant playCurrent() (voir updateSeqPlayhead).
+   Masqué par défaut, jamais interactif. */
+.seq-playhead {
+    display: none;
+    align-self: stretch; /* .seq-grid impose align-items:center (hauteur au contenu) : sans stretch,
+                             cet élément vide s'écraserait à 0px de haut au lieu de couvrir la colonne */
+    pointer-events: none;
+    background: rgba(255, 255, 255, 0.14);
+    border-left: 2px solid var(--accent);
+    border-right: 2px solid var(--accent);
+    box-shadow: 0 0 10px rgba(0, 230, 118, 0.5), inset 0 0 10px rgba(0, 230, 118, 0.2);
+    z-index: 5;
+}
+
 /* Navigation par mesure(s) du séquenceur : un saut net d'une page à l'autre plutôt qu'un scroll
    continu, qui se confondait au doigt avec le geste d'étirement d'une note (voir renderSequencer). */
 .seq-page-nav {
@@ -1420,6 +1450,10 @@ button:active { transform: translateY(1px); }
     padding: 9px 8px;
     font-size: var(--fs-sm);
 }
+
+/* Bouton Boucle : reste un icon-btn carré (comme dans les autres en-têtes), pas étiré à égalité avec
+   les gros boutons texte de cette rangée. */
+.seq-presets .icon-btn { flex: none; padding: 0; }
 
 /* Bouton dédié : supprime uniquement les notes sélectionnées, sans toucher au reste du motif */
 .seq-delete-btn:not(:disabled) {
