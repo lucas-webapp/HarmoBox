@@ -1110,23 +1110,26 @@ button:active { transform: translateY(1px); }
     z-index: 3;
 }
 
-/* Barre de lecture de la grille : repère à gauche de l'accord sélectionné/en cours (voir
-   updateGridPlayhead) — simple enfant absolu du .grid-cell concerné (position:relative), jamais
-   interactif, au-dessus de tout le reste de la case. Uniquement en partie basse (pas toute la
-   hauteur), et estompée en s'approchant du centre (dégradé du plein en bas vers transparent).
+/* Barre de lecture de la grille : glisse progressivement le long de l'accord en cours, de la gauche
+   vers la droite, au fil des croches jouées (voir schedulePlayback/gridPos et
+   setGridPlayheadProgress) — sa position (style.left, en %) est mise à jour en JS à chaque croche,
+   sans re-render de la grille. Uniquement en partie basse (pas toute la hauteur), et estompée en
+   s'approchant du centre (dégradé du plein en bas vers transparent).
    En BLANC (pas --accent) : pendant la lecture, la case en cours a déjà un contour vert plein
-   (.grid-cell.playing) qui rendait la barre — de la même couleur — invisible, confondue avec ce
-   contour. Le blanc reste distinct quel que soit l'état (case simple, sélectionnée ou en lecture). */
+   (.grid-cell.playing) qui rendait une barre verte invisible, confondue avec ce contour. Le blanc
+   reste distinct quel que soit l'état (case simple, sélectionnée ou en lecture) ; discret (fin,
+   faiblement lumineux) pour ne pas dominer visuellement la case. */
 .grid-playhead {
     position: absolute;
     left: 0;
     bottom: 0;
-    width: 4px;
-    height: 55%;
+    width: 2px;
+    height: 50%;
     pointer-events: none;
-    background: linear-gradient(to top, #ffffff 0%, rgba(255, 255, 255, 0) 100%);
-    box-shadow: 0 0 4px rgba(255, 255, 255, 0.8);
+    background: linear-gradient(to top, rgba(255, 255, 255, 0.75) 0%, rgba(255, 255, 255, 0) 100%);
+    box-shadow: 0 0 2px rgba(255, 255, 255, 0.4);
     z-index: 6;
+    transition: left 0.1s linear;
 }
 
 /* Emplacement où l'accord déplacé va se poser */

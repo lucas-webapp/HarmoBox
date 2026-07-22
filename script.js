@@ -1817,7 +1817,7 @@ class HarmoBoxApp {
     // même voix en une seule note tenue plutôt que de rejouer une attaque à chaque croche — c'est ce
     // qui permet à un motif « tout allumé » de sonner comme un accord soutenu (Maintenu), tout en
     // restant un motif éditable case par case comme un vrai séquenceur pas-à-pas.
-    schedulePlayback(notes, midis, seqPattern, seqTie, secPerBeat, timeOffset, roleMap = {}, instrumentKey = 'piano', chord = null, trackPlayhead = false) {
+    schedulePlayback(notes, midis, seqPattern, seqTie, secPerBeat, timeOffset, roleMap = {}, instrumentKey = 'piano', chord = null, trackPlayhead = false, gridPos = null) {
         const instrument = this.getInstrument(instrumentKey);
         const stepDur = secPerBeat / SEQ_STEPS_PER_BEAT;
         const steps = seqPattern.length;
@@ -1843,6 +1843,7 @@ class HarmoBoxApp {
                         this.ensurePianoWindow(midis); this.updateViz(activeMidis, roleMap);
                         if (chord) this.ensureGuitarDiagram(chord);
                         if (trackPlayhead) this.updateSeqPlayhead(s);
+                        if (gridPos && chord) this.setGridPlayheadProgress(gridPos.section, gridPos.index, s / SEQ_STEPS_PER_BEAT, chord.beats);
                     } catch (e) {
                         console.warn('Mise à jour visuelle ignorée (croche', s, ') :', e.message);
                     }
@@ -1986,7 +1987,7 @@ class HarmoBoxApp {
             const chord = new Chord(data.root, data.quality, beats, data.inversion, data.drop, octaveFromData(data), data.bass);
             const notes = chord.getNotes();
             const { pattern: seqPattern, tie: seqTie } = this.resolveSeqPatternForData(chord, data);
-            this.schedulePlayback(notes, chord.getMidiNotes(), seqPattern, seqTie, secPerBeat, timeOffset, chord.getRoleMap(), data.instrument || 'piano', chord);
+            this.schedulePlayback(notes, chord.getMidiNotes(), seqPattern, seqTie, secPerBeat, timeOffset, chord.getRoleMap(), data.instrument || 'piano', chord, false, { section, index });
 
             // Métronome maintenu pendant la lecture (option activée) : un clic par temps de l'accord,
             // accentué sur le 1er temps de chaque mesure — indépendant des notes de l'accord jouées.
@@ -2063,17 +2064,54 @@ class HarmoBoxApp {
     // l'arrêt (contrairement à la surbrillance « playing »), elle marque où la lecture reprendrait.
     // Sans re-render de la grille : un simple élément déplacé/réinséré, comme highlightPlaying.
     updateGridPlayhead(section, index) {
+        if (index == null) {
+            this.playheadSection = section;
+            this.playheadIndex = index;
+            document.querySelectorAll('.grid-playhead').forEach(el => el.remove());
+            return;
+        }
+        this.setGridPlayheadProgress(section, index, 0, 1); // position de repos : tout à gauche
+    }
+
+    // Fait glisser la barre de lecture le long de l'accord en cours, de la gauche vers la droite, au
+    // fil des croches jouées (voir schedulePlayback/gridPos) — plutôt qu'un simple saut d'accord en
+    // accord. `elapsedBeats`/`totalBeats` couvrent la durée ENTIÈRE de l'accord, qui peut être scindé
+    // sur plusieurs cases si étiré au-delà d'une ligne (voir layoutProgression, seg-first/-mid/-last) :
+    // chaque segment occupe `span` colonnes = `span` temps, on retrouve donc le bon segment et la
+    // fraction qui lui correspond en consommant `elapsedBeats` case par case.
+    setGridPlayheadProgress(section, index, elapsedBeats, totalBeats) {
         this.playheadSection = section;
         this.playheadIndex = index;
-        document.querySelectorAll('.grid-playhead').forEach(el => el.remove());
-        if (index == null) return;
-        // Le PREMIER segment seulement (voir seg-first) : un accord scindé sur plusieurs mesures/lignes
-        // a plusieurs cases pour le même index, la barre doit marquer son tout début, pas chaque bout.
-        const cell = document.querySelector(`.chord-grid[data-section="${section}"] .grid-cell[data-index="${index}"]`);
-        if (!cell) return;
-        const bar = document.createElement('div');
-        bar.className = 'grid-playhead';
-        cell.appendChild(bar);
+        const segs = Array.from(document.querySelectorAll(`.chord-grid[data-section="${section}"] .grid-cell[data-index="${index}"]`));
+        if (segs.length === 0) {
+            document.querySelectorAll('.grid-playhead').forEach(el => el.remove());
+            return;
+        }
+        const spans = segs.map(seg => {
+            const m = /span\s+(\d+)/.exec(seg.getAttribute('style') || '');
+            return m ? parseInt(m[1], 10) : 1;
+        });
+        let remaining = totalBeats > 0 ? Math.max(0, Math.min(totalBeats, elapsedBeats)) : 0;
+        let targetSeg = segs[0], fraction = 0;
+        for (let i = 0; i < segs.length; i++) {
+            if (i === segs.length - 1 || remaining < spans[i]) {
+                targetSeg = segs[i];
+                fraction = spans[i] > 0 ? Math.max(0, Math.min(1, remaining / spans[i])) : 0;
+                break;
+            }
+            remaining -= spans[i];
+        }
+        // Réutilise la barre déjà en place si elle est déjà dans le bon segment (juste sa position qui
+        // change) : la transition CSS (voir .grid-playhead) peut alors glisser au lieu de sauter d'une
+        // croche à l'autre. Recrée seulement en changeant de segment/case (ou après un re-render).
+        let bar = document.querySelector('.grid-playhead');
+        if (!(bar && bar.parentElement === targetSeg)) {
+            document.querySelectorAll('.grid-playhead').forEach(el => el.remove());
+            bar = document.createElement('div');
+            bar.className = 'grid-playhead';
+            targetSeg.appendChild(bar);
+        }
+        bar.style.left = `${fraction * 100}%`;
     }
 
     // `insertAfter` (optionnel) : index après lequel insérer le nouvel accord, dans la partie active
@@ -4698,7 +4736,7 @@ class HarmoBoxApp {
         const bpm = parseInt(document.getElementById('bpm').value);
         const secPerBeat = 60 / bpm;
         const { pattern: seqPattern, tie: seqTie } = this.resolveSeqPatternForData(chord, data);
-        this.schedulePlayback(notes, midis, seqPattern, seqTie, secPerBeat, 0.1, roleMap, data.instrument || 'piano', chord);
+        this.schedulePlayback(notes, midis, seqPattern, seqTie, secPerBeat, 0.1, roleMap, data.instrument || 'piano', chord, false, { section, index });
         this.isPlaying = true;
 
         // Attend que l'instrument soit prêt avant de démarrer le transport (voir playCurrent)
