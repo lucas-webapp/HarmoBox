@@ -991,6 +991,19 @@ const INSTRUMENT_BANKS = {
         })
     }
 };
+
+// Attend que les instruments à échantillons (Piano) aient fini de charger leurs sons depuis internet
+// avant de démarrer une lecture — sans plafond, un réseau absent ou trop lent bloquerait la lecture
+// indéfiniment (elle ne démarrerait jamais) plutôt que de simplement laisser filer en silence les
+// quelques notes concernées (voir schedulePlayback). Le plafond n'empêche pas le chargement de se
+// terminer en arrière-plan ensuite, pour les lectures suivantes.
+function waitForAudioReady(timeoutMs = 4000) {
+    return Promise.race([
+        Tone.loaded().catch(() => {}), // un échec de chargement ne doit jamais empêcher la lecture
+        new Promise(resolve => setTimeout(resolve, timeoutMs)),
+    ]);
+}
+
 const INSTRUMENT_KEY = 'harmoboxInstrument';
 const METRONOME_KEY = 'harmoboxMetronomeDuringPlayback';
 const CHORD_VOLUME_KEY = 'harmoboxChordVolume';
@@ -1878,6 +1891,12 @@ class HarmoBoxApp {
         this.schedulePlayback(notes, chord.getMidiNotes(), seqPattern, seqTie, secPerBeat, 0.1, chord.getRoleMap(), instrumentKey, chord, true);
         this.isPlaying = true;
 
+        // Attend que l'instrument (Piano notamment : ses sons se chargent depuis internet) soit prêt
+        // AVANT de démarrer le transport — sinon triggerAttackRelease échouait sur les premières
+        // notes le temps du chargement (voir schedulePlayback, qui les ignore désormais proprement,
+        // mais autant vraiment les jouer plutôt que de les sauter en silence).
+        await waitForAudioReady();
+
         // Bouton « Boucle » du séquenceur : au lieu de s'arrêter, rejoue aussitôt depuis le début —
         // pratique pour tester un rythme en continu sans avoir à rappuyer sur Lecture. Stop (qui
         // annule tout ce qui est programmé sur le transport) coupe la boucle net à tout moment.
@@ -1991,6 +2010,13 @@ class HarmoBoxApp {
                 }
             }, t);
         }, timeOffset);
+
+        // Attend que tous les instruments utilisés dans la grille (Piano notamment : ses sons se
+        // chargent depuis internet) soient prêts avant de démarrer le transport — la boucle ci-dessus
+        // les a déjà tous instanciés en programmant leur lecture (voir getInstrument), il ne reste
+        // qu'à attendre leur chargement. Sans ça, une note jouée trop tôt échouait silencieusement
+        // (voir schedulePlayback, qui l'ignore désormais proprement), mais autant vraiment l'entendre.
+        await waitForAudioReady();
 
         Tone.Transport.start();
     }
@@ -4645,6 +4671,9 @@ class HarmoBoxApp {
         const { pattern: seqPattern, tie: seqTie } = this.resolveSeqPatternForData(chord, data);
         this.schedulePlayback(notes, midis, seqPattern, seqTie, secPerBeat, 0.1, roleMap, data.instrument || 'piano', chord);
         this.isPlaying = true;
+
+        // Attend que l'instrument soit prêt avant de démarrer le transport (voir playCurrent)
+        await waitForAudioReady();
 
         // En fin de lecture, on GARDE l'accord affiché sur le clavier (au lieu de l'effacer)
         Tone.Transport.schedule((t) => {
