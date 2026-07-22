@@ -239,7 +239,7 @@ button, .icon-btn, .prog-section-del, .cell-edit, .cell-dup, .seq-presets button
 /* ---- Panneau Fichiers ---- */
 .files-empty { color: var(--text-muted); font-size: var(--fs-sm); text-align: center; padding: 30px 10px; }
 
-/* Barre d'outils : créer un dossier à gauche, annuler/rétablir à droite */
+/* Barre d'outils : créer un dossier à gauche, export/import de la bibliothèque puis annuler/rétablir à droite */
 .files-toolbar {
     display: flex;
     align-items: center;

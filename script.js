@@ -2025,6 +2025,13 @@ class HarmoBoxApp {
                     Nouveau dossier
                 </button>
                 <div class="files-toolbar-spacer"></div>
+                <button type="button" id="library-export-btn" class="icon-btn" title="Exporter toute la bibliothèque (sauvegarde)" aria-label="Exporter toute la bibliothèque">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M5 21h14"/></svg>
+                </button>
+                <button type="button" id="library-import-btn" class="icon-btn" title="Importer une bibliothèque (restauration)" aria-label="Importer une bibliothèque">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21V9"/><path d="m7 13 5-5 5 5"/><path d="M5 3h14"/></svg>
+                </button>
+                <input type="file" id="library-import-input" accept="application/json" hidden>
                 <button type="button" id="files-undo-btn" class="icon-btn" title="Annuler (Ctrl+Z)" aria-label="Annuler" ${this.filesUndoStack.length ? '' : 'disabled'}>
                     <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
                 </button>
@@ -2125,6 +2132,18 @@ class HarmoBoxApp {
         if (u) u.onclick = () => this.filesUndo();
         const r = document.getElementById('files-redo-btn');
         if (r) r.onclick = () => this.filesRedo();
+        const exportBtn = document.getElementById('library-export-btn');
+        if (exportBtn) exportBtn.onclick = () => this.exportLibrary();
+        const importBtn = document.getElementById('library-import-btn');
+        const importInput = document.getElementById('library-import-input');
+        if (importBtn && importInput) {
+            importBtn.onclick = () => importInput.click();
+            importInput.onchange = () => {
+                const file = importInput.files[0];
+                importInput.value = ''; // permet de resélectionner le même fichier ensuite
+                if (file) this.importLibraryFile(file);
+            };
+        }
     }
 
     openSongFromFiles(id) {
@@ -2289,6 +2308,74 @@ class HarmoBoxApp {
         songs.forEach(s => { if (s.folder === name) s.folder = null; });
         saveSongs(songs);
         this.renderFilesPanel();
+    }
+
+    // ---------- Sauvegarde/restauration de toute la bibliothèque (fichier .json) ----------
+    // Ne couvre QUE la bibliothèque (morceaux + dossiers) : les préférences locales de l'appareil
+    // (volumes, instrument par défaut, son du métronome...) n'ont pas leur place dans une sauvegarde
+    // destinée à être restaurée sur un autre navigateur ou ordinateur.
+    exportLibrary() {
+        const payload = {
+            app: 'HarmoBox',
+            kind: 'library-backup',
+            version: 1,
+            exportedAt: Date.now(),
+            songs: loadSongs(),
+            folders: loadFolders()
+        };
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `harmobox-bibliotheque-${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        this.flashHint('Bibliothèque exportée');
+    }
+
+    // Importe une sauvegarde : AJOUTE les morceaux du fichier à la bibliothèque actuelle, sans jamais
+    // rien supprimer ni écraser (une restauration ne doit jamais faire perdre du travail en cours).
+    // Les morceaux dont l'identifiant existe déjà (déjà importés, ou fichier réimporté par erreur)
+    // sont ignorés silencieusement plutôt que dupliqués — importer deux fois le même fichier ne
+    // change donc rien la seconde fois.
+    async importLibraryFile(file) {
+        let data;
+        try {
+            data = JSON.parse(await file.text());
+        } catch (e) {
+            data = null;
+        }
+        if (!data || !Array.isArray(data.songs)) {
+            this.flashHint('Fichier invalide — ce n\'est pas une sauvegarde HarmoBox');
+            return;
+        }
+
+        const existingSongs = loadSongs();
+        const existingIds = new Set(existingSongs.map(s => s.id));
+        const toAdd = data.songs.filter(s => s && s.id && !existingIds.has(s.id));
+        const skipped = data.songs.length - toAdd.length;
+
+        const existingFolders = loadFolders();
+        const mergedFolders = Array.isArray(data.folders) ? [...new Set([...existingFolders, ...data.folders])] : existingFolders;
+        const foldersChanged = mergedFolders.length !== existingFolders.length;
+
+        if (toAdd.length > 0 || foldersChanged) {
+            this.pushFilesUndo(); // un seul pas d'annulation pour tout l'import (morceaux + dossiers)
+            if (toAdd.length > 0) saveSongs([...existingSongs, ...toAdd]);
+            if (foldersChanged) saveFolders(mergedFolders);
+            this.refreshSongList();
+            if (this.settingsOpen) this.renderFilesPanel();
+        }
+
+        if (toAdd.length === 0) {
+            this.flashHint(skipped > 0 ? 'Bibliothèque déjà à jour — rien à importer' : 'Aucun morceau dans ce fichier');
+        } else if (skipped > 0) {
+            this.flashHint(`${toAdd.length} morceau(x) importé(s), ${skipped} déjà présent(s)`);
+        } else {
+            this.flashHint(`${toAdd.length} morceau(x) importé(s)`);
+        }
     }
 
     // ---------- Menu contextuel (clic droit / appui long) ----------
