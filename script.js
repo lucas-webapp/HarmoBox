@@ -8,8 +8,6 @@ const ICONS = {
     pencil: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
     duplicate: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>',
     trash: '<path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>',
-    bulb: '<path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2Z"/>',
-    warning: '<path d="M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.7 3.86a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
     play: '<path d="M8 5v14l11-7z" fill="currentColor" stroke="none"/>',
     stop: '<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none"/>'
 };
@@ -496,97 +494,6 @@ function diatonicNumeralFor(diff, keyMode) {
     return numeral;
 }
 
-// Repère les accords hors-tonalité qui sonnent VRAIMENT faux. Approche jazz-friendly : ne signale
-// PAS les diatoniques, dominantes secondaires (dom7 partout, triades majeures sur degrés de la gamme),
-// subs tritoniques (dom7) ni les emprunts modaux courants. Signale le reste (dissonances franches).
-function isOutOfKeyBad(root, quality, keyRoot, keyMode) {
-    const kr = NOTES.indexOf(keyRoot), cr = NOTES.indexOf(root);
-    const IV = CHORD_INTERVALS[quality];
-    if (kr < 0 || cr < 0 || !IV) return false;
-    const i = ((cr - kr) % 12 + 12) % 12;
-    const scale = MODE_SCALES[keyMode] || MODE_SCALES.maj;
-    const pcs = IV.map(n => (i + n.semi) % 12);
-
-    if (pcs.every(pc => scale.includes(pc))) return false;       // diatonique
-    // Dominantes (secondaires/enrichies), sub tritoniques, diminués et augmentés : usage jazz
-    // courant, jamais signalés (même logique que dom7 avant l'ajout de ces types d'accords)
-    if (['dom7', 'dom9', 'dom11', 'dom13', 'dim', 'dim7', 'm7b5', 'aug'].includes(quality)) return false;
-    // Triade majeure (nue ou colorée : 6, maj9, add9, sus) sur un degré = dominante secondaire
-    if (['maj', '6', 'maj9', 'add9', 'sus2', 'sus4'].includes(quality) && scale.includes(i)) return false;
-
-    // Emprunts modaux courants (jolis) qu'on ne signale pas
-    const MAJ_BORROW = [
-        { i: 5, q: ['min', 'min7', 'm6', 'm9'] },      // iv (mineur emprunté)
-        { i: 8, q: ['maj', 'maj7', '6', 'maj9'] },      // bVI
-        { i: 3, q: ['maj', 'maj7', '6', 'maj9'] },      // bIII
-        { i: 1, q: ['maj', 'maj7'] },                   // bII (napolitain)
-        { i: 10, q: ['maj', 'maj7', '6', 'maj9'] },     // bVII
-        { i: 0, q: ['min', 'min7', 'm6', 'm9'] }        // i (mineur parallèle)
-    ];
-    const MIN_BORROW = [
-        { i: 0, q: ['maj', 'maj7'] },   // I (tierce picarde)
-        { i: 5, q: ['maj'] },           // IV majeur (dorien)
-        { i: 2, q: ['maj'] },           // II majeur = V/v, dominante de la dominante (pas dorien : le
-                                        // dorien ne hausse que la 6te, pas la tierce de ce degré)
-        { i: 1, q: ['maj'] },           // bII (napolitain)
-        { i: 7, q: ['maj'] }            // V majeur
-    ];
-    // Pas de liste d'emprunts dédiée pour les 5 autres modes (dorien, phrygien...) : les exemptions
-    // déjà larges ci-dessus (dominantes, diminués, augmentés, triades majeures sur degré diatonique)
-    // couvrent l'essentiel de l'usage jazz courant sans qu'il faille cataloguer un emprunt par mode.
-    const B = keyMode === 'min' ? MIN_BORROW : (keyMode === 'maj' ? MAJ_BORROW : []);
-    if (B.some(b => b.i === i && b.q.includes(quality))) return false;
-
-    return true; // sinon : hors-tonalité, dissonance probable
-}
-
-// ---------- Conduite des voix : suggestions non contraignantes (infobulle uniquement) ----------
-// Coût approximatif du déplacement entre deux voicings : pour chaque note du second accord, la
-// distance (en demi-tons) à la note la plus proche du premier. Favorise les notes communes et les
-// mouvements par degrés conjoints sans imposer un appariement voix-à-voix strict (les accords
-// comparés n'ont pas forcément le même nombre de notes).
-function voiceLeadingCost(fromMidis, toMidis) {
-    if (!fromMidis.length || !toMidis.length) return Infinity;
-    return toMidis.reduce((sum, m) => {
-        let nearest = fromMidis[0];
-        fromMidis.forEach(f => { if (Math.abs(f - m) < Math.abs(nearest - m)) nearest = f; });
-        return sum + Math.abs(nearest - m);
-    }, 0);
-}
-
-const INVERSION_LABELS = ['fondamentale', '1er renv.', '2e renv.', '3e renv.'];
-const DROP_OPTIONS = ['none', 'drop2', 'drop3'];
-const DROP_LABELS = { drop2: 'Drop 2', drop3: 'Drop 3' };
-
-// Combinaison renversement+drop (même qualité/octave) de `data` qui rapprocherait le plus ses voix
-// de `prevMidis`. Renvoie null si la combinaison déjà choisie est déjà optimale, ou si le gain est
-// trop faible pour valoir une suggestion (seuil de 4 demi-tons) — jamais rien d'automatique,
-// seulement de quoi renseigner une infobulle.
-function suggestSmootherVoicing(data, prevMidis) {
-    const maxInv = new Chord(data.root, data.quality, 4, 0, 'none', octaveFromData(data)).getIntervals().length - 1;
-    const currentInv = new Chord(data.root, data.quality, 4, data.inversion, data.drop, octaveFromData(data)).getEffectiveInversion();
-    const currentDrop = DROP_OPTIONS.includes(data.drop) ? data.drop : 'none';
-    let currentCost = null, best = null;
-    for (let inv = 0; inv <= maxInv; inv++) {
-        for (const drop of DROP_OPTIONS) {
-            const midis = new Chord(data.root, data.quality, 4, inv, drop, octaveFromData(data), data.bass).getMidiNotes();
-            const cost = voiceLeadingCost(prevMidis, midis);
-            if (inv === currentInv && drop === currentDrop) currentCost = cost;
-            if (!best || cost < best.cost) best = { inversion: inv, drop, cost };
-        }
-    }
-    if ((best.inversion === currentInv && best.drop === currentDrop) || currentCost - best.cost < 4) return null;
-    return { inversion: best.inversion, drop: best.drop, currentCost, bestCost: best.cost };
-}
-
-// Texte lisible d'une suggestion, ex. "1er renv., Drop 2" ou juste "2e renv." si le drop suggéré
-// est "aucun" — reprend le vocabulaire déjà utilisé ailleurs dans l'appli (Chord.getLabel).
-function voicingSuggestionLabel(suggestion) {
-    const parts = [INVERSION_LABELS[suggestion.inversion] || `${suggestion.inversion}e renv.`];
-    if (DROP_LABELS[suggestion.drop]) parts.push(DROP_LABELS[suggestion.drop]);
-    return parts.join(', ');
-}
-
 class Chord {
     constructor(root, quality, beats, inversion, drop, octave = 3, bass = null) {
         this.root = root;
@@ -965,7 +872,6 @@ class HarmoBoxApp {
         this.seqTouched = false;   // l'utilisateur a-t-il personnalisé le motif pour l'accord en cours ?
         this.seqSelections = []; // notes du séquenceur sélectionnées : [{ voice, start, end }, ...]
         this.seqDrag = null;       // état de glisser en cours sur le séquenceur
-        this.showVoiceLeading = false; // affiche les suggestions de conduite des voix dans la grille
 
         // Garder le métronome pendant la lecture de la grille (pas seulement au décompte) : une
         // préférence d'usage, mémorisée d'une session à l'autre comme le choix d'instrument.
@@ -1024,13 +930,6 @@ class HarmoBoxApp {
             document.getElementById('instrument').value = savedInstrument;
         }
         document.getElementById('instrument').onchange = (e) => localStorage.setItem(INSTRUMENT_KEY, e.target.value);
-
-        // Suggestions de conduite des voix dans la grille : masquées par défaut, uniquement sur demande
-        document.getElementById('toggle-voice-leading').onclick = (e) => {
-            this.showVoiceLeading = !this.showVoiceLeading;
-            e.currentTarget.classList.toggle('active', this.showVoiceLeading);
-            this.loadProgression();
-        };
 
         // Garder le métronome pendant la lecture de la grille (au-delà du seul décompte)
         const metroBtn = document.getElementById('toggle-metronome');
@@ -1724,20 +1623,6 @@ class HarmoBoxApp {
                     if (s.barStart) cls += ' bar-start';
                     // police réduite pour les segments courts (peu de temps)
                     if (s.span === 1) cls += ' sz1'; else if (s.span === 2) cls += ' sz2';
-                    // repère des accords hors-tonalité qui sonnent faux
-                    const outOfKey = isOutOfKeyBad(h.root, h.quality, gRoot, gMode);
-                    if (outOfKey) cls += ' out-of-key';
-
-                    // Conduite des voix : suggestion de renversement plus fluide par rapport à
-                    // l'accord précédent DE LA MÊME PARTIE (simple infobulle, rien n'est imposé).
-                    // Masquée par défaut (this.showVoiceLeading) : calcul évité tant qu'elle est cachée.
-                    let vlSuggestion = null;
-                    if (this.showVoiceLeading && s.index > 0) {
-                        const prevData = history[s.index - 1];
-                        const prevMidis = new Chord(prevData.root, prevData.quality, 4, prevData.inversion, prevData.drop, octaveFromData(prevData), prevData.bass).getMidiNotes();
-                        vlSuggestion = suggestSmootherVoicing(h, prevMidis);
-                    }
-
                     const style = `grid-column: ${s.col + 1} / span ${s.span}; grid-row: ${s.row + 1};`;
 
                     // Boutons (modifier + dupliquer) et méta uniquement sur le premier segment
@@ -1749,12 +1634,6 @@ class HarmoBoxApp {
                                     title="Dupliquer cet accord" aria-label="Dupliquer cet accord">${svgIcon('duplicate')}</button>
                         </div>` : '';
                     const romanEl = s.isFirst ? `<span class="cell-roman">${roman}</span>` : '';
-                    const warnEl = (s.isFirst && outOfKey) ? `<span class="cell-warn" title="Hors tonalité — risque de dissonance">${svgIcon('warning')}</span>` : '';
-                    let vlHintEl = '';
-                    if (s.isFirst && vlSuggestion) {
-                        const vlMsg = `Suggestion — ${voicingSuggestionLabel(vlSuggestion)} (${vlSuggestion.bestCost} demi-tons de mouvement au lieu de ${vlSuggestion.currentCost})`;
-                        vlHintEl = `<span class="cell-hint" onclick="event.stopPropagation(); app.flashHint('${escapeHtml(vlMsg)}', 3200)" title="${escapeHtml(vlMsg)}">${svgIcon('bulb')}</span>`;
-                    }
                     const metaEl = s.isFirst ? `<span class="cell-meta">${styleLabel}</span>` : '';
                     const contFlag = (s.split && !s.isFirst) ? ' <span class="cell-cont">↩</span>' : '';
 
@@ -1762,7 +1641,7 @@ class HarmoBoxApp {
                     <div class="${cls}" data-section="${si}" data-index="${s.index}" style="${style}" title="Toucher pour écouter · glisser pour déplacer">
                         ${actions}
                         ${romanEl}
-                        <span class="cell-sym">${sym}${warnEl}${vlHintEl}${contFlag}</span>
+                        <span class="cell-sym">${sym}${contFlag}</span>
                         ${metaEl}
                     </div>`;
                 }).join('');
@@ -2724,7 +2603,7 @@ class HarmoBoxApp {
         const section = +gridEl.dataset.section;
 
         const cell = e.target.closest('.grid-cell');
-        if (cell && !e.target.closest('.cell-actions') && !e.target.closest('.cell-hint')) {
+        if (cell && !e.target.closest('.cell-actions')) {
             const rect = cell.getBoundingClientRect();
             this.drag = {
                 section,

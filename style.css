@@ -787,13 +787,6 @@ button:active { transform: translateY(1px); }
     width: 30px;
     height: 30px;
 }
-.toggle-vl-btn {
-    position: absolute;
-    right: 72px;
-    bottom: 0;
-    width: 30px;
-    height: 30px;
-}
 
 /* ---------- Progression ---------- */
 .history-section { margin-top: 30px; }
@@ -1042,21 +1035,6 @@ button:active { transform: translateY(1px); }
     border-color: #2f81f7;
     color: #fff;
 }
-
-/* Accord hors-tonalité (dissonant) : liseré rouge en haut + pictogramme */
-.grid-cell.out-of-key::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 3px;
-    background: #ff6b3d;
-    z-index: 3;
-}
-.cell-warn { color: #ff6b3d; margin-left: 2px; }
-.cell-warn .icon, .cell-hint .icon { width: 12px; height: 12px; vertical-align: -2px; }
-
-/* Suggestion de conduite des voix : simple infobulle, jamais rien d'imposé */
-.cell-hint { color: #ffd23d; margin-left: 2px; opacity: 0.85; cursor: pointer; }
 
 /* Police réduite pour les segments courts */
 .grid-cell.sz2 .cell-sym { font-size: var(--fs-base); }
