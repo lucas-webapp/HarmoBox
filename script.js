@@ -3822,6 +3822,20 @@ class HarmoBoxApp {
                 if (e.key === 'ArrowLeft') { this.resizeSelectedSeqNote(-1); e.preventDefault(); return; }
             }
 
+            // Accord sélectionné dans la grille : ← → passe au précédent/suivant DANS LA MÊME PARTIE
+            // (s'arrête aux bornes, ne saute pas d'une partie à l'autre) — s'appuie sur selectChord,
+            // donc rejoue aussi l'accord ciblé, comme un clic direct sur sa case.
+            if (!typing && this.selectedIndex != null && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+                const sections = loadProgressionSections();
+                const history = sections[this.activeSection] && sections[this.activeSection].chords;
+                if (history && history.length > 0) {
+                    const dir = (e.key === 'ArrowRight') ? 1 : -1;
+                    const next = Math.min(history.length - 1, Math.max(0, this.selectedIndex + dir));
+                    if (next !== this.selectedIndex) this.selectChord(this.activeSection, next);
+                    e.preventDefault();
+                }
+            }
+
             if (!typing && (e.key === 'Delete' || e.key === 'Backspace')) {
                 if (this.selectedIndex != null) { this.removeChord(this.activeSection, this.selectedIndex); e.preventDefault(); }
             }
