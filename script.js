@@ -1834,9 +1834,18 @@ class HarmoBoxApp {
             const activeMidis = seqPattern[s].map(v => midis[v]);
             Tone.Transport.schedule((t) => {
                 Tone.Draw.schedule(() => {
-                    this.ensurePianoWindow(midis); this.updateViz(activeMidis, roleMap);
-                    if (chord) this.ensureGuitarDiagram(chord);
-                    if (trackPlayhead) this.updateSeqPlayhead(s);
+                    // Ce bloc tourne à CHAQUE croche de CHAQUE accord pendant la lecture de toute la
+                    // grille : une exception ici importe silencieusement TOUT le traitement des
+                    // évènements suivants du transport (même constat que pour triggerAttackRelease,
+                    // voir plus bas) — la grille se figeait alors sur le premier accord concerné,
+                    // quel que soit l'état du réseau ou de l'instrument. Un filet, comme pour le son.
+                    try {
+                        this.ensurePianoWindow(midis); this.updateViz(activeMidis, roleMap);
+                        if (chord) this.ensureGuitarDiagram(chord);
+                        if (trackPlayhead) this.updateSeqPlayhead(s);
+                    } catch (e) {
+                        console.warn('Mise à jour visuelle ignorée (croche', s, ') :', e.message);
+                    }
                 }, t);
             }, stepTime(s));
         }
@@ -1902,9 +1911,14 @@ class HarmoBoxApp {
         // annule tout ce qui est programmé sur le transport) coupe la boucle net à tout moment.
         Tone.Transport.schedule((t) => {
             Tone.Draw.schedule(() => {
-                this.refreshPreview();
-                if (this.seqLoopPlay) this.playCurrent();
-                else { this.isPlaying = false; this.updateSeqPlayhead(null); }
+                try {
+                    this.refreshPreview();
+                    if (this.seqLoopPlay) this.playCurrent();
+                    else { this.isPlaying = false; this.updateSeqPlayhead(null); }
+                } catch (e) {
+                    console.warn('Fin de lecture ignorée :', e.message);
+                    this.isPlaying = false;
+                }
             }, t);
         }, 0.1 + (chord.beats * secPerBeat));
 
@@ -1949,7 +1963,11 @@ class HarmoBoxApp {
             const accent = (b === 0);
             const label = b + 1;
             Tone.Transport.schedule((t) => {
-                this.playMetronomeClick(accent, t);
+                // Un filet à chaque callback programmé sur le transport (voir schedulePlayback) : une
+                // seule exception, n'importe où, bloquait silencieusement tout le reste de la lecture.
+                try {
+                    this.playMetronomeClick(accent, t);
+                } catch (e) { console.warn('Clic de décompte ignoré :', e.message); }
                 Tone.Draw.schedule(() => {
                     disp.innerHTML = `Décompte<span class="chord-notes">${label} / ${COUNT_IN}</span>`;
                 }, t);
@@ -1977,7 +1995,9 @@ class HarmoBoxApp {
                     const accent = (songBeat % COUNT_IN === 0);
                     const clickTime = timeOffset + b * secPerBeat;
                     Tone.Transport.schedule((t) => {
-                        this.playMetronomeClick(accent, t);
+                        try {
+                            this.playMetronomeClick(accent, t);
+                        } catch (e) { console.warn('Clic de métronome ignoré :', e.message); }
                     }, clickTime);
                     songBeat++;
                 }
@@ -1988,8 +2008,12 @@ class HarmoBoxApp {
             const labelHTML = `<span class="chord-title">${flatTight(chord.getLabel(chordUseFlats))}</span><span class="chord-notes">${chordNotesHtml(chord, chordUseFlats)}</span>`;
             Tone.Transport.schedule((t) => {
                 Tone.Draw.schedule(() => {
-                    disp.innerHTML = labelHTML;
-                    this.highlightPlaying(section, index);
+                    try {
+                        disp.innerHTML = labelHTML;
+                        this.highlightPlaying(section, index);
+                    } catch (e) {
+                        console.warn('Surbrillance ignorée pour', section, index, ':', e.message);
+                    }
                 }, t);
             }, timeOffset);
 
@@ -1998,14 +2022,19 @@ class HarmoBoxApp {
 
         Tone.Transport.schedule((t) => {
             Tone.Draw.schedule(() => {
-                // Boucle encore active et lecture non interrompue entre-temps (bouton Stop) -> on
-                // relance directement un tour complet (avec son propre décompte) plutôt que de
-                // s'arrêter ; sinon, comportement habituel de fin de lecture.
-                if (loop && this.loopActiveSection && this.isPlaying) {
-                    this.playProgression();
-                } else {
-                    this.clearViz();
-                    this.highlightPlaying(null, null);
+                try {
+                    // Boucle encore active et lecture non interrompue entre-temps (bouton Stop) -> on
+                    // relance directement un tour complet (avec son propre décompte) plutôt que de
+                    // s'arrêter ; sinon, comportement habituel de fin de lecture.
+                    if (loop && this.loopActiveSection && this.isPlaying) {
+                        this.playProgression();
+                    } else {
+                        this.clearViz();
+                        this.highlightPlaying(null, null);
+                        this.isPlaying = false;
+                    }
+                } catch (e) {
+                    console.warn('Fin de progression ignorée :', e.message);
                     this.isPlaying = false;
                 }
             }, t);
@@ -4677,7 +4706,14 @@ class HarmoBoxApp {
 
         // En fin de lecture, on GARDE l'accord affiché sur le clavier (au lieu de l'effacer)
         Tone.Transport.schedule((t) => {
-            Tone.Draw.schedule(() => { this.ensurePianoWindow(midis); this.updateViz(midis, roleMap); this.ensureGuitarDiagram(chord); this.isPlaying = false; }, t);
+            Tone.Draw.schedule(() => {
+                try {
+                    this.ensurePianoWindow(midis); this.updateViz(midis, roleMap); this.ensureGuitarDiagram(chord);
+                } catch (e) {
+                    console.warn('Affichage de fin ignoré :', e.message);
+                }
+                this.isPlaying = false;
+            }, t);
         }, 0.1 + (chord.beats * secPerBeat));
 
         Tone.Transport.start();

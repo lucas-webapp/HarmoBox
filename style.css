@@ -1112,16 +1112,16 @@ button:active { transform: translateY(1px); }
 
 /* Barre de lecture de la grille : repère à gauche de l'accord sélectionné/en cours (voir
    updateGridPlayhead) — simple enfant absolu du .grid-cell concerné (position:relative), jamais
-   interactif, au-dessus de tout le reste de la case. */
+   interactif, au-dessus de tout le reste de la case. Uniquement en partie basse (pas toute la
+   hauteur), et estompée en s'approchant du centre (dégradé du plein en bas vers transparent). */
 .grid-playhead {
     position: absolute;
     left: 0;
-    top: 0;
     bottom: 0;
     width: 3px;
+    height: 55%;
     pointer-events: none;
-    background: var(--accent);
-    box-shadow: 0 0 6px rgba(0, 230, 118, 0.7);
+    background: linear-gradient(to top, var(--accent) 0%, rgba(0, 230, 118, 0) 100%);
     z-index: 6;
 }
 
