@@ -2202,12 +2202,15 @@ class HarmoBoxApp {
     // en double-cliquant la case comme n'importe quel accord), à la durée et au style de lecture/
     // instrument actuellement réglés dans le panneau Accord. Pensée pour poser vite une grille au
     // clavier, sans toucher aux menus déroulants.
-    addQuickChord() {
-        const input = document.getElementById('quick-add-input');
-        const parsed = parseChordSymbol(input.value);
+    // Ajoute un accord à partir d'un symbole texte (ex. "Cm7") à LA FIN d'une partie donnée — logique
+    // commune à l'ajout rapide (#quick-add-input, toujours sur la partie ACTIVE) et à la case "+" en
+    // bout de grille (une par partie, voir loadProgression/.cell-add-input) qui vise directement la
+    // partie où elle apparaît. Renvoie true si l'accord a bien été ajouté.
+    addChordFromSymbol(section, symbolStr) {
+        const parsed = parseChordSymbol(symbolStr);
         if (!parsed) {
             this.flashHint('Accord non reconnu (ex. Cm7, F#dim, Bbadd9)');
-            return;
+            return false;
         }
         const beats = parseInt(document.getElementById('duration').value) || 4;
         const playStyle = document.getElementById('playStyle').value;
@@ -2231,13 +2234,20 @@ class HarmoBoxApp {
 
         const sections = loadProgressionSections();
         this.pushUndo(sections);
-        sections[this.activeSection].chords.push(data);
+        sections[section].chords.push(data);
         saveProgressionSections(sections);
         this.loadProgression();
 
-        input.value = '';
-        input.focus();
         this.flashHint(`${noteNameForPc(NOTES.indexOf(parsed.root), this.useFlatsForRoot(parsed.root))}${QUALITY_LABEL[parsed.quality]} ajouté`);
+        return true;
+    }
+
+    addQuickChord() {
+        const input = document.getElementById('quick-add-input');
+        if (this.addChordFromSymbol(this.activeSection, input.value)) {
+            input.value = '';
+            input.focus();
+        }
     }
 
     // Passe les contrôles en mode « modification » d'un accord existant
@@ -2368,7 +2378,7 @@ class HarmoBoxApp {
             cells.push(...segs);
             cursor = pos;
         });
-        return { cells, rows: Math.max(1, Math.ceil(cursor / beatsPerRow)), beatsPerRow };
+        return { cells, rows: Math.max(1, Math.ceil(cursor / beatsPerRow)), beatsPerRow, cursor };
     }
 
     // Rend TOUTES les parties (couplet, refrain, ...) : chacune a son titre éditable et sa propre
@@ -2398,9 +2408,18 @@ class HarmoBoxApp {
             let gridInner, gridStyle = '';
 
             if (history.length === 0) {
-                gridInner = `<div class="empty-hint">Ajouter un accord</div>`;
+                const beatsPerRow = beatsPerRowFor(beatsPerBar);
+                const plusSpan = Math.min(2, beatsPerRow);
+                gridStyle = `grid-template-rows: repeat(1, var(--row-h) var(--measure-row-h)); grid-template-columns: repeat(${beatsPerRow}, 1fr);`;
+                gridInner = this.buildAddCellHtml(si, 0, 0, plusSpan);
             } else {
-                const { cells, rows, beatsPerRow } = this.layoutProgression(history, beatsPerBar);
+                const { cells, rows: chordRows, beatsPerRow, cursor } = this.layoutProgression(history, beatsPerBar);
+                // Case "+" (voir buildAddCellHtml) juste après le dernier accord : même ligne s'il
+                // reste de la place, sinon ligne suivante — la grille (rows) doit alors en tenir compte.
+                const plusCol = cursor % beatsPerRow;
+                const plusRow = Math.floor(cursor / beatsPerRow);
+                const plusSpan = Math.min(2, beatsPerRow - plusCol);
+                const rows = Math.max(chordRows, plusRow + 1);
                 // Une ligne de grille sur deux (impaire) porte les accords, l'autre (paire, fine et de
                 // hauteur EXPLICITE --measure-row-h, jamais "auto" — plus robuste d'un navigateur à
                 // l'autre qu'un dimensionnement intrinsèque basé sur le contenu) les numéros de mesure
@@ -2473,7 +2492,8 @@ class HarmoBoxApp {
                     <div class="row-measure" style="grid-column: ${s.col + 1} / span 1; grid-row: ${s.row * 2 + 2};">${s.barNumber}</div>`
                 ).join('') + cells.flatMap(s => s.innerBars.map(ib => `
                     <div class="row-measure" style="grid-column: ${s.col + ib.offset + 1} / span 1; grid-row: ${s.row * 2 + 2};">${ib.barNumber}</div>`)
-                ).join('') + this.buildLoopRangeBars(cells, loopRange);
+                ).join('') + this.buildLoopRangeBars(cells, loopRange)
+                + this.buildAddCellHtml(si, plusRow, plusCol, plusSpan);
             }
 
             const titleVal = (sec.title || '').replace(/"/g, '&quot;');
@@ -3895,12 +3915,31 @@ class HarmoBoxApp {
     setupGridInteractions() {
         const host = document.getElementById('progression-sections');
         host.addEventListener('pointerdown', (e) => this.onGridPointerDown(e));
+        // Case "+" en bout de grille (voir buildAddCellHtml) : Entrée ajoute l'accord tapé, Échap vide
+        // le champ (utile surtout au clavier ; au doigt on peut aussi juste toucher ailleurs).
+        host.addEventListener('keydown', (e) => {
+            if (!e.target.matches('.cell-add-input')) return;
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const section = +e.target.dataset.section;
+                if (this.addChordFromSymbol(section, e.target.value)) {
+                    // loadProgression() a déjà reconstruit un champ "+" vide à la même place : lui
+                    // redonner le focus pour enchaîner plusieurs accords sans re-cliquer à chaque fois.
+                    const fresh = document.querySelector(`.cell-add-input[data-section="${section}"]`);
+                    if (fresh) fresh.focus();
+                }
+            } else if (e.key === 'Escape') {
+                e.target.value = '';
+                e.target.blur();
+            }
+        });
     }
 
     onGridPointerDown(e) {
         if (e.button != null && e.button !== 0) return; // clic gauche / touch uniquement
         const gridEl = e.target.closest('.chord-grid');
         if (!gridEl) return;
+        if (e.target.closest('.grid-cell-add')) return; // laisse le clic focaliser normalement le champ
         const section = +gridEl.dataset.section;
 
         // Bouton dédié « modifier » (voir .cell-edit-btn) : entre en édition directement, sans passer
@@ -4093,6 +4132,17 @@ class HarmoBoxApp {
         return Array.from(byRow.entries()).map(([row, r]) => `
                     <div class="loop-range-bar" style="grid-column: ${r.minCol + 1} / ${r.maxCol + 1}; grid-row: ${row * 2 + 2};"></div>`
         ).join('');
+    }
+
+    // Case "+" en bout de grille (une par partie) : un simple champ texte (placeholder "+"), pour
+    // taper un accord directement dedans (voir addChordFromSymbol/onAddCellKeydown) sans repasser par
+    // le champ d'ajout rapide séparé — pratique maintenant que les accords se réordonnent par glisser
+    // (voir onGridPointerDown), plus besoin d'ajouter au bon endroit du premier coup.
+    buildAddCellHtml(section, row, col, span) {
+        return `
+                    <div class="grid-cell grid-cell-add" style="grid-column: ${col + 1} / span ${span}; grid-row: ${row * 2 + 1};">
+                        <input type="text" class="cell-add-input" data-section="${section}" placeholder="+" autocomplete="off" autocapitalize="off" spellcheck="false">
+                    </div>`;
     }
 
     // ---------- Étirement d'un accord (durée) directement dans la grille ----------

@@ -1043,14 +1043,6 @@ button:active { transform: translateY(1px); }
        colonnes variant avec la signature rythmique, un fond à pourcentages fixes serait faux. */
 }
 
-.empty-hint {
-    grid-column: 1 / -1;
-    color: var(--text-muted);
-    font-size: var(--fs-base);
-    padding: 20px;
-    text-align: center;
-}
-
 .grid-cell {
     position: relative;
     background-color: var(--card-bg);
@@ -1092,6 +1084,32 @@ button:active { transform: translateY(1px); }
 .grid-cell.seg-last  { border-left: 1px dashed #5a5a5a; }
 
 .grid-cell:hover { background: #1c1c1c; border-color: #555; z-index: 1; }
+
+/* Case "+" en bout de grille (voir buildAddCellHtml) : bord en pointillés (jamais confondue avec un
+   vrai accord), discrète tant qu'on n'y tape rien — le champ occupe toute la case, son placeholder
+   "+" centré en tient lieu d'étiquette. */
+.grid-cell-add {
+    border-style: dashed;
+    border-color: #3a3a3a;
+    cursor: text;
+}
+.grid-cell-add:hover { border-color: #666; }
+.cell-add-input {
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    background: transparent;
+    border: none;
+    padding: 0;
+    text-align: center;
+    color: var(--text-main);
+    font-family: inherit;
+    font-size: var(--fs-md);
+    font-weight: 600;
+}
+.cell-add-input::placeholder { color: var(--text-muted); opacity: 0.6; font-size: var(--fs-xl); }
+.cell-add-input:focus { outline: none; }
+.grid-cell-add:focus-within { border-style: solid; border-color: var(--accent); background-color: #0f1c14; }
 
 .grid-cell.selected {
     background-color: #0f1c14;
