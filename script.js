@@ -351,15 +351,24 @@ function loadProgressionSections() {
     return [{ title: '', chords: [] }];
 }
 
-function saveProgressionSections(sections) {
+// Modifications du tampon de travail pas encore reportées dans le morceau enregistré (voir
+// saveCurrentSong/Ctrl+S) — volontairement une variable de module (pas this.xxx) : les fonctions
+// autonomes ci-dessous (appelées depuis de très nombreux endroits) doivent pouvoir la modifier sans
+// dépendre de l'instance HarmoBoxApp (pas encore construite au tout premier appel).
+let hasUnsavedChanges = false;
+
+// `markDirty=false` : chargement d'un morceau (neuf ou déjà enregistré), pas une modification —
+// voir newSong/loadSong, les deux seuls appelants à passer false.
+function saveProgressionSections(sections, markDirty = true) {
     localStorage.setItem('myProgression', JSON.stringify({ sections }));
-    syncCurrentSong({ sections });
+    if (markDirty) hasUnsavedChanges = true;
 }
 
 // ---------- Morceaux (plusieurs chansons enregistrées séparément) ----------
-// Le « tampon de travail » (myProgression, tonalité, tempo) représente toujours le morceau ouvert.
-// Tant qu'un morceau est ouvert (SONG_ID_KEY renseigné), chaque modification s'y recopie aussitôt :
-// il n'y a rien à « enregistrer » à part la toute première fois (lui donner un nom).
+// Le « tampon de travail » (myProgression, tonalité, tempo) représente le morceau ouvert, mais n'est
+// PLUS recopié automatiquement dans le morceau enregistré à chaque modification (voir
+// hasUnsavedChanges ci-dessus) : il faut explicitement Enregistrer (bouton dédié ou Ctrl+S, voir
+// saveCurrentSong) pour que les changements soient vraiment sauvegardés.
 const SONG_ID_KEY = 'harmoboxCurrentSongId';
 
 function loadSongs() {
@@ -1306,6 +1315,14 @@ class HarmoBoxApp {
         this.setupLoopRangeInteractions();
         this.setupSequencerInteractions();
         this.setupKeyboardShortcuts();
+        // Avertissement natif du navigateur si on ferme/recharge la page avec des modifications non
+        // enregistrées (voir hasUnsavedChanges/saveCurrentSong) — les navigateurs modernes ignorent le
+        // message personnalisé et affichent le leur, mais returnValue déclenche bien la confirmation.
+        window.addEventListener('beforeunload', (e) => {
+            if (!hasUnsavedChanges) return;
+            e.preventDefault();
+            e.returnValue = '';
+        });
         this.updateKeyLabels();
         this.updateDurationOptions();
         this.loadProgression();
@@ -1414,7 +1431,7 @@ class HarmoBoxApp {
         };
 
         document.getElementById('bpm').oninput = (e) => document.getElementById('bpm-val').value = e.target.value;
-        document.getElementById('bpm').addEventListener('change', (e) => syncCurrentSong({ bpm: parseInt(e.target.value) }));
+        document.getElementById('bpm').addEventListener('change', () => { hasUnsavedChanges = true; });
 
         // Valeur du tempo éditable directement au clavier (clic dessus, taper une valeur, Entrée ou
         // clic ailleurs pour valider) — resynchronisée avec le curseur, dans les mêmes bornes (60-240).
@@ -1427,21 +1444,21 @@ class HarmoBoxApp {
             v = Math.min(240, Math.max(60, v));
             bpmValInput.value = v;
             bpmSlider.value = v;
-            syncCurrentSong({ bpm: v });
+            hasUnsavedChanges = true;
         });
 
         document.getElementById('tap-tempo').onclick = () => this.handleTapTempo();
 
         document.getElementById('global-root').onchange = () => {
-            syncCurrentSong({ root: document.getElementById('global-root').value });
+            hasUnsavedChanges = true;
             this.updateKeyLabels(); this.loadProgression(); this.refreshPreview();
         };
         document.getElementById('global-mode').onchange = () => {
-            syncCurrentSong({ mode: document.getElementById('global-mode').value });
+            hasUnsavedChanges = true;
             this.updateKeyLabels(); this.loadProgression(); this.refreshPreview();
         };
         document.getElementById('time-sig').onchange = () => {
-            syncCurrentSong({ timeSig: document.getElementById('time-sig').value });
+            hasUnsavedChanges = true;
             this.updateDurationOptions();
             this.loadProgression();
             this.refreshPreview();
@@ -1451,7 +1468,7 @@ class HarmoBoxApp {
         // comme dans la plupart des séquenceurs/DAW : seul l'instant réel de chaque case se décale à
         // la lecture/l'export) — pas de re-rendu à déclencher ici, juste la sauvegarde du réglage.
         document.getElementById('groove').onchange = () => {
-            syncCurrentSong({ groove: document.getElementById('groove').value });
+            hasUnsavedChanges = true;
         };
 
         // Aperçu en direct : nom de l'accord, clavier et séquenceur mis à jour dès qu'on change un réglage
@@ -1488,7 +1505,9 @@ class HarmoBoxApp {
 
         document.getElementById('song-select').onchange = (e) => this.onSongSelectChange(e.target.value);
         document.getElementById('song-new').onclick = () => this.newSong();
-        document.getElementById('song-save').onclick = () => this.saveCurrentAsSong();
+        document.getElementById('song-save').onclick = () => this.saveCurrentSong();
+        const saveAsBtn = document.getElementById('song-save-as');
+        if (saveAsBtn) saveAsBtn.onclick = () => this.saveCurrentAsSong();
 
         // Fenêtre Paramètres : toutes les sections (Son, Fichiers) se rendent ensemble à l'ouverture,
         // en une seule vue qui défile, sans onglet.
@@ -2701,7 +2720,7 @@ class HarmoBoxApp {
 
         const rootSel = document.getElementById('global-root');
         rootSel.value = NOTES[(NOTES.indexOf(rootSel.value) + semitones + 1200) % 12];
-        syncCurrentSong({ root: rootSel.value });
+        hasUnsavedChanges = true;
         this.updateKeyLabels();
 
         this.loadProgression();
@@ -2710,19 +2729,14 @@ class HarmoBoxApp {
 
     // ---------- Morceaux : enregistrer/charger plusieurs chansons séparées ----------
 
-    // Y a-t-il quelque chose de significatif dans le tampon de travail actuel (pour avertir avant
-    // de l'écraser si aucun morceau n'est ouvert pour le recueillir automatiquement) ?
-    hasUnsavedContent() {
-        const sections = loadProgressionSections();
-        if (sections.length > 1) return true;
-        return sections.some(s => s.chords.length > 0 || (s.title && s.title.trim()));
-    }
-
-    // Avant de quitter le tampon actuel (nouveau morceau, ou en charger un autre) : si rien n'est
-    // ouvert et qu'il contient quelque chose, prévient qu'il va être perdu.
+    // Avant de quitter le tampon actuel (nouveau morceau, en charger un autre, fermer la page...) :
+    // si des modifications ne sont pas enregistrées (voir hasUnsavedChanges/saveCurrentSong), prévient
+    // qu'elles seront perdues — que le morceau ait déjà un nom ou non, contrairement à l'ancien
+    // comportement (qui ne prévenait que pour un morceau jamais enregistré, puisque tout le reste
+    // s'auto-sauvegardait aussitôt).
     confirmDiscardUnsavedIfNeeded() {
-        if (getCurrentSongId() || !this.hasUnsavedContent()) return true;
-        return confirm('Le morceau en cours n\'est pas enregistré et sera perdu. Continuer ?');
+        if (!hasUnsavedChanges) return true;
+        return confirm('Des modifications ne sont pas enregistrées et seront perdues. Continuer ?');
     }
 
     refreshSongList() {
@@ -2733,7 +2747,9 @@ class HarmoBoxApp {
         select.innerHTML = `<option value="">— Non enregistré —</option>` +
             songs.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
         select.value = currentId || '';
-        document.getElementById('song-save').title = currentId ? 'Enregistrer sous...' : 'Enregistrer';
+        document.getElementById('song-save').title = 'Enregistrer (Ctrl+S)';
+        const saveAsBtn = document.getElementById('song-save-as');
+        if (saveAsBtn) saveAsBtn.hidden = !currentId; // rien à « dupliquer sous un autre nom » si jamais enregistré
     }
 
     onSongSelectChange(id) {
@@ -2753,7 +2769,8 @@ class HarmoBoxApp {
         document.getElementById('groove').value = 'straight';
         document.getElementById('bpm').value = 120;
         document.getElementById('bpm-val').value = '120';
-        saveProgressionSections([{ title: '', chords: [] }]);
+        saveProgressionSections([{ title: '', chords: [] }], false); // nouveau tampon vierge, rien à enregistrer
+        hasUnsavedChanges = false;
         this.clearHistory(); // changement de morceau : l'historique annuler/rétablir n'a plus de sens
         this.activeSection = 0;
         this.selectedIndex = null;
@@ -2765,7 +2782,9 @@ class HarmoBoxApp {
         this.refreshSongList();
     }
 
-    // Charge un morceau enregistré : il devient le morceau ouvert (autosauvegardé en continu ensuite)
+    // Charge un morceau enregistré : il devient le morceau ouvert, mais n'est plus auto-sauvegardé en
+    // continu (voir hasUnsavedChanges/saveCurrentSong) — il faut Enregistrer/Ctrl+S pour persister
+    // toute modification ultérieure.
     loadSong(id) {
         const song = loadSongs().find(s => s.id === id);
         if (!song) return;
@@ -2777,7 +2796,8 @@ class HarmoBoxApp {
         document.getElementById('groove').value = song.groove || 'straight';
         document.getElementById('bpm').value = song.bpm || 120;
         document.getElementById('bpm-val').value = String(song.bpm || 120);
-        saveProgressionSections(song.sections && song.sections.length ? song.sections : [{ title: '', chords: [] }]);
+        saveProgressionSections(song.sections && song.sections.length ? song.sections : [{ title: '', chords: [] }], false);
+        hasUnsavedChanges = false; // tampon tout juste chargé, identique au morceau enregistré
         this.clearHistory(); // changement de morceau : l'historique annuler/rétablir n'a plus de sens
         this.activeSection = 0;
         this.selectedIndex = null;
@@ -2789,8 +2809,29 @@ class HarmoBoxApp {
         this.refreshSongList();
     }
 
+    // Enregistre RÉELLEMENT les modifications (bouton « Enregistrer » / Ctrl+S) : écrase le morceau
+    // déjà ouvert avec l'état actuel du tampon de travail — plus aucune auto-sauvegarde en continu
+    // (voir hasUnsavedChanges), c'est désormais le SEUL moment où le morceau enregistré change.
+    // Si aucun morceau n'est encore ouvert, il faut bien lui donner un nom une première fois :
+    // se comporte alors comme « Enregistrer sous » (voir saveCurrentAsSong).
+    saveCurrentSong() {
+        const id = getCurrentSongId();
+        if (!id) { this.saveCurrentAsSong(); return; }
+        syncCurrentSong({
+            sections: loadProgressionSections(),
+            root: document.getElementById('global-root').value,
+            mode: document.getElementById('global-mode').value,
+            timeSig: document.getElementById('time-sig').value,
+            groove: document.getElementById('groove').value,
+            bpm: parseInt(document.getElementById('bpm').value),
+        });
+        hasUnsavedChanges = false;
+        this.refreshSongList();
+        this.flashHint('Morceau enregistré');
+    }
+
     // Enregistre l'état actuel sous un nom : nouveau morceau, ou copie séparée si un morceau est
-    // déjà ouvert (ce dernier continue d'être autosauvegardé sous son propre nom en parallèle).
+    // déjà ouvert (celui-ci n'est pas modifié — voir saveCurrentSong pour l'écraser à la place).
     // Le select se cache et un champ de saisie apparaît à sa place, plutôt qu'un prompt() natif
     // pour choisir le nom du morceau à enregistrer.
     saveCurrentAsSong() {
@@ -2827,6 +2868,7 @@ class HarmoBoxApp {
             songs.push(song);
             saveSongs(songs);
             setCurrentSongId(song.id);
+            hasUnsavedChanges = false;
             this.refreshSongList();
             this.flashHint(`« ${song.name} » enregistré`);
             finish();
@@ -2978,7 +3020,7 @@ class HarmoBoxApp {
             const bpm = Math.min(240, Math.max(60, Math.round(60000 / avgMs)));
             document.getElementById('bpm').value = bpm;
             document.getElementById('bpm-val').value = bpm;
-            syncCurrentSong({ bpm });
+            hasUnsavedChanges = true;
         }
 
         // Flash bref pour confirmer que le tap a bien été pris en compte, même avant qu'un BPM
@@ -5129,7 +5171,7 @@ class HarmoBoxApp {
         const rootSel = document.getElementById('global-root');
         if (!root || root === rootSel.value) return;
         rootSel.value = root;
-        syncCurrentSong({ root });
+        hasUnsavedChanges = true;
         this.updateKeyLabels();
     }
 
@@ -5274,6 +5316,13 @@ class HarmoBoxApp {
                 if (this.settingsOpen) this.filesRedo();
                 else if (this.seqOpen) this.seqRedo();
                 else this.redo();
+                return;
+            }
+            // Ctrl/Cmd+S : enregistre réellement le morceau (voir saveCurrentSong) — au lieu du
+            // dialogue natif « Enregistrer la page », partout (même en train de taper un champ).
+            if (mod && (e.key === 's' || e.key === 'S')) {
+                e.preventDefault();
+                this.saveCurrentSong();
                 return;
             }
             // Note du séquenceur sélectionnée : Suppr/Retour l'efface, ← → la raccourcit/rallonge
