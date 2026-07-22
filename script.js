@@ -908,6 +908,7 @@ const CHORD_VOLUME_KEY = 'harmoboxChordVolume';
 const METRONOME_VOLUME_KEY = 'harmoboxMetronomeVolume';
 const METRONOME_SOUND_KEY = 'harmoboxMetronomeSound';
 const GENERAL_VOLUME_KEY = 'harmoboxGeneralVolume';
+const AUTOPLAY_SELECT_KEY = 'harmoboxAutoplaySelect';
 
 // Curseurs de volume (0-100, plus intuitif qu'une valeur en décibels) : 0 = silence, 100 = 0 dB
 // (plein volume « normal »), avec un plancher à -40 dB pour que même « presque muet » reste audible
@@ -1087,6 +1088,10 @@ class HarmoBoxApp {
         const storedGeneralVol = localStorage.getItem(GENERAL_VOLUME_KEY);
         this.generalVolumePercent = storedGeneralVol !== null ? parseInt(storedGeneralVol) : 100;
         Tone.Destination.volume.value = percentToDb(this.generalVolumePercent);
+
+        // Lecture automatique d'un accord de la grille dès qu'on clique dessus pour le sélectionner
+        // (activée par défaut, comme le comportement historique) — désactivable dans Paramètres > Son.
+        this.autoplaySelect = localStorage.getItem(AUTOPLAY_SELECT_KEY) !== '0';
 
         // Chaque accord choisit sa propre banque de son (voir data.instrument) : plusieurs
         // instruments Tone.js peuvent donc jouer simultanément. Construits à la demande et mis en
@@ -2381,12 +2386,27 @@ class HarmoBoxApp {
                     ).join('')}
                 </select>
             </div>
+            <div class="settings-slider-sep"></div>
+            <div class="settings-toggle-row">
+                <label for="toggle-autoplay-select">Jouer l'accord en le sélectionnant dans la grille</label>
+                <button type="button" id="toggle-autoplay-select" class="switch" role="switch" aria-checked="${this.autoplaySelect}" aria-label="Jouer l'accord en le sélectionnant dans la grille">
+                    <span class="switch-thumb"></span>
+                </button>
+            </div>
             <div class="settings-slider-hint">Le volume général s'applique en plus des deux réglages spécifiques ci-dessus, sans changer leur équilibre l'un par rapport à l'autre. Le tempo se règle dans la carte « Morceau » (cliquer sur sa valeur permet de la saisir directement au clavier).</div>`;
 
         document.getElementById('general-volume').oninput = (e) => this.setGeneralVolume(+e.target.value);
         document.getElementById('chord-volume').oninput = (e) => this.setChordVolume(+e.target.value);
         document.getElementById('metronome-volume').oninput = (e) => this.setMetronomeVolume(+e.target.value);
         document.getElementById('metronome-sound').onchange = (e) => this.setMetronomeSound(e.target.value);
+        document.getElementById('toggle-autoplay-select').onclick = () => this.setAutoplaySelect(!this.autoplaySelect);
+    }
+
+    setAutoplaySelect(on) {
+        this.autoplaySelect = on;
+        localStorage.setItem(AUTOPLAY_SELECT_KEY, on ? '1' : '0');
+        const btn = document.getElementById('toggle-autoplay-select');
+        if (btn) btn.setAttribute('aria-checked', on);
     }
 
     setGeneralVolume(percent) {
@@ -4073,15 +4093,17 @@ class HarmoBoxApp {
         if (stopBtn) stopBtn.onclick = () => this.stopAll();
     }
 
-    // Clic sur une case : sélectionne (surbrillance) + écoute l'accord
+    // Clic sur une case : sélectionne (surbrillance) + écoute l'accord, sauf si l'utilisateur a
+    // désactivé la lecture automatique à la sélection (Paramètres > Son) — l'accord reste alors
+    // affiché (clavier/guitare) mais ne se joue pas.
     selectChord(section, index) {
         this.activeSection = section;
         this.selectedIndex = index;
         this.loadProgression(); // re-render pour afficher la surbrillance
-        this.playSavedChord(section, index);
+        this.playSavedChord(section, index, this.autoplaySelect);
     }
 
-    async playSavedChord(section, index) {
+    async playSavedChord(section, index, play = true) {
         await Tone.start();
         this.stopAll();
 
@@ -4100,6 +4122,9 @@ class HarmoBoxApp {
         disp.innerHTML = `<span class="chord-title">${flatTight(chord.getLabel(useFlats))}</span><span class="chord-notes">${chordNotesHtml(chord, useFlats)}</span>`;
         this.ensurePianoWindow(midis);
         this.ensureGuitarDiagram(chord);
+        this.updateViz(midis, roleMap);
+
+        if (!play) return; // aperçu silencieux seulement : le clavier/la guitare restent affichés
 
         const bpm = parseInt(document.getElementById('bpm').value);
         const secPerBeat = 60 / bpm;
