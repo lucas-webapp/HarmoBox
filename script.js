@@ -725,6 +725,32 @@ class Chord {
 // accès aux styles calculés pour construire du SVG à l'export).
 const ROLE_COLOR = { root: '#00c853', third: '#2f81f7', fifth: '#e53922', seventh: '#ff9800', ext: '#8bd6a8' };
 
+// Détecte un barré POUR L'AFFICHAGE (un doigt à plat sur plusieurs cordes à la case la plus basse
+// de la forme) — plus permissif que fingersNeeded (voir solveGuitarFingerings, qui compte les doigts
+// pour évaluer la difficulté) : là où fingersNeeded exige que toutes les cordes entre les deux
+// extrêmes soient à LA MÊME case pour compter un vrai barré (sinon il suppose des doigts séparés,
+// plus prudent pour la difficulté), le barré existe visuellement même quand d'autres doigts pressent
+// PAR-DESSUS à une case plus haute sur des cordes intermédiaires (cas réel du Fa en forme de Mi : le
+// barré couvre les 6 cordes, d'autres doigts prennent certaines à une case plus haute) — seule une
+// corde à VIDE entre les deux extrêmes est réellement incompatible avec un barré continu à cet
+// endroit. Fonction autonome, jamais utilisée par le solveur de doigtés lui-même. Renvoie
+// {fret, loString, hiString} ou null.
+function detectBarre(byString) {
+    const fretted = [];
+    byString.forEach((e, s) => { if (e && e.fret > 0) fretted.push({ s, fret: e.fret }); });
+    if (!fretted.length) return null;
+    const minFret = Math.min(...fretted.map(f => f.fret));
+    const atMin = fretted.filter(f => f.fret === minFret);
+    if (atMin.length < 2) return null;
+    const strs = atMin.map(f => f.s);
+    const loString = Math.min(...strs), hiString = Math.max(...strs);
+    for (let s = loString; s <= hiString; s++) {
+        const e = byString[s];
+        if (e && e.fret === 0) return null; // corde à vide entre les deux : pas de vrai barré ici
+    }
+    return { fret: minFret, loString, hiString };
+}
+
 // Accordage standard, du 6e (Mi grave) au 1er (Mi aigu), en numéros MIDI
 const GUITAR_OPEN_MIDI = [40, 45, 50, 55, 59, 64];
 const GUITAR_MAX_FRET = 15;   // au-delà, une position n'est plus vraiment utilisée en pratique
@@ -3535,6 +3561,20 @@ class HarmoBoxApp {
         for (let s = 0; s < 6; s++) {
             const y = stringY(s);
             svg += `<line x1="${MARGIN_LEFT}" y1="${y}" x2="${MARGIN_LEFT + FRET_GAP * FRET_WINDOW}" y2="${y}" stroke="${lineColor}" stroke-width="1"/>`;
+        }
+        // Barré (un seul doigt à plat sur plusieurs cordes à la même case) : fond semi-transparent sur
+        // toute la largeur de la case, entre les deux cordes extrêmes couvertes — matérialise qu'il
+        // faut appuyer avec TOUT le doigt à plat à cet endroit, pas juste du bout du doigt comme les
+        // autres cases. Sous les repères/points de doigté dessinés ensuite (ordre du document SVG).
+        const barre = detectBarre(byString);
+        if (barre && barre.fret - baseFret >= 1 && barre.fret - baseFret <= FRET_WINDOW) {
+            const col = barre.fret - baseFret;
+            const bx = MARGIN_LEFT + (col - 1) * FRET_GAP;
+            const byTop = stringY(barre.hiString) - STRING_GAP * 0.42;
+            const byBottom = stringY(barre.loString) + STRING_GAP * 0.42;
+            const barreFill = forPrint ? 'rgba(0, 0, 0, 0.1)' : 'rgba(255, 255, 255, 0.14)';
+            const barreStroke = forPrint ? 'rgba(0, 0, 0, 0.25)' : 'rgba(255, 255, 255, 0.3)';
+            svg += `<rect x="${bx}" y="${byTop}" width="${FRET_GAP}" height="${byBottom - byTop}" rx="6" fill="${barreFill}" stroke="${barreStroke}" stroke-width="1"/>`;
         }
         // Points de repère du manche (incrustations réelles d'une guitare), centrés dans la hauteur du
         // diagramme — un seul point pour les cases usuelles, deux pour l'octave (case 12/24) — avec le
