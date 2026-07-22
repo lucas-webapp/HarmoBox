@@ -314,16 +314,29 @@ function sectionMeasureCount(sec, beatsPerBar) {
     return Number.isInteger(count) ? String(count) : count.toFixed(1);
 }
 
-// Fond zébré (une mesure sur deux, +5% de blanc) pour un segment qui s'étend sur plusieurs mesures :
-// sans repère, un accord long reste un seul bloc plein, impossible de voir combien de temps il dure.
-// L'alternance se base sur le numéro de mesure ABSOLU du segment (s.barNumber), pas sur sa position
-// dans le segment, pour que la phase reste cohérente d'un accord à l'autre le long de la grille.
-function buildInnerZebra(s, beatsPerBar) {
-    const mw = (beatsPerBar / s.span) * 100; // largeur d'une mesure, en % de la largeur du segment
-    const firstOn = (s.barNumber % 2 === 0);
-    return firstOn
-        ? `repeating-linear-gradient(90deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.05) ${mw}%, transparent ${mw}%, transparent ${mw * 2}%)`
-        : `repeating-linear-gradient(90deg, transparent 0%, transparent ${mw}%, rgba(255,255,255,0.05) ${mw}%, rgba(255,255,255,0.05) ${mw * 2}%)`;
+// Fond zébré sur les temps FAIBLES (2, 4, 6... au sein de chaque mesure), pour repérer la pulsation
+// d'un coup d'œil — y compris pour un accord COURT (moins d'une mesure), contrairement à l'ancienne
+// version (une mesure sur deux) qui ne s'affichait que pour un accord étalé sur plusieurs mesures :
+// un accord d'un seul temps ne montrait jamais rien. La phase se base sur la position ABSOLUE de
+// chaque case dans la grille (pas sur la position du segment lui-même), pour rester cohérente d'un
+// accord à l'autre, y compris scindé sur plusieurs lignes. Dégradé de haut en bas (au lieu d'un
+// aplat) sur chaque temps marqué : plus délicat qu'un simple bloc plein, un léger effet de reflet.
+// `inLoop` : ajoute le lavis doré de la plage à boucler (voir .in-loop-range en CSS) — désormais
+// composé ICI plutôt que dans la feuille de style, puisque cette fonction pose maintenant TOUJOURS
+// un background-image en ligne sur la case (avant : seulement pour les accords longs), qui
+// écraserait sinon complètement celui de la classe CSS (une déclaration en ligne l'emporte toujours).
+function buildBeatZebra(s, beatsPerBar, beatsPerRow, inLoop) {
+    const startAbs = s.row * beatsPerRow + s.col;
+    const stops = [];
+    for (let i = 0; i < s.span; i++) {
+        const beatInBar = (startAbs + i) % beatsPerBar;
+        const on = beatInBar % 2 === 1; // temps 2, 4, 6... (index 0 = temps 1)
+        const color = on ? 'rgba(255,255,255,0.055)' : 'rgba(255,255,255,0)';
+        const from = (i / s.span * 100).toFixed(3), to = ((i + 1) / s.span * 100).toFixed(3);
+        stops.push(`${color} ${from}%`, `${color} ${to}%`);
+    }
+    const loopTint = inLoop ? ', linear-gradient(0deg, rgba(255, 213, 79, 0.1), rgba(255, 213, 79, 0.1))' : '';
+    return `linear-gradient(90deg, ${stops.join(', ')}), linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0) 55%)${loopTint}`;
 }
 
 // Octave de base d'un accord (défaut 3 = C3, compatibilité avec les sauvegardes sans octave)
@@ -2501,18 +2514,19 @@ class HarmoBoxApp {
                         if (isActive && s.index === this.selectedIndex) cls += ' selected';
                         if (isActive && s.index === this.editingIndex) cls += ' editing';
                     }
-                    if (loopRange && s.index >= loopRange.start && s.index <= loopRange.end) cls += ' in-loop-range';
+                    const inLoop = loopRange && s.index >= loopRange.start && s.index <= loopRange.end;
+                    if (inLoop) cls += ' in-loop-range';
                     // arrondis / bords de coupe selon la position du segment dans l'accord
                     if (s.split) cls += s.isFirst ? ' seg-first' : (s.isLast ? ' seg-last' : ' seg-mid');
                     // repère de début de mesure (barre de mesure)
                     if (s.barStart) cls += ' bar-start';
                     // police réduite pour les segments courts (peu de temps)
                     if (s.span === 1) cls += ' sz1'; else if (s.span === 2) cls += ' sz2';
-                    // Accord qui dure plusieurs mesures sans être coupé de ligne : zébrure de fond très
-                    // fine (une mesure sur deux) pour voir sa durée d'un coup d'œil, sans repère sur les
-                    // accords courts (inutile, et ça alourdirait la grille pour rien).
+                    // Zébrure des temps faibles (2, 4...) : voir buildBeatZebra, toujours affichée (y
+                    // compris pour un accord court, contrairement à l'ancienne version limitée aux
+                    // accords étalés sur plusieurs mesures).
                     const hasInnerBars = s.innerBars.length > 0;
-                    const zebra = hasInnerBars ? `background-image: ${buildInnerZebra(s, beatsPerBar)};` : '';
+                    const zebra = `background-image: ${buildBeatZebra(s, beatsPerBar, beatsPerRow, inLoop)};`;
                     const style = `grid-column: ${s.col + 1} / span ${s.span}; grid-row: ${s.row * 2 + 1}; ${zebra}`;
 
                     const romanEl = s.isFirst ? `<span class="cell-roman">${roman}</span>` : '';

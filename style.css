@@ -1326,12 +1326,9 @@ button:active { transform: translateY(1px); }
     pointer-events: none;
 }
 
-/* Léger lavis dans les cases couvertes par la plage, pour la repérer même en dehors de la ligne des
-   numéros (grille défilée verticalement, longue plage sur plusieurs lignes, etc.) */
-.grid-cell.in-loop-range {
-    background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0) 45%),
-                       linear-gradient(0deg, rgba(255, 213, 79, 0.1), rgba(255, 213, 79, 0.1));
-}
+/* Le lavis doré des cases couvertes par la plage (.in-loop-range) est désormais composé directement
+   dans buildBeatZebra (script.js) : cette classe pose maintenant TOUJOURS un background-image en
+   ligne (zébrure des temps faibles), qui écraserait sinon toute règle CSS sur la même propriété. */
 
 .cell-meta {
     position: absolute;
