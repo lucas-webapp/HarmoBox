@@ -800,6 +800,68 @@ button:active { transform: translateY(1px); }
 .dot-seventh { background: #ffb300; }
 .dot-ext     { background: #e0b0ff; }
 
+/* Bascule piano/guitare : indépendantes, affichables ensemble ou aucune des deux */
+.viz-toggle {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+.viz-toggle-btn {
+    flex: none;
+    padding: 4px 14px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0) 50%), #1c2027;
+    color: var(--text-muted);
+    border: 1px solid #333;
+    border-radius: 999px;
+    font-size: var(--fs-xs);
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.03);
+}
+.viz-toggle-btn:hover { background: linear-gradient(180deg, rgba(255,255,255,0.09), rgba(255,255,255,0) 50%), #262b33; color: var(--text-main); }
+.viz-toggle-btn.active {
+    background: linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0) 50%), rgba(0, 230, 118, 0.14);
+    color: var(--accent);
+    border-color: rgba(0, 230, 118, 0.45);
+}
+
+.viz-diagrams {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 24px;
+}
+.viz-diagrams .piano-container { flex: 1 1 auto; }
+
+/* ---------- Guitare ---------- */
+.guitar-viz-wrap {
+    display: none; /* masqué par défaut ; JS applique la préférence utilisateur au chargement (display:flex) */
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+.guitar-container svg { display: block; margin: 0 auto; }
+.guitar-unplayable {
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+    padding: 10px 14px;
+    border: 1px dashed #444;
+    border-radius: 8px;
+}
+.guitar-nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 6px;
+}
+.guitar-nav-label {
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+    min-width: 26px;
+}
+
 /* Bouton d'export PDF, ancré en bas à droite du bloc piano */
 .viz-wrap {
     position: relative;
@@ -1472,3 +1534,18 @@ select.song-select-narrow {
     margin-bottom: 6px;
 }
 .print-piano-item svg { max-width: 100%; height: auto; }
+.print-diagrams {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.print-guitar-unplayable {
+    font-size: var(--fs-2xs);
+    color: #888;
+    border: 1px dashed #bbb;
+    border-radius: 6px;
+    padding: 6px 8px;
+    line-height: 1.3;
+}

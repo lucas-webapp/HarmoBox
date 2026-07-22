@@ -298,7 +298,25 @@
             </section>
 
             <div class="viz-wrap">
-                <section id="piano-viz" class="piano-container"></section>
+                <div class="viz-toggle">
+                    <button type="button" id="toggle-viz-piano" class="viz-toggle-btn" aria-pressed="true">Piano</button>
+                    <button type="button" id="toggle-viz-guitar" class="viz-toggle-btn" aria-pressed="false">Guitare</button>
+                </div>
+                <div class="viz-diagrams">
+                    <section id="piano-viz" class="piano-container"></section>
+                    <div id="guitar-viz-wrap" class="guitar-viz-wrap">
+                        <div id="guitar-viz" class="guitar-container"></div>
+                        <div id="guitar-nav" class="guitar-nav">
+                            <button type="button" id="guitar-prev" class="icon-btn" title="Doigté précédent" aria-label="Doigté précédent">
+                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+                            </button>
+                            <span id="guitar-nav-label" class="guitar-nav-label">1/1</span>
+                            <button type="button" id="guitar-next" class="icon-btn" title="Doigté suivant" aria-label="Doigté suivant">
+                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
                 <div class="piano-legend">
                     <span class="lg"><span class="dot dot-root"></span>1</span>
                     <span class="lg"><span class="dot dot-third"></span>3</span>
