@@ -1222,6 +1222,9 @@ class HarmoBoxApp {
         this.seqDrag = null;       // état de glisser en cours sur le séquenceur
         this.seqPage = 0;          // mesure(s) affichée(s) pour un accord qui en dure plusieurs (voir seqPageBars)
         this.seqLoopPlay = false;  // « Lecture » du séquenceur reboucle indéfiniment (voir playCurrent)
+        this.playheadSection = null; // partie/index de l'accord marqué par la barre de lecture de la
+        this.playheadIndex = null;   // grille (voir updateGridPlayhead) : accord sélectionné au repos,
+                                      // accord en cours au fil de la lecture — jamais effacée à l'arrêt
 
         // Garder le métronome pendant la lecture de la grille (pas seulement au décompte) : une
         // préférence d'usage, mémorisée d'une session à l'autre comme le choix d'instrument.
@@ -1987,6 +1990,25 @@ class HarmoBoxApp {
         document.querySelectorAll('.grid-cell.playing').forEach(c => c.classList.remove('playing'));
         if (index == null) return;
         document.querySelectorAll(`.chord-grid[data-section="${section}"] .grid-cell[data-index="${index}"]`).forEach(c => c.classList.add('playing'));
+        this.updateGridPlayhead(section, index); // suit l'accord qui démarre, comme au clic (voir selectChord)
+    }
+
+    // Barre de lecture de la grille : petit repère à gauche de l'accord sélectionné au repos, qui
+    // suit ensuite l'accord en cours pendant la lecture (voir highlightPlaying) — jamais effacée à
+    // l'arrêt (contrairement à la surbrillance « playing »), elle marque où la lecture reprendrait.
+    // Sans re-render de la grille : un simple élément déplacé/réinséré, comme highlightPlaying.
+    updateGridPlayhead(section, index) {
+        this.playheadSection = section;
+        this.playheadIndex = index;
+        document.querySelectorAll('.grid-playhead').forEach(el => el.remove());
+        if (index == null) return;
+        // Le PREMIER segment seulement (voir seg-first) : un accord scindé sur plusieurs mesures/lignes
+        // a plusieurs cases pour le même index, la barre doit marquer son tout début, pas chaque bout.
+        const cell = document.querySelector(`.chord-grid[data-section="${section}"] .grid-cell[data-index="${index}"]`);
+        if (!cell) return;
+        const bar = document.createElement('div');
+        bar.className = 'grid-playhead';
+        cell.appendChild(bar);
     }
 
     // `insertAfter` (optionnel) : index après lequel insérer le nouvel accord, dans la partie active
@@ -2345,6 +2367,10 @@ class HarmoBoxApp {
 
         this.updateSaveButtons();
         this.updateUndoRedoButtons();
+        // La grille vient d'être entièrement reconstruite (nouveau HTML) : la barre de lecture, elle,
+        // n'est jamais réinsérée dans le gabarit lui-même (voir updateGridPlayhead) — la replacer ici
+        // sinon un ré-rendu la ferait simplement disparaître.
+        this.updateGridPlayhead(this.playheadSection, this.playheadIndex);
     }
 
     // Bascule Ajouter / (À la suite + À la fin) / Modifier selon le contexte : un accord sélectionné
@@ -4577,6 +4603,7 @@ class HarmoBoxApp {
         this.activeSection = section;
         this.selectedIndex = index;
         this.loadProgression(); // re-render pour afficher la surbrillance
+        this.updateGridPlayhead(section, index); // la barre de lecture se pose à gauche de l'accord choisi
         this.playSavedChord(section, index, this.autoplaySelect);
     }
 
