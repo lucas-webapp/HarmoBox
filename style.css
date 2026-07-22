@@ -1232,6 +1232,8 @@ button:active { transform: translateY(1px); }
 /* Numéro de mesure : fine ligne dédiée juste sous chaque ligne d'accords (voir gridStyle/loadProgression,
    une ligne de grille sur deux), alignée sur le début de la mesure plutôt que posée sur l'accord lui-même. */
 .row-measure {
+    position: relative;
+    z-index: 2; /* reste lisible par-dessus .loop-range-bar, qui peut occuper la même case */
     height: var(--measure-row-h);
     line-height: var(--measure-row-h);
     padding: 0 0 0 2px;
@@ -1240,6 +1242,29 @@ button:active { transform: translateY(1px); }
     color: var(--text-muted);
     opacity: 0.7;
     overflow: hidden;
+    cursor: ns-resize; /* indique qu'on peut y glisser pour définir une plage à boucler */
+    touch-action: none;
+}
+
+/* Plage d'accords à boucler (glisser sur la ligne des numéros de mesure, voir
+   setupLoopRangeInteractions/setLoopRange) — inspirée de la barre de cycle jaune de GarageBand. Un
+   jaune/doré distinct du vert (sélection/lecture) et de l'orange (édition) pour ne pas s'y confondre. */
+.loop-range-bar {
+    align-self: center;
+    height: 6px;
+    margin-top: 1px;
+    border-radius: 3px;
+    background: linear-gradient(180deg, #ffd54f, #ffb300);
+    box-shadow: 0 0 5px rgba(255, 213, 79, 0.45);
+    z-index: 1;
+    pointer-events: none;
+}
+
+/* Léger lavis dans les cases couvertes par la plage, pour la repérer même en dehors de la ligne des
+   numéros (grille défilée verticalement, longue plage sur plusieurs lignes, etc.) */
+.grid-cell.in-loop-range {
+    background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0) 45%),
+                       linear-gradient(0deg, rgba(255, 213, 79, 0.1), rgba(255, 213, 79, 0.1));
 }
 
 .cell-meta {

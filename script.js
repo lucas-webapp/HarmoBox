@@ -1221,6 +1221,12 @@ class HarmoBoxApp {
         this.selectedIndex = null; // accord sélectionné dans la grille (au sein de la partie active)
         this.editingIndex = null;  // accord en cours de modification (au sein de la partie active)
         this.drag = null;          // état de glisser-déposer
+        this.loopRange = null;     // {section, start, end} : boucle sur une PLAGE d'accords voisins
+                                    // (glisser sur la ligne des numéros de mesure, voir
+                                    // setupLoopRangeInteractions/playProgression) — comme la barre de
+                                    // cycle jaune de GarageBand. Distinct de loopActiveSection (boucle
+                                    // TOUTE la partie active, bouton dédié) : quand définie, elle est
+                                    // prioritaire sur celui-ci.
         this.clipboard = null;     // presse-papier (copier/coller d'accords)
         this.pianoWindow = null;   // fenêtre clavier courante
         this.guitarKey = null;     // signature (midis triés) du dernier accord affiché à la guitare
@@ -1265,6 +1271,7 @@ class HarmoBoxApp {
 
         this.setupEventListeners();
         this.setupGridInteractions();
+        this.setupLoopRangeInteractions();
         this.setupSequencerInteractions();
         this.setupKeyboardShortcuts();
         this.updateKeyLabels();
@@ -1959,9 +1966,19 @@ class HarmoBoxApp {
         this.stopAll();
 
         const sections = loadProgressionSections();
-        const loop = this.loopActiveSection;
+        // Plage à boucler (glisser sur les numéros de mesure, voir setLoopRange) : prioritaire sur le
+        // bouton « Boucle » (partie active entière) quand elle est définie.
+        const range = this.loopRange;
+        const loop = !!range || this.loopActiveSection;
         const flat = []; // { section, index, data } à plat, dans l'ordre de lecture
-        if (loop) {
+        if (range) {
+            const sec = sections[range.section];
+            if (sec) {
+                for (let ci = range.start; ci <= range.end && ci < sec.chords.length; ci++) {
+                    flat.push({ section: range.section, index: ci, data: sec.chords[ci] });
+                }
+            }
+        } else if (this.loopActiveSection) {
             const sec = sections[this.activeSection];
             if (sec) sec.chords.forEach((data, ci) => flat.push({ section: this.activeSection, index: ci, data }));
         } else {
@@ -1970,7 +1987,7 @@ class HarmoBoxApp {
         if (flat.length === 0) return;
 
         // Démarre depuis l'accord en surbrillance si présent, sinon depuis le tout début — non
-        // pertinent en mode boucle : chaque tour rejoue la partie depuis son tout premier accord.
+        // pertinent en mode boucle : chaque tour rejoue la partie (ou la plage) depuis son tout début.
         let startPos = 0;
         if (!loop && this.selectedIndex != null) {
             const pos = flat.findIndex(c => c.section === this.activeSection && c.index === this.selectedIndex);
@@ -2052,7 +2069,7 @@ class HarmoBoxApp {
                     // Boucle encore active et lecture non interrompue entre-temps (bouton Stop) -> on
                     // relance directement un tour complet (avec son propre décompte) plutôt que de
                     // s'arrêter ; sinon, comportement habituel de fin de lecture.
-                    if (loop && this.loopActiveSection && this.isPlaying) {
+                    if ((this.loopRange || this.loopActiveSection) && this.isPlaying) {
                         this.playProgression();
                     } else {
                         this.clearViz();
@@ -2385,6 +2402,7 @@ class HarmoBoxApp {
                 // ×2+1 pour sa ligne CSS, ×2+2 pour la ligne des numéros juste après elle (voir plus
                 // bas, en fin de gridInner).
                 gridStyle = `grid-template-rows: repeat(${rows}, var(--row-h) var(--measure-row-h)); grid-template-columns: repeat(${beatsPerRow}, 1fr);`;
+                const loopRange = (this.loopRange && this.loopRange.section === si) ? this.loopRange : null;
                 gridInner = cells.map(s => {
                     const h = history[s.index];
                     const roman = this.getRomanNumeral(gRoot, gMode, h.root, h.quality);
@@ -2400,6 +2418,7 @@ class HarmoBoxApp {
                         if (isActive && s.index === this.selectedIndex) cls += ' selected';
                         if (isActive && s.index === this.editingIndex) cls += ' editing';
                     }
+                    if (loopRange && s.index >= loopRange.start && s.index <= loopRange.end) cls += ' in-loop-range';
                     // arrondis / bords de coupe selon la position du segment dans l'accord
                     if (s.split) cls += s.isFirst ? ' seg-first' : (s.isLast ? ' seg-last' : ' seg-mid');
                     // repère de début de mesure (barre de mesure)
@@ -2445,7 +2464,7 @@ class HarmoBoxApp {
                     <div class="row-measure" style="grid-column: ${s.col + 1} / span 1; grid-row: ${s.row * 2 + 2};">${s.barNumber}</div>`
                 ).join('') + cells.flatMap(s => s.innerBars.map(ib => `
                     <div class="row-measure" style="grid-column: ${s.col + ib.offset + 1} / span 1; grid-row: ${s.row * 2 + 2};">${ib.barNumber}</div>`)
-                ).join('');
+                ).join('') + this.buildLoopRangeBars(cells, loopRange);
             }
 
             const titleVal = (sec.title || '').replace(/"/g, '&quot;');
@@ -3959,6 +3978,101 @@ class HarmoBoxApp {
         this.selectedIndex = this._shiftIndex(this.selectedIndex, d.origIndex, d.index);
         this.editingIndex = this._shiftIndex(this.editingIndex, d.origIndex, d.index);
         this.loadProgression();
+    }
+
+    // ---------- Plage à boucler (glisser sur la ligne des numéros de mesure) ----------
+    // Glisser directement sur les accords sert déjà à les réordonner (voir onGridPointerDown) : on
+    // déclenche donc ce geste-ci uniquement depuis la fine ligne de numéros de mesure sous la grille
+    // (.row-measure), jamais utilisée pour autre chose — comme la règle/barre de cycle de GarageBand.
+    setupLoopRangeInteractions() {
+        const host = document.getElementById('progression-sections');
+        host.addEventListener('pointerdown', (e) => this.onLoopRangeStart(e));
+    }
+
+    // Retrouve l'accord (index) sous un point (clientX/clientY), à partir de la géométrie de la
+    // grille CSS elle-même (colonnes = temps, lignes = paires accords/numéros) plutôt que d'un
+    // element-from-point : la ligne des numéros n'a d'élément qu'aux débuts de mesure (colonnes
+    // creuses sinon), on ne peut donc pas se contenter d'un hit-test dessus.
+    chordIndexAtPoint(gridEl, section, clientX, clientY) {
+        const rect = gridEl.getBoundingClientRect();
+        const beatsPerRow = parseInt(gridEl.dataset.beatsPerRow) || 16;
+        const cs = getComputedStyle(gridEl);
+        const rowH = parseFloat(cs.getPropertyValue('--row-h')) || 64;
+        const measureRowH = parseFloat(cs.getPropertyValue('--measure-row-h')) || 15;
+        const col = Math.max(0, Math.min(beatsPerRow - 1, Math.floor((clientX - rect.left) / (rect.width / beatsPerRow))));
+        const row = Math.max(0, Math.floor((clientY - rect.top) / (rowH + measureRowH)));
+        const history = loadProgressionSections()[section]?.chords;
+        if (!history || history.length === 0) return null;
+        const { cells } = this.layoutProgression(history, this.beatsPerBar());
+        const seg = cells.find(s => s.row === row && col >= s.col && col < s.col + s.span);
+        return seg ? seg.index : null;
+    }
+
+    onLoopRangeStart(e) {
+        if (e.button != null && e.button !== 0) return; // clic gauche / toucher uniquement
+        if (!e.target.closest('.row-measure')) return;
+        const gridEl = e.target.closest('.chord-grid');
+        if (!gridEl) return;
+        e.preventDefault();
+        e.stopPropagation(); // n'ouvre pas aussi le glisser-déposer (réordonner) de la grille
+        const section = +gridEl.dataset.section;
+        const index = this.chordIndexAtPoint(gridEl, section, e.clientX, e.clientY);
+        if (index == null) return;
+
+        // Ne PAS garder `gridEl` : setLoopRange() re-rend la grille (loadProgression), ce qui
+        // remplace tout le sous-arbre DOM — l'élément capturé ici deviendrait détaché dès le premier
+        // appel, faussant tout calcul de géométrie basé dessus par la suite (voir chordIndexAtPoint).
+        // On re-cherche la grille VIVANTE (par data-section) à chaque déplacement à la place.
+        this.loopRangeDrag = { section, anchor: index };
+        this._onLoopRangeMove = (ev) => this.onLoopRangeMove(ev);
+        this._onLoopRangeUp = () => this.onLoopRangeEnd();
+        window.addEventListener('pointermove', this._onLoopRangeMove);
+        window.addEventListener('pointerup', this._onLoopRangeUp);
+        window.addEventListener('pointercancel', this._onLoopRangeUp);
+        this.setLoopRange(section, index, index);
+    }
+
+    onLoopRangeMove(e) {
+        const d = this.loopRangeDrag;
+        if (!d) return;
+        const gridEl = document.querySelector(`.chord-grid[data-section="${d.section}"]`);
+        if (!gridEl) return;
+        const index = this.chordIndexAtPoint(gridEl, d.section, e.clientX, e.clientY);
+        if (index == null) return;
+        const lo = Math.min(d.anchor, index), hi = Math.max(d.anchor, index);
+        if (!this.loopRange || this.loopRange.start !== lo || this.loopRange.end !== hi) {
+            this.setLoopRange(d.section, lo, hi);
+        }
+    }
+
+    onLoopRangeEnd() {
+        window.removeEventListener('pointermove', this._onLoopRangeMove);
+        window.removeEventListener('pointerup', this._onLoopRangeUp);
+        window.removeEventListener('pointercancel', this._onLoopRangeUp);
+        this.loopRangeDrag = null;
+    }
+
+    setLoopRange(section, start, end) {
+        this.loopRange = { section, start: Math.min(start, end), end: Math.max(start, end) };
+        this.loadProgression();
+    }
+
+    // Bande(s) façon barre de cycle (GarageBand) marquant la plage à boucler, sur la ligne des
+    // numéros de mesure — une par LIGNE de la grille effectivement couverte (un accord scindé sur
+    // plusieurs lignes, ou une plage qui déborde sur la ligne suivante, ont chacun leur propre bande).
+    buildLoopRangeBars(cells, loopRange) {
+        if (!loopRange) return '';
+        const byRow = new Map();
+        cells.forEach(s => {
+            if (s.index < loopRange.start || s.index > loopRange.end) return;
+            const r = byRow.get(s.row) || { minCol: s.col, maxCol: s.col + s.span };
+            r.minCol = Math.min(r.minCol, s.col);
+            r.maxCol = Math.max(r.maxCol, s.col + s.span);
+            byRow.set(s.row, r);
+        });
+        return Array.from(byRow.entries()).map(([row, r]) => `
+                    <div class="loop-range-bar" style="grid-column: ${r.minCol + 1} / ${r.maxCol + 1}; grid-row: ${row * 2 + 2};"></div>`
+        ).join('');
     }
 
     // ---------- Étirement d'un accord (durée) directement dans la grille ----------
