@@ -1100,8 +1100,10 @@ button:active { transform: translateY(1px); }
     z-index: 2;
 }
 
+/* Fond en rgba (pas un aplat marron distinct) : reste un simple voile translucide sur la case, quel
+   que soit son fond d'origine — cohérent avec le contour, déjà en rgba, et moins "lourd" à l'œil. */
 .grid-cell.editing {
-    background-color: #20180a;
+    background-color: rgba(255, 179, 0, 0.075);
     border-color: rgba(255, 179, 0, 0.5);
     box-shadow: inset 0 0 0 1px rgba(255, 179, 0, 0.32), 0 0 7px rgba(255, 179, 0, 0.14);
     z-index: 2;
@@ -1187,6 +1189,45 @@ button:active { transform: translateY(1px); }
 }
 .cell-resize-right { right: 0; }
 .cell-resize-left { left: 0; }
+
+/* Bouton dédié pour entrer en édition (voir editChord), en plus du double-clic/double-tap existant
+   — évite de modifier un accord par un double-tap accidentel : discret (opacité réduite) tant qu'on
+   ne survole/focus pas la case, bien visible ensuite. Toujours un peu visible même sans survol (pas
+   de hover tactile) pour rester repérable au doigt. Au-dessus des poignées d'étirement (z-index). */
+.cell-edit-btn {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    z-index: 4;
+    /* Le sélecteur générique `button` (voir plus bas) pose min-width:120px/padding:16px/flex:1 : sans
+       les annuler ici, min-width l'emporterait sur le width:18px ci-dessous (plancher CSS), rendant
+       le bouton géant et couvrant toute la case au lieu de son seul coin. */
+    flex: none;
+    min-width: 0;
+    min-height: 0;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-muted);
+    opacity: 0.4;
+    cursor: pointer;
+    touch-action: manipulation;
+    transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.cell-edit-btn .icon { width: 11px; height: 11px; }
+.grid-cell:hover .cell-edit-btn,
+.cell-edit-btn:hover,
+.cell-edit-btn:focus-visible {
+    opacity: 1;
+    background: rgba(255, 179, 0, 0.22);
+    color: #ffb300;
+}
 
 /* Repère de mesure À L'INTÉRIEUR d'un accord qui dure plusieurs mesures (zébrure de fond posée en
    background-image inline, voir buildInnerZebra) : un trait vertical très fin à chaque limite de

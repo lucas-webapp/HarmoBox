@@ -1503,18 +1503,24 @@ class HarmoBoxApp {
             if (!menu.hidden && !menu.contains(e.target)) this.closeContextMenu();
         });
 
-        // Désélectionne l'accord de la grille dès qu'on clique ailleurs (en dehors de la grille et du
-        // menu contextuel) — évite l'ambiguïté entre l'accord SÉLECTIONNÉ (voir bouton « Accord »
-        // ci-dessus) et l'accord affiché dans le panneau, une fois qu'on est passé à autre chose.
+        // Désélectionne l'accord de la grille dès qu'on clique en dehors de la grille et du menu
+        // contextuel — évite l'ambiguïté entre l'accord SÉLECTIONNÉ (voir bouton « Accord » ci-
+        // dessus) et l'accord affiché dans le panneau, une fois qu'on est passé à autre chose.
         // En phase 'click' (pas 'pointerdown') : un bouton comme « Grille » lit encore selectedIndex
         // (démarrage depuis l'accord en surbrillance) dans son propre clic AVANT que celui-ci ne
         // remonte jusqu'ici et déselectionne.
+        // Annule aussi une édition en cours (referme facilement le contour orange sans chercher le
+        // bouton Annuler) — mais SEULEMENT en dehors du panneau Accord/séquenceur (.col-left, qui
+        // contient aussi bien les réglages BPM/instrument/Grille que le séquenceur) : contrairement à
+        // la sélection, y cliquer fait partie de l'édition elle-même, pas un clic « ailleurs ».
         document.addEventListener('click', (e) => {
-            if (this.selectedIndex == null) return;
-            if (e.target.closest('.chord-grid')) return;
-            if (e.target.closest('#context-menu')) return;
-            this.selectedIndex = null;
-            this.loadProgression();
+            const inGrid = !!e.target.closest('.chord-grid');
+            const inMenu = !!e.target.closest('#context-menu');
+            const inEditor = !!e.target.closest('.col-left');
+            let changed = false;
+            if (!inGrid && !inMenu && this.selectedIndex != null) { this.selectedIndex = null; changed = true; }
+            if (!inGrid && !inMenu && !inEditor && this.editingIndex != null) { this.exitEditMode(); changed = true; }
+            if (changed) this.loadProgression();
         });
 
         document.getElementById('export-pdf').onclick = () => this.exportPdf();
@@ -2434,6 +2440,8 @@ class HarmoBoxApp {
 
                     const romanEl = s.isFirst ? `<span class="cell-roman">${roman}</span>` : '';
                     const metaEl = s.isFirst ? `<span class="cell-meta">${styleLabel}</span>` : '';
+                    const editBtnEl = (s.isFirst && !cls.includes('drag-placeholder'))
+                        ? `<button type="button" class="cell-edit-btn" data-section="${si}" data-index="${s.index}" title="Modifier cet accord" aria-label="Modifier cet accord">${svgIcon('pencil')}</button>` : '';
                     const contFlag = (s.split && !s.isFirst) ? ' <span class="cell-cont">↩</span>' : '';
                     // Petits traits à chaque limite de mesure interne, positionnés en % de la largeur du
                     // segment (colonnes de largeur égale au sein d'une même grille) — le dégradé qui les
@@ -2457,6 +2465,7 @@ class HarmoBoxApp {
                         <span class="cell-sym">${sym}${contFlag}</span>
                         ${metaEl}
                         ${ticksEl}
+                        ${editBtnEl}
                         ${resizeLeftEl}
                         ${resizeRightEl}
                     </div>`;
@@ -3893,6 +3902,17 @@ class HarmoBoxApp {
         const gridEl = e.target.closest('.chord-grid');
         if (!gridEl) return;
         const section = +gridEl.dataset.section;
+
+        // Bouton dédié « modifier » (voir .cell-edit-btn) : entre en édition directement, sans passer
+        // par le double-clic/double-tap (qui reste possible en plus) — n'ouvre pas aussi le
+        // glisser-déposer de la case.
+        const editBtn = e.target.closest('.cell-edit-btn');
+        if (editBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.editChord(section, parseInt(editBtn.dataset.index));
+            return;
+        }
 
         const cell = e.target.closest('.grid-cell');
         if (cell) {
