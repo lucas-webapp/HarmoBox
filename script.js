@@ -25,12 +25,6 @@ const NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 // Équivalents enharmoniques en bémols, utilisés à l'affichage pour les tonalités qui s'écrivent ainsi
 const NOTES_FLAT = ['C', 'D♭', 'D', 'E♭', 'E', 'F', 'G♭', 'G', 'A♭', 'A', 'B♭', 'B'];
 
-// Couleur d'identité de chaque partie (couplet, refrain...) dans la grille — cycle sur ces 6 teintes
-// selon la position de la partie, pour la repérer d'un coup d'œil sans lien avec le sens (aucune
-// couleur n'est réservée à « couplet » ou « refrain » en particulier). Le vert d'accent est
-// volontairement exclu : il reste réservé à la partie ACTIVE (voir .prog-section.active), pour ne
-// jamais confondre « cette partie est bleue » et « cette partie est active ».
-const SECTION_COLORS = ['#2f81f7', '#ffb300', '#e0b0ff', '#ff6b6b', '#4dd0e1', '#f06292'];
 
 // Intervalles de chaque type d'accord, partagés entre la classe Chord (voicing/lecture), le
 // repérage hors-tonalité et l'orthographe enharmonique fonctionnelle. Pour chaque note :
@@ -1738,10 +1732,9 @@ class HarmoBoxApp {
 
             const titleVal = (sec.title || '').replace(/"/g, '&quot;');
             const canDelete = sections.length > 1;
-            const sectionColor = SECTION_COLORS[si % SECTION_COLORS.length];
             const measureCountEl = history.length > 0 ? `<span class="prog-section-measures">${sectionMeasureCount(sec, beatsPerBar)} mes.</span>` : '';
             return `
-            <div class="prog-section${isActive ? ' active' : ''}" style="--section-color: ${sectionColor}">
+            <div class="prog-section">
                 <div class="prog-section-head">
                     <input type="text" class="prog-title" data-section="${si}" placeholder="Titre de la partie (ex. Couplet 1)" value="${titleVal}">
                     ${measureCountEl}

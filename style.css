@@ -837,18 +837,10 @@ button:active { transform: translateY(1px); }
      letter-spacing: 0.03em;
      margin-bottom: 15px;
 }
-/* Une partie de la chanson (couplet, refrain, ...) : titre éditable + sa propre grille. Le liseré
-   prend par défaut une couleur propre à la partie (--section-color, posée en ligne par partie, voir
-   renderProgression), pour la repérer d'un coup d'œil dans une grille longue ; celle qui est active
-   (ciblée par Ajouter/Modifier/Suppr) l'affiche en accent à la place, prioritaire sur sa propre
-   couleur — une seule partie à la fois est active, ça reste donc sans ambiguïté. */
+/* Une partie de la chanson (couplet, refrain, ...) : titre éditable + sa propre grille. */
 .prog-section {
     margin-bottom: 22px;
-    padding-left: 10px;
-    border-left: 2px solid var(--section-color, transparent);
-    transition: border-color 0.15s ease;
 }
-.prog-section.active { border-left-color: var(--accent); }
 
 .prog-section-head {
     display: flex;
