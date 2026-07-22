@@ -1018,6 +1018,17 @@ button:active { transform: translateY(1px); }
 
 .grid-cell.selected .cell-sym { color: var(--accent); }
 
+/* Numéro de mesure : coin haut-droit, libre depuis le retrait des boutons ✎/⧉ superposés aux cases */
+.cell-measure {
+    position: absolute;
+    top: 3px;
+    right: 6px;
+    font-size: var(--fs-2xs);
+    font-weight: 700;
+    color: var(--text-muted);
+    opacity: 0.7;
+}
+
 .cell-meta {
     position: absolute;
     bottom: 3px;
@@ -1036,7 +1047,8 @@ button:active { transform: translateY(1px); }
 .grid-cell.sz2 .cell-sym { font-size: var(--fs-base); }
 .grid-cell.sz1 .cell-sym { font-size: var(--fs-xs); }
 .grid-cell.sz1 .cell-roman,
-.grid-cell.sz1 .cell-meta { display: none; } /* trop étroit : on masque les annexes */
+.grid-cell.sz1 .cell-meta,
+.grid-cell.sz1 .cell-measure { display: none; } /* trop étroit : on masque les annexes */
 
 /* Toast (copier / coller) */
 .toast {
@@ -1407,12 +1419,22 @@ select.song-select-narrow {
     margin-bottom: 6px;
 }
 .print-chord-cell {
+    position: relative;
     flex-grow: 1;
     flex-basis: 60px;
     border: 1px solid #999;
     border-radius: 6px;
     padding: 6px 8px;
     text-align: center;
+}
+/* Numéro de mesure : coin haut-droit, une seule fois par mesure (pas à chaque accord) */
+.print-chord-measure {
+    position: absolute;
+    top: 2px;
+    right: 5px;
+    font-size: var(--fs-2xs);
+    font-weight: 700;
+    color: #888;
 }
 .print-chord-roman {
     display: block;

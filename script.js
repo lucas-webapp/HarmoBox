@@ -1636,7 +1636,7 @@ class HarmoBoxApp {
                 const row = Math.floor(pos / beatsPerRow);
                 const col = pos % beatsPerRow;
                 const span = Math.min(remaining, beatsPerRow - col);
-                segs.push({ index: i, row, col, span, barStart: (pos % beatsPerBar === 0) });
+                segs.push({ index: i, row, col, span, barStart: (pos % beatsPerBar === 0), barNumber: Math.floor(pos / beatsPerBar) + 1 });
                 pos += span;
                 remaining -= span;
             }
@@ -1708,10 +1708,15 @@ class HarmoBoxApp {
                     const romanEl = s.isFirst ? `<span class="cell-roman">${roman}</span>` : '';
                     const metaEl = s.isFirst ? `<span class="cell-meta">${styleLabel}</span>` : '';
                     const contFlag = (s.split && !s.isFirst) ? ' <span class="cell-cont">↩</span>' : '';
+                    // Numéro de mesure : affiché à chaque début de mesure (pas seulement au premier
+                    // segment d'un accord) — un accord tenu qui chevauche une frontière de mesure aurait
+                    // sinon un « trou » dans la numérotation visible à l'écran.
+                    const measureEl = s.barStart ? `<span class="cell-measure">${s.barNumber}</span>` : '';
 
                     return `
                     <div class="${cls}" data-section="${si}" data-index="${s.index}" style="${style}" title="Toucher pour écouter · double-clic/double-tap pour modifier · clic droit/appui long pour plus d'options">
                         ${romanEl}
+                        ${measureEl}
                         <span class="cell-sym">${sym}${contFlag}</span>
                         ${metaEl}
                     </div>`;
@@ -2690,6 +2695,10 @@ class HarmoBoxApp {
             <h1 class="print-title">${escapeHtml(songName)}</h1>
             <div class="print-meta">Tonalité : ${noteNameForPc(NOTES.indexOf(gRoot), useFlats)} ${MODE_LABELS[gMode] || 'majeur'} · ${timeSig} · ${bpm} BPM</div>`;
 
+        // Même découpage en lignes/mesures que la grille à l'écran (layoutProgression) : chaque ligne
+        // imprimée correspond ainsi à un nombre entier de mesures, avec leur numéro, plutôt qu'un
+        // simple retour à la ligne au gré de la largeur (comme c'était le cas avant).
+        const beatsPerBar = this.beatsPerBar();
         const allChords = []; // à plat, dans l'ordre de lecture, pour la page 2
         sections.forEach((sec, si) => {
             const title = (sec.title && sec.title.trim()) ? sec.title : `Partie ${si + 1}`;
@@ -2698,20 +2707,25 @@ class HarmoBoxApp {
                 page1 += `<div class="print-empty">—</div>`;
                 return;
             }
-            page1 += `<div class="print-chord-row">`;
-            sec.chords.forEach(data => {
-                const chord = new Chord(data.root, data.quality, beatsFromData(data), data.inversion, data.drop, octaveFromData(data), data.bass);
-                const chordUseFlats = useFlatsForChordRoot(NOTES.indexOf(data.root), NOTES.indexOf(gRoot), gMode, useFlats);
-                const sym = chord.getLabel(chordUseFlats);
-                const roman = this.getRomanNumeral(gRoot, gMode, data.root, data.quality);
-                const beats = beatsFromData(data);
-                page1 += `<div class="print-chord-cell" style="flex-grow:${beats};">
-                    <span class="print-chord-roman">${roman}</span>
-                    <span class="print-chord-sym">${escapeHtml(sym)}</span>
-                </div>`;
-                allChords.push({ chord, sym });
-            });
-            page1 += `</div>`;
+            const { cells, rows } = this.layoutProgression(sec.chords, beatsPerBar);
+            for (let r = 0; r < rows; r++) {
+                page1 += `<div class="print-chord-row">`;
+                cells.filter(c => c.row === r).forEach(s => {
+                    const data = sec.chords[s.index];
+                    const chord = new Chord(data.root, data.quality, beatsFromData(data), data.inversion, data.drop, octaveFromData(data), data.bass);
+                    const chordUseFlats = useFlatsForChordRoot(NOTES.indexOf(data.root), NOTES.indexOf(gRoot), gMode, useFlats);
+                    const sym = chord.getLabel(chordUseFlats) + ((s.split && !s.isFirst) ? ' ↩' : '');
+                    const roman = s.isFirst ? this.getRomanNumeral(gRoot, gMode, data.root, data.quality) : '';
+                    const measureEl = s.barStart ? `<span class="print-chord-measure">${s.barNumber}</span>` : '';
+                    page1 += `<div class="print-chord-cell" style="flex-grow:${s.span};">
+                        ${measureEl}
+                        <span class="print-chord-roman">${roman}</span>
+                        <span class="print-chord-sym">${escapeHtml(sym)}</span>
+                    </div>`;
+                    if (s.isFirst) allChords.push({ chord, sym });
+                });
+                page1 += `</div>`;
+            }
         });
         page1 += `</div>`;
 
