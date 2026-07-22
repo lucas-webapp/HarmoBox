@@ -1682,7 +1682,7 @@ class HarmoBoxApp {
             let gridInner, gridStyle = '';
 
             if (history.length === 0) {
-                gridInner = `<div class="empty-hint">Aucun accord. Règle un accord puis « Ajouter » pour le placer ici.</div>`;
+                gridInner = `<div class="empty-hint">Ajouter un accord</div>`;
             } else {
                 const { cells, rows, beatsPerRow } = this.layoutProgression(history, beatsPerBar);
                 // Une ligne de grille sur deux (impaire) porte les accords, l'autre (paire, fine et de
@@ -1736,7 +1736,7 @@ class HarmoBoxApp {
             return `
             <div class="prog-section">
                 <div class="prog-section-head">
-                    <input type="text" class="prog-title" data-section="${si}" placeholder="Titre de la partie (ex. Couplet 1)" value="${titleVal}">
+                    <input type="text" class="prog-title" data-section="${si}" placeholder="Section" value="${titleVal}">
                     ${measureCountEl}
                     <button type="button" class="icon-btn prog-section-transpose" data-section="${si}" data-semitones="-1" title="Transposer cette partie d'un demi-ton vers le bas" aria-label="Transposer cette partie vers le bas">${svgIcon('down')}</button>
                     <button type="button" class="icon-btn prog-section-transpose" data-section="${si}" data-semitones="1" title="Transposer cette partie d'un demi-ton vers le haut" aria-label="Transposer cette partie vers le haut">${svgIcon('up')}</button>
