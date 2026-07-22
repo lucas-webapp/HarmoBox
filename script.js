@@ -1681,7 +1681,11 @@ class HarmoBoxApp {
                 gridInner = `<div class="empty-hint">Aucun accord. Règle un accord puis « Ajouter » pour le placer ici.</div>`;
             } else {
                 const { cells, rows, beatsPerRow } = this.layoutProgression(history, beatsPerBar);
-                gridStyle = `grid-template-rows: repeat(${rows}, var(--row-h)); grid-template-columns: repeat(${beatsPerRow}, 1fr);`;
+                // Une ligne de grille sur deux (impaire) porte les accords, l'autre (paire, fine —
+                // "auto") les numéros de mesure juste en dessous. this.row se réfère toujours à une
+                // ligne d'ACCORDS (0, 1, 2...) : ×2+1 pour sa ligne CSS, ×2+2 pour la ligne des numéros
+                // juste après elle (voir plus bas, en fin de gridInner).
+                gridStyle = `grid-template-rows: repeat(${rows}, var(--row-h) auto); grid-template-columns: repeat(${beatsPerRow}, 1fr);`;
                 gridInner = cells.map(s => {
                     const h = history[s.index];
                     const roman = this.getRomanNumeral(gRoot, gMode, h.root, h.quality);
@@ -1703,24 +1707,21 @@ class HarmoBoxApp {
                     if (s.barStart) cls += ' bar-start';
                     // police réduite pour les segments courts (peu de temps)
                     if (s.span === 1) cls += ' sz1'; else if (s.span === 2) cls += ' sz2';
-                    const style = `grid-column: ${s.col + 1} / span ${s.span}; grid-row: ${s.row + 1};`;
+                    const style = `grid-column: ${s.col + 1} / span ${s.span}; grid-row: ${s.row * 2 + 1};`;
 
                     const romanEl = s.isFirst ? `<span class="cell-roman">${roman}</span>` : '';
                     const metaEl = s.isFirst ? `<span class="cell-meta">${styleLabel}</span>` : '';
                     const contFlag = (s.split && !s.isFirst) ? ' <span class="cell-cont">↩</span>' : '';
-                    // Numéro de mesure : affiché à chaque début de mesure (pas seulement au premier
-                    // segment d'un accord) — un accord tenu qui chevauche une frontière de mesure aurait
-                    // sinon un « trou » dans la numérotation visible à l'écran.
-                    const measureEl = s.barStart ? `<span class="cell-measure">${s.barNumber}</span>` : '';
 
                     return `
                     <div class="${cls}" data-section="${si}" data-index="${s.index}" style="${style}" title="Toucher pour écouter · double-clic/double-tap pour modifier · clic droit/appui long pour plus d'options">
                         ${romanEl}
-                        ${measureEl}
                         <span class="cell-sym">${sym}${contFlag}</span>
                         ${metaEl}
                     </div>`;
-                }).join('');
+                }).join('') + cells.filter(s => s.barStart).map(s => `
+                    <div class="row-measure" style="grid-column: ${s.col + 1} / span 1; grid-row: ${s.row * 2 + 2};">${s.barNumber}</div>`
+                ).join('');
             }
 
             const titleVal = (sec.title || '').replace(/"/g, '&quot;');

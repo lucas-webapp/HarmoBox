@@ -1018,11 +1018,11 @@ button:active { transform: translateY(1px); }
 
 .grid-cell.selected .cell-sym { color: var(--accent); }
 
-/* Numéro de mesure : coin haut-droit, libre depuis le retrait des boutons ✎/⧉ superposés aux cases */
-.cell-measure {
-    position: absolute;
-    top: 3px;
-    right: 6px;
+/* Numéro de mesure : fine ligne dédiée juste sous chaque ligne d'accords (voir gridStyle/loadProgression,
+   une ligne de grille sur deux), alignée sur le début de la mesure plutôt que posée sur l'accord lui-même. */
+.row-measure {
+    align-self: start;
+    padding: 2px 0 0 2px;
     font-size: var(--fs-2xs);
     font-weight: 700;
     color: var(--text-muted);
@@ -1047,8 +1047,7 @@ button:active { transform: translateY(1px); }
 .grid-cell.sz2 .cell-sym { font-size: var(--fs-base); }
 .grid-cell.sz1 .cell-sym { font-size: var(--fs-xs); }
 .grid-cell.sz1 .cell-roman,
-.grid-cell.sz1 .cell-meta,
-.grid-cell.sz1 .cell-measure { display: none; } /* trop étroit : on masque les annexes */
+.grid-cell.sz1 .cell-meta { display: none; } /* trop étroit : on masque les annexes */
 
 /* Toast (copier / coller) */
 .toast {
