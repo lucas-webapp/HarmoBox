@@ -1113,15 +1113,19 @@ button:active { transform: translateY(1px); }
 /* Barre de lecture de la grille : repère à gauche de l'accord sélectionné/en cours (voir
    updateGridPlayhead) — simple enfant absolu du .grid-cell concerné (position:relative), jamais
    interactif, au-dessus de tout le reste de la case. Uniquement en partie basse (pas toute la
-   hauteur), et estompée en s'approchant du centre (dégradé du plein en bas vers transparent). */
+   hauteur), et estompée en s'approchant du centre (dégradé du plein en bas vers transparent).
+   En BLANC (pas --accent) : pendant la lecture, la case en cours a déjà un contour vert plein
+   (.grid-cell.playing) qui rendait la barre — de la même couleur — invisible, confondue avec ce
+   contour. Le blanc reste distinct quel que soit l'état (case simple, sélectionnée ou en lecture). */
 .grid-playhead {
     position: absolute;
     left: 0;
     bottom: 0;
-    width: 3px;
+    width: 4px;
     height: 55%;
     pointer-events: none;
-    background: linear-gradient(to top, var(--accent) 0%, rgba(0, 230, 118, 0) 100%);
+    background: linear-gradient(to top, #ffffff 0%, rgba(255, 255, 255, 0) 100%);
+    box-shadow: 0 0 4px rgba(255, 255, 255, 0.8);
     z-index: 6;
 }
 
