@@ -3005,12 +3005,12 @@ class HarmoBoxApp {
         const FRET_WINDOW = 5; // nombre de cases visibles, identique pour tous les accords
         const SINGLE_MARKERS = [3, 5, 7, 9, 15, 17, 19, 21];
         const DOUBLE_MARKERS = [12, 24];
-        const STRING_GAP = 16, FRET_GAP = 24, MARGIN_LEFT = 20, MARGIN_TOP = 8, BOTTOM_PAD = 6;
+        const STRING_GAP = 16, FRET_GAP = 30, MARGIN_LEFT = 20, MARGIN_TOP = 8, LABEL_ROW_H = 13;
         const lineColor = forPrint ? '#555' : '#888';
         const nutColor = forPrint ? '#1a1a1a' : '#e8e8e8';
         const openColor = forPrint ? '#333' : '#ccc';
-        const posLabelColor = forPrint ? '#333' : '#aaa';
         const markerColor = forPrint ? '#999' : '#3a3a3a';
+        const labelColor = forPrint ? '#333' : '#999';
 
         // Corde aiguë (Mi aigu, index 5) en haut, grave (Mi grave, index 0) en bas : y croît avec
         // l'index de corde à l'envers.
@@ -3031,7 +3031,7 @@ class HarmoBoxApp {
 
         const stringsSpan = STRING_GAP * 5;
         const width = MARGIN_LEFT + FRET_GAP * FRET_WINDOW + 8;
-        const height = MARGIN_TOP + stringsSpan + BOTTOM_PAD;
+        const height = MARGIN_TOP + stringsSpan + LABEL_ROW_H + 4;
 
         let svg = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">`;
 
@@ -3039,7 +3039,6 @@ class HarmoBoxApp {
             svg += `<rect x="${MARGIN_LEFT - 2}" y="${MARGIN_TOP}" width="3" height="${stringsSpan}" fill="${nutColor}"/>`;
         } else {
             svg += `<line x1="${MARGIN_LEFT}" y1="${MARGIN_TOP}" x2="${MARGIN_LEFT}" y2="${MARGIN_TOP + stringsSpan}" stroke="${lineColor}" stroke-width="1"/>`;
-            svg += `<text x="${MARGIN_LEFT}" y="${MARGIN_TOP - 2}" font-size="9" fill="${posLabelColor}" text-anchor="middle">${baseFret + 1}</text>`;
         }
         for (let c = 1; c <= FRET_WINDOW; c++) {
             const x = MARGIN_LEFT + c * FRET_GAP;
@@ -3050,18 +3049,23 @@ class HarmoBoxApp {
             svg += `<line x1="${MARGIN_LEFT}" y1="${y}" x2="${MARGIN_LEFT + FRET_GAP * FRET_WINDOW}" y2="${y}" stroke="${lineColor}" stroke-width="1"/>`;
         }
         // Points de repère du manche (incrustations réelles d'une guitare), centrés dans la hauteur du
-        // diagramme — un seul point pour les cases usuelles, deux pour l'octave (case 12/24).
+        // diagramme — un seul point pour les cases usuelles, deux pour l'octave (case 12/24) — avec le
+        // numéro de case en dessous du manche, UNIQUEMENT là où il y a un point (pas de repère générique
+        // de position, moins lisible et redondant).
         const midY = MARGIN_TOP + stringsSpan / 2;
+        const labelY = MARGIN_TOP + stringsSpan + 11;
         SINGLE_MARKERS.forEach(marker => {
             if (marker < baseFret + 1 || marker > baseFret + FRET_WINDOW) return;
             const x = MARGIN_LEFT + (marker - baseFret - 0.5) * FRET_GAP;
             svg += `<circle cx="${x}" cy="${midY}" r="3" fill="${markerColor}"/>`;
+            svg += `<text x="${x}" y="${labelY}" font-size="8" fill="${labelColor}" text-anchor="middle">${marker}</text>`;
         });
         DOUBLE_MARKERS.forEach(marker => {
             if (marker < baseFret + 1 || marker > baseFret + FRET_WINDOW) return;
             const x = MARGIN_LEFT + (marker - baseFret - 0.5) * FRET_GAP;
             svg += `<circle cx="${x}" cy="${midY - STRING_GAP}" r="3" fill="${markerColor}"/>`;
             svg += `<circle cx="${x}" cy="${midY + STRING_GAP}" r="3" fill="${markerColor}"/>`;
+            svg += `<text x="${x}" y="${labelY}" font-size="8" fill="${labelColor}" text-anchor="middle">${marker}</text>`;
         });
         byString.forEach((e, s) => {
             const y = stringY(s) + 3;
