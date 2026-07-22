@@ -298,23 +298,29 @@
             </section>
 
             <div class="viz-wrap">
-                <div class="viz-toggle">
-                    <button type="button" id="toggle-viz-piano" class="viz-toggle-btn" aria-pressed="true">Piano</button>
-                    <button type="button" id="toggle-viz-guitar" class="viz-toggle-btn" aria-pressed="false">Guitare</button>
-                </div>
-                <div class="viz-diagrams">
-                    <section id="piano-viz" class="piano-container"></section>
-                    <div id="guitar-viz-wrap" class="guitar-viz-wrap">
-                        <div id="guitar-viz" class="guitar-container"></div>
-                        <div id="guitar-nav" class="guitar-nav">
-                            <button type="button" id="guitar-prev" class="icon-btn" title="Doigté précédent" aria-label="Doigté précédent">
-                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
-                            </button>
-                            <span id="guitar-nav-label" class="guitar-nav-label">1/1</span>
-                            <button type="button" id="guitar-next" class="icon-btn" title="Doigté suivant" aria-label="Doigté suivant">
-                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
-                            </button>
+                <div class="viz-row">
+                    <div class="viz-diagrams">
+                        <section id="piano-viz" class="piano-container"></section>
+                        <div id="guitar-viz-wrap" class="guitar-viz-wrap">
+                            <div id="guitar-viz" class="guitar-container"></div>
+                            <div id="guitar-nav" class="guitar-nav">
+                                <button type="button" id="guitar-prev" class="icon-btn" title="Doigté précédent" aria-label="Doigté précédent">
+                                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+                                </button>
+                                <span id="guitar-nav-label" class="guitar-nav-label">1/1</span>
+                                <button type="button" id="guitar-next" class="icon-btn" title="Doigté suivant" aria-label="Doigté suivant">
+                                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+                                </button>
+                            </div>
                         </div>
+                    </div>
+                    <div class="viz-toggle">
+                        <button type="button" id="toggle-viz-piano" class="icon-btn viz-toggle-btn" title="Afficher le piano" aria-label="Afficher le piano" aria-pressed="true">
+                            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="1"/><path d="M8 5v8M12 5v8M16 5v8"/></svg>
+                        </button>
+                        <button type="button" id="toggle-viz-guitar" class="icon-btn viz-toggle-btn" title="Afficher la guitare" aria-label="Afficher la guitare" aria-pressed="false">
+                            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8.5" cy="15.5" r="5.5"/><circle cx="8.5" cy="15.5" r="1.6"/><path d="M12.5 12 19 5.5"/><path d="M17 4l3 3"/></svg>
+                        </button>
                     </div>
                 </div>
                 <div class="piano-legend">

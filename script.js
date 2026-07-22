@@ -744,6 +744,101 @@ function solveGuitarFingerings(voiced, limit = 4) {
         .map(r => r.byString);
 }
 
+// Formes ouvertes standard (celles apprises en tout premier, "école de musique") pour les tons qui
+// ont une forme dédiée bien connue — D, G et C n'ont pas de forme mobile simple (contrairement à
+// E/A ci-dessous), donc consignées telles quelles. E/A eux-mêmes n'ont pas besoin d'entrée ici : leur
+// forme ouverte est simplement leur gabarit de barré (voir BARRE_TEMPLATES) posé à la case 0.
+// Case par corde (grave -> aigu), `null` = corde étouffée. Vérifiées note à note contre les
+// intervalles de l'accord (voir les commentaires de dérivation dans la conversation de conception).
+const OPEN_SHAPES = {
+    'D:maj':   [null, null, 0, 2, 3, 2],
+    'D:min':   [null, null, 0, 2, 3, 1],
+    'D:dom7':  [null, null, 0, 2, 1, 2],
+    'G:maj':   [3, 2, 0, 0, 0, 3],
+    'G:dom7':  [3, 2, 0, 0, 0, 1],
+    'C:maj':   [null, 3, 2, 0, 1, 0],
+    'C:dom7':  [null, 3, 2, 3, 1, 0],
+};
+
+// Gabarits de barré mobiles (les deux formes enseignées en premier pour jouer N'IMPORTE QUEL ton) :
+// forme E (fondamentale à la 6e corde) et forme A (fondamentale à la 5e corde), décalage de case
+// (barré) déduit de la tonique demandée. `null` = corde étouffée, nombre = décalage depuis le barré
+// (0 = à la hauteur du barré). Dérivées directement des accords ouverts E/Em/E7/Emaj7/Em7 et
+// A/Am/A7/Amaj7/Am7 (mêmes décalages, vérifiés note à note), donc fiables pour n'importe quel ton.
+const BARRE_TEMPLATES = {
+    E: {
+        openPc: NOTES.indexOf('E'),
+        maj:  [0, 2, 2, 1, 0, 0],
+        min:  [0, 2, 2, 0, 0, 0],
+        dom7: [0, 2, 0, 1, 0, 0],
+        maj7: [0, 2, 1, 1, 0, 0],
+        min7: [0, 2, 0, 0, 0, 0],
+    },
+    A: {
+        openPc: NOTES.indexOf('A'),
+        maj:  [null, 0, 2, 2, 2, 0],
+        min:  [null, 0, 2, 2, 1, 0],
+        dom7: [null, 0, 2, 0, 2, 0],
+        maj7: [null, 0, 2, 1, 2, 0],
+        min7: [null, 0, 2, 0, 1, 0],
+    }
+};
+const BARRE_QUALITIES = ['maj', 'min', 'dom7', 'maj7', 'min7'];
+
+// Formes « communément enseignées » pour un ton/qualité donné (ouverte quand elle existe, puis
+// gabarits de barré E et A décalés) — triées de la plus courante (position la plus basse) à la plus
+// rare. Tableau vide si la qualité n'a pas de forme standard répandue (accords étendus/rares) :
+// c'est alors le solveur exact (solveGuitarFingerings) qui prend le relais, voir guitarFingeringsForChord.
+function commonGuitarShapes(root, quality) {
+    const rootPc = NOTES.indexOf(root);
+    const results = [];
+
+    const openShape = OPEN_SHAPES[`${root}:${quality}`];
+    if (openShape) results.push({ shape: openShape, pos: 0 });
+
+    if (BARRE_QUALITIES.includes(quality)) {
+        ['E', 'A'].forEach(name => {
+            const tpl = BARRE_TEMPLATES[name][quality];
+            if (!tpl) return;
+            const barreFret = ((rootPc - BARRE_TEMPLATES[name].openPc) % 12 + 12) % 12;
+            const shape = tpl.map(f => (f === null ? null : f + barreFret));
+            const key = shape.join(',');
+            if (results.some(r => r.shape.join(',') === key)) return; // déjà couvert (barreFret 0 == forme ouverte)
+            results.push({ shape, pos: barreFret });
+        });
+    }
+
+    return results.sort((a, b) => a.pos - b.pos).map(r => r.shape);
+}
+
+// Convertit une forme (case par corde, `null` = étouffée) en doigté { fret, midi, role } par corde,
+// le rôle étant recalculé depuis la hauteur réelle jouée (pas mémorisé à la main -> pas d'erreur
+// possible de correspondance avec la couleur affichée).
+function shapeToByString(shape, root, quality) {
+    const rootPc = NOTES.indexOf(root);
+    const intervals = CHORD_INTERVALS[quality] || CHORD_INTERVALS.maj;
+    return shape.map((fret, s) => {
+        if (fret === null || fret === undefined) return null;
+        const midi = GUITAR_OPEN_MIDI[s] + fret;
+        const pc = ((midi % 12) + 12) % 12;
+        const match = intervals.find(iv => (((rootPc + iv.semi) % 12) + 12) % 12 === pc);
+        return { fret, midi, role: match ? match.role : 'ext' };
+    });
+}
+
+// Point d'entrée unique pour la vue live et l'export PDF : privilégie les formes communément
+// enseignées quand elles existent ET que l'accord est en position simple (fondamentale, sans drop
+// ni basse différente) — dès que l'utilisateur a personnalisé le voicing (renversement/drop/basse),
+// cette personnalisation est délibérée et doit rester fidèle, donc on retombe sur le solveur exact.
+function guitarFingeringsForChord(chord) {
+    const isPlainVoicing = chord.getEffectiveInversion() === 0 && !chord.drop && !chord.bass;
+    if (isPlainVoicing) {
+        const common = commonGuitarShapes(chord.root, chord.quality);
+        if (common.length) return common.map(shape => shapeToByString(shape, chord.root, chord.quality));
+    }
+    return solveGuitarFingerings(chord.getVoiced());
+}
+
 // ---------- Banques de sons ----------
 // Le piano (échantillonné, Salamander) reste le son par défaut. Les autres sont synthétisés
 // (Tone.js) : disponibles instantanément, sans temps de chargement ni bibliothèque à héberger.
@@ -1353,7 +1448,7 @@ class HarmoBoxApp {
         disp.innerHTML = `<span class="chord-title">${flatTight(chord.getLabel(useFlats))}</span><span class="chord-notes">${chordNotesHtml(chord, useFlats)}</span>`;
         this.ensurePianoWindow(midis);
         this.updateViz(midis, chord.getRoleMap());
-        this.ensureGuitarDiagram(midis, chord.getRoleMap());
+        this.ensureGuitarDiagram(chord);
     }
 
     // Calcule une fenêtre clavier (multiple de 12, alignée sur des Do) englobant l'accord,
@@ -1433,17 +1528,17 @@ class HarmoBoxApp {
             k.classList.remove('active', 'role-root', 'role-third', 'role-fifth', 'role-seventh', 'role-ext'));
     }
 
-    // Recalcule les doigtés guitare seulement si l'accord a changé (mêmes notes) — évite de tout
-    // reconstruire à chaque croche pendant un arpège, comme ensurePianoWindow pour le clavier.
-    // `midis` : notes de L'ACCORD ENTIER (pas seulement celles actives à cet instant) : à la guitare,
-    // les doigts restent posés sur tout l'accord du début à la fin, contrairement au piano.
-    ensureGuitarDiagram(midis, roleMap = {}) {
+    // Recalcule les doigtés guitare seulement si l'accord a changé — évite de tout reconstruire à
+    // chaque croche pendant un arpège, comme ensurePianoWindow pour le clavier. Prend le CHORD ENTIER
+    // (pas juste ses notes) : à la guitare, les doigts restent posés sur tout l'accord du début à la
+    // fin (contrairement au piano), et le ton/qualité sont nécessaires pour choisir une forme
+    // communément enseignée plutôt que le voicing brut (voir guitarFingeringsForChord).
+    ensureGuitarDiagram(chord) {
         if (!this.showGuitarViz()) return;
-        const key = midis.slice().sort((a, b) => a - b).join(',');
+        const key = `${chord.root}:${chord.quality}:${chord.getMidiNotes().join(',')}`;
         if (this.guitarKey === key) return;
         this.guitarKey = key;
-        const voiced = midis.map(m => ({ midi: m, role: roleMap[m] || 'ext' }));
-        this.guitarFingerings = solveGuitarFingerings(voiced);
+        this.guitarFingerings = guitarFingeringsForChord(chord);
         this.guitarFingeringIndex = 0;
         this.renderGuitarDiagram();
     }
@@ -1530,7 +1625,7 @@ class HarmoBoxApp {
     // même voix en une seule note tenue plutôt que de rejouer une attaque à chaque croche — c'est ce
     // qui permet à un motif « tout allumé » de sonner comme un accord soutenu (Maintenu), tout en
     // restant un motif éditable case par case comme un vrai séquenceur pas-à-pas.
-    schedulePlayback(notes, midis, seqPattern, seqTie, secPerBeat, timeOffset, roleMap = {}, instrumentKey = 'piano') {
+    schedulePlayback(notes, midis, seqPattern, seqTie, secPerBeat, timeOffset, roleMap = {}, instrumentKey = 'piano', chord = null) {
         const instrument = this.getInstrument(instrumentKey);
         const stepDur = secPerBeat / SEQ_STEPS_PER_BEAT;
         const steps = seqPattern.length;
@@ -1543,7 +1638,10 @@ class HarmoBoxApp {
         for (let s = 0; s < steps; s++) {
             const activeMidis = seqPattern[s].map(v => midis[v]);
             Tone.Transport.schedule((t) => {
-                Tone.Draw.schedule(() => { this.ensurePianoWindow(midis); this.updateViz(activeMidis, roleMap); this.ensureGuitarDiagram(midis, roleMap); }, t);
+                Tone.Draw.schedule(() => {
+                    this.ensurePianoWindow(midis); this.updateViz(activeMidis, roleMap);
+                    if (chord) this.ensureGuitarDiagram(chord);
+                }, t);
             }, stepTime(s));
         }
 
@@ -1584,7 +1682,7 @@ class HarmoBoxApp {
         const secPerBeat = 60 / bpm;
         const instrumentKey = document.getElementById('instrument').value;
 
-        this.schedulePlayback(notes, chord.getMidiNotes(), seqPattern, seqTie, secPerBeat, 0.1, chord.getRoleMap(), instrumentKey);
+        this.schedulePlayback(notes, chord.getMidiNotes(), seqPattern, seqTie, secPerBeat, 0.1, chord.getRoleMap(), instrumentKey, chord);
         this.isPlaying = true;
 
         Tone.Transport.schedule((t) => {
@@ -1651,7 +1749,7 @@ class HarmoBoxApp {
             const chord = new Chord(data.root, data.quality, beats, data.inversion, data.drop, octaveFromData(data), data.bass);
             const notes = chord.getNotes();
             const { pattern: seqPattern, tie: seqTie } = this.resolveSeqPatternForData(chord, data);
-            this.schedulePlayback(notes, chord.getMidiNotes(), seqPattern, seqTie, secPerBeat, timeOffset, chord.getRoleMap(), data.instrument || 'piano');
+            this.schedulePlayback(notes, chord.getMidiNotes(), seqPattern, seqTie, secPerBeat, timeOffset, chord.getRoleMap(), data.instrument || 'piano', chord);
 
             // Métronome maintenu pendant la lecture (option activée) : un clic par temps de l'accord,
             // accentué sur le 1er temps de chaque mesure — indépendant des notes de l'accord jouées.
@@ -2894,53 +2992,73 @@ class HarmoBoxApp {
     }
 
     // Diagramme SVG d'un manche de guitare pour un doigté donné (un élément du tableau retourné par
-    // solveGuitarFingerings) : cordes verticales (grave à gauche, aigu à droite), cases horizontales,
-    // X/O au-dessus des cordes étouffées/à vide, points colorés par fonction (mêmes couleurs que le
-    // clavier). `forPrint` bascule vers des couleurs sombres (encre sur papier blanc) au lieu des
-    // couleurs claires utilisées en direct sur fond sombre — sans ça le sillet ou les repères X/O
-    // deviennent invisibles selon le fond.
+    // guitarFingeringsForChord/solveGuitarFingerings) : à l'HORIZONTALE, comme un manche de guitare
+    // qu'on regarde en le tenant (sillet à gauche, cases vers la droite, corde de Mi grave en haut,
+    // Mi aigu en bas) — la convention la plus répandue plutôt que la présentation verticale des
+    // partitions. Fenêtre d'un nombre de cases FIXE (FRET_WINDOW) pour que tous les diagrammes aient
+    // la même taille, avec les repères de case habituels (3, 5, 7, 9, 12, 15, 17...) quand ils sont
+    // dans la fenêtre affichée. `forPrint` bascule vers des couleurs sombres (encre sur papier blanc)
+    // au lieu des couleurs claires utilisées en direct sur fond sombre.
     buildGuitarDiagramSVG(byString, forPrint = false) {
-        const STRING_GAP = 16, FRET_GAP = 18, PAD_X = 10, MARGIN_TOP = 16;
+        const FRET_WINDOW = 5; // nombre de cases visibles, identique pour tous les accords
+        const STANDARD_MARKERS = [3, 5, 7, 9, 12, 15, 17];
+        const STRING_GAP = 16, FRET_GAP = 24, MARGIN_LEFT = 20, MARGIN_TOP = 8, MARKER_ROW_H = 14;
         const lineColor = forPrint ? '#555' : '#888';
         const nutColor = forPrint ? '#1a1a1a' : '#e8e8e8';
         const openColor = forPrint ? '#333' : '#ccc';
         const posLabelColor = forPrint ? '#333' : '#aaa';
+        const markerColor = forPrint ? '#777' : '#666';
+
         const fretted = byString.filter(e => e && e.fret > 0);
         const maxFret = fretted.length ? Math.max(...fretted.map(e => e.fret)) : 0;
         const minFret = fretted.length ? Math.min(...fretted.map(e => e.fret)) : 0;
-        const showNut = maxFret === 0 || minFret <= 1;
-        const numRows = showNut ? Math.max(4, maxFret) : Math.max(4, maxFret - minFret + 1);
-        const baseFret = showNut ? 0 : (minFret - 1); // n° de case juste au-dessus de la 1ère ligne dessinée
+        // Le sillet ne s'affiche que s'il y a une vraie corde à vide ET que le reste de la forme
+        // tient dans la fenêtre depuis la case 0 : un barré à la case 1 (ex. Fa, forme E) n'a AUCUNE
+        // corde ouverte et doit afficher un repère de position ("1") plutôt qu'un sillet, sinon on le
+        // confondrait avec un accord en position ouverte ; et une corde à vide isolée alors que le
+        // reste de l'accord est loin sur le manche ne doit pas forcer la fenêtre à revenir à la case 0
+        // (les notes réellement jouées deviendraient invisibles, hors fenêtre).
+        const hasOpenString = byString.some(e => e && e.fret === 0);
+        const showNut = fretted.length === 0 || (hasOpenString && maxFret <= FRET_WINDOW);
+        const baseFret = showNut ? 0 : (minFret - 1); // n° de case juste avant la 1ère colonne dessinée
 
-        const width = PAD_X * 2 + STRING_GAP * 5;
-        const height = MARGIN_TOP + FRET_GAP * numRows + 6;
+        const stringsSpan = STRING_GAP * 5;
+        const width = MARGIN_LEFT + FRET_GAP * FRET_WINDOW + 8;
+        const height = MARGIN_TOP + stringsSpan + MARKER_ROW_H + 4;
 
         let svg = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">`;
 
         if (showNut) {
-            svg += `<rect x="${PAD_X}" y="${MARGIN_TOP}" width="${STRING_GAP * 5}" height="3" fill="${nutColor}"/>`;
+            svg += `<rect x="${MARGIN_LEFT - 2}" y="${MARGIN_TOP}" width="3" height="${stringsSpan}" fill="${nutColor}"/>`;
         } else {
-            svg += `<line x1="${PAD_X}" y1="${MARGIN_TOP}" x2="${PAD_X + STRING_GAP * 5}" y2="${MARGIN_TOP}" stroke="${lineColor}" stroke-width="1"/>`;
-            svg += `<text x="${PAD_X - 6}" y="${MARGIN_TOP + FRET_GAP * 0.7}" font-size="9" fill="${posLabelColor}" text-anchor="end">${baseFret + 1}</text>`;
+            svg += `<line x1="${MARGIN_LEFT}" y1="${MARGIN_TOP}" x2="${MARGIN_LEFT}" y2="${MARGIN_TOP + stringsSpan}" stroke="${lineColor}" stroke-width="1"/>`;
+            svg += `<text x="${MARGIN_LEFT}" y="${MARGIN_TOP - 2}" font-size="9" fill="${posLabelColor}" text-anchor="middle">${baseFret + 1}</text>`;
         }
-        for (let r = 1; r <= numRows; r++) {
-            const y = MARGIN_TOP + r * FRET_GAP;
-            svg += `<line x1="${PAD_X}" y1="${y}" x2="${PAD_X + STRING_GAP * 5}" y2="${y}" stroke="${lineColor}" stroke-width="1"/>`;
+        for (let c = 1; c <= FRET_WINDOW; c++) {
+            const x = MARGIN_LEFT + c * FRET_GAP;
+            svg += `<line x1="${x}" y1="${MARGIN_TOP}" x2="${x}" y2="${MARGIN_TOP + stringsSpan}" stroke="${lineColor}" stroke-width="1"/>`;
         }
         for (let s = 0; s < 6; s++) {
-            const x = PAD_X + s * STRING_GAP;
-            svg += `<line x1="${x}" y1="${MARGIN_TOP}" x2="${x}" y2="${MARGIN_TOP + FRET_GAP * numRows}" stroke="${lineColor}" stroke-width="1"/>`;
+            const y = MARGIN_TOP + s * STRING_GAP;
+            svg += `<line x1="${MARGIN_LEFT}" y1="${y}" x2="${MARGIN_LEFT + FRET_GAP * FRET_WINDOW}" y2="${y}" stroke="${lineColor}" stroke-width="1"/>`;
         }
+        // Repères de case habituels (incrustations du manche), sous le diagramme
+        STANDARD_MARKERS.forEach(marker => {
+            if (marker < baseFret + 1 || marker > baseFret + FRET_WINDOW) return;
+            const col = marker - baseFret;
+            const x = MARGIN_LEFT + (col - 0.5) * FRET_GAP;
+            svg += `<text x="${x}" y="${MARGIN_TOP + stringsSpan + 11}" font-size="8" fill="${markerColor}" text-anchor="middle">${marker}</text>`;
+        });
         byString.forEach((e, s) => {
-            const x = PAD_X + s * STRING_GAP;
-            if (!e) svg += `<text x="${x}" y="${MARGIN_TOP - 4}" font-size="10" fill="#e53922" text-anchor="middle">X</text>`;
-            else if (e.fret === 0) svg += `<text x="${x}" y="${MARGIN_TOP - 4}" font-size="10" fill="${openColor}" text-anchor="middle">O</text>`;
+            const y = MARGIN_TOP + s * STRING_GAP + 3;
+            if (!e) svg += `<text x="${MARGIN_LEFT - 9}" y="${y}" font-size="9" fill="#e53922" text-anchor="middle">X</text>`;
+            else if (e.fret === 0) svg += `<text x="${MARGIN_LEFT - 9}" y="${y}" font-size="9" fill="${openColor}" text-anchor="middle">O</text>`;
         });
         byString.forEach((e, s) => {
             if (!e || e.fret === 0) return;
-            const row = e.fret - baseFret;
-            const x = PAD_X + s * STRING_GAP;
-            const y = MARGIN_TOP + (row - 0.5) * FRET_GAP;
+            const col = e.fret - baseFret;
+            const x = MARGIN_LEFT + (col - 0.5) * FRET_GAP;
+            const y = MARGIN_TOP + s * STRING_GAP;
             const fill = ROLE_COLOR[e.role] || ROLE_COLOR.ext;
             svg += `<circle cx="${x}" cy="${y}" r="6" fill="${fill}" stroke="#000" stroke-width="0.5"/>`;
         });
@@ -3017,7 +3135,7 @@ class HarmoBoxApp {
                 const diagrams = [];
                 if (showPiano) diagrams.push(this.buildPianoDiagramSVG(chord));
                 if (showGuitar) {
-                    const fingerings = solveGuitarFingerings(chord.getVoiced());
+                    const fingerings = guitarFingeringsForChord(chord);
                     diagrams.push(fingerings.length
                         ? this.buildGuitarDiagramSVG(fingerings[0], true)
                         : `<div class="print-guitar-unplayable">Non jouable<br>à la guitare</div>`);
@@ -3963,17 +4081,17 @@ class HarmoBoxApp {
         const disp = document.getElementById('current-chord-display');
         disp.innerHTML = `<span class="chord-title">${flatTight(chord.getLabel(useFlats))}</span><span class="chord-notes">${chordNotesHtml(chord, useFlats)}</span>`;
         this.ensurePianoWindow(midis);
-        this.ensureGuitarDiagram(midis, roleMap);
+        this.ensureGuitarDiagram(chord);
 
         const bpm = parseInt(document.getElementById('bpm').value);
         const secPerBeat = 60 / bpm;
         const { pattern: seqPattern, tie: seqTie } = this.resolveSeqPatternForData(chord, data);
-        this.schedulePlayback(notes, midis, seqPattern, seqTie, secPerBeat, 0.1, roleMap, data.instrument || 'piano');
+        this.schedulePlayback(notes, midis, seqPattern, seqTie, secPerBeat, 0.1, roleMap, data.instrument || 'piano', chord);
         this.isPlaying = true;
 
         // En fin de lecture, on GARDE l'accord affiché sur le clavier (au lieu de l'effacer)
         Tone.Transport.schedule((t) => {
-            Tone.Draw.schedule(() => { this.ensurePianoWindow(midis); this.updateViz(midis, roleMap); this.ensureGuitarDiagram(midis, roleMap); this.isPlaying = false; }, t);
+            Tone.Draw.schedule(() => { this.ensurePianoWindow(midis); this.updateViz(midis, roleMap); this.ensureGuitarDiagram(chord); this.isPlaying = false; }, t);
         }, 0.1 + (chord.beats * secPerBeat));
 
         Tone.Transport.start();
