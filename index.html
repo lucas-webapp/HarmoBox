@@ -276,7 +276,18 @@
             <div id="current-chord-display">--</div>
 
             <section class="history-section">
-                <h2>Grille d'accords</h2>
+                <div class="card-head">
+                    <h2>Grille d'accords</h2>
+                    <div class="card-head-actions transpose-actions">
+                        <span class="transpose-label">Transposer</span>
+                        <button type="button" id="transpose-song-down" class="icon-btn" title="Transposer tout le morceau d'un demi-ton vers le bas" aria-label="Transposer tout le morceau vers le bas">
+                            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="m5 12 7 7 7-7"/></svg>
+                        </button>
+                        <button type="button" id="transpose-song-up" class="icon-btn" title="Transposer tout le morceau d'un demi-ton vers le haut" aria-label="Transposer tout le morceau vers le haut">
+                            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
+                        </button>
+                    </div>
+                </div>
                 <div id="progression-sections"></div>
                 <button type="button" id="add-section" class="btn-sec add-section-btn"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg> Ajouter une partie</button>
             </section>

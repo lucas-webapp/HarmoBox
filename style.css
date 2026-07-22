@@ -478,6 +478,8 @@ main {
     gap: 6px;
     flex: none;
 }
+.transpose-actions { align-items: center; gap: 8px; }
+.transpose-label { font-size: var(--fs-xs); color: var(--text-muted); }
 
 .icon-btn {
     flex: none;

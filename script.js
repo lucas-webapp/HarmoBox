@@ -8,6 +8,8 @@ const ICONS = {
     pencil: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
     duplicate: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>',
     trash: '<path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>',
+    up: '<path d="M12 19V5"/><path d="m5 12 7-7 7 7"/>',
+    down: '<path d="M12 5v14"/><path d="m5 12 7 7 7-7"/>',
     play: '<path d="M8 5v14l11-7z" fill="currentColor" stroke="none"/>',
     stop: '<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none"/>'
 };
@@ -232,6 +234,15 @@ function beatsFromData(data) {
 // Octave de base d'un accord (défaut 3 = C3, compatibilité avec les sauvegardes sans octave)
 function octaveFromData(data) {
     return (data.octave != null) ? parseInt(data.octave) : 3;
+}
+
+// Décale la fondamentale ET la basse (si définie) d'un accord de `semitones` demi-tons, en conservant
+// tout le reste tel quel (qualité, renversement, drop, octave, durée, style de lecture...). +1200 (100
+// tours d'octave) avant le modulo : garantit un résultat toujours positif quel que soit le signe de
+// `semitones`, sans changer la classe de hauteur obtenue.
+function transposeChordData(data, semitones) {
+    const shift = (pc) => NOTES[(NOTES.indexOf(pc) + semitones + 1200) % 12];
+    return { ...data, root: shift(data.root), bass: data.bass ? shift(data.bass) : data.bass };
 }
 
 // ---------- Sections de la progression (couplet, refrain, etc.) ----------
@@ -1067,6 +1078,8 @@ class HarmoBoxApp {
         document.getElementById('cancel-edit').onclick = () => this.cancelEdit();
 
         document.getElementById('add-section').onclick = () => this.addSection();
+        document.getElementById('transpose-song-down').onclick = () => this.transposeSong(-1);
+        document.getElementById('transpose-song-up').onclick = () => this.transposeSong(1);
 
         document.getElementById('song-select').onchange = (e) => this.onSongSelectChange(e.target.value);
         document.getElementById('song-new').onclick = () => this.newSong();
@@ -1699,6 +1712,8 @@ class HarmoBoxApp {
             <div class="prog-section${isActive ? ' active' : ''}">
                 <div class="prog-section-head">
                     <input type="text" class="prog-title" data-section="${si}" placeholder="Titre de la partie (ex. Couplet 1)" value="${titleVal}">
+                    <button type="button" class="icon-btn prog-section-transpose" data-section="${si}" data-semitones="-1" title="Transposer cette partie d'un demi-ton vers le bas" aria-label="Transposer cette partie vers le bas">${svgIcon('down')}</button>
+                    <button type="button" class="icon-btn prog-section-transpose" data-section="${si}" data-semitones="1" title="Transposer cette partie d'un demi-ton vers le haut" aria-label="Transposer cette partie vers le haut">${svgIcon('up')}</button>
                     ${canDelete ? `<button type="button" class="prog-section-del" data-section="${si}" title="Supprimer cette partie" aria-label="Supprimer cette partie">${svgIcon('trash')}</button>` : ''}
                 </div>
                 <div class="chord-grid" data-section="${si}" style="${gridStyle}">${gridInner}</div>
@@ -1712,6 +1727,9 @@ class HarmoBoxApp {
         });
         host.querySelectorAll('.prog-section-del').forEach(btn => {
             btn.onclick = (e) => { e.stopPropagation(); this.deleteSection(+btn.dataset.section); };
+        });
+        host.querySelectorAll('.prog-section-transpose').forEach(btn => {
+            btn.onclick = (e) => { e.stopPropagation(); this.transposeSection(+btn.dataset.section, +btn.dataset.semitones); };
         });
 
         this.updateSaveButtons();
@@ -1787,6 +1805,39 @@ class HarmoBoxApp {
         this.selectedIndex = null;
 
         this.loadProgression();
+    }
+
+    // Transpose tous les accords d'UNE partie de `semitones` demi-tons (boutons ▲▼ dans l'en-tête de
+    // la partie). La tonalité globale n'est volontairement pas touchée : transposer une seule partie
+    // s'éloigne de la tonalité affichée pour les autres, ce qui est le but recherché (modulation,
+    // adaptation ponctuelle à une voix...), pas une erreur à corriger.
+    transposeSection(s, semitones) {
+        const sections = loadProgressionSections();
+        const sec = sections[s];
+        if (!sec || sec.chords.length === 0) return;
+        this.pushUndo(sections);
+        sec.chords = sec.chords.map(c => transposeChordData(c, semitones));
+        saveProgressionSections(sections);
+        this.loadProgression();
+    }
+
+    // Transpose TOUT le morceau (toutes les parties) de `semitones` demi-tons, et décale la tonalité
+    // globale d'autant pour qu'elle reste cohérente avec les accords transposés (mêmes chiffrages
+    // romains qu'avant la transposition).
+    transposeSong(semitones) {
+        const sections = loadProgressionSections();
+        if (sections.every(sec => sec.chords.length === 0)) return;
+        this.pushUndo(sections);
+        sections.forEach(sec => { sec.chords = sec.chords.map(c => transposeChordData(c, semitones)); });
+        saveProgressionSections(sections);
+
+        const rootSel = document.getElementById('global-root');
+        rootSel.value = NOTES[(NOTES.indexOf(rootSel.value) + semitones + 1200) % 12];
+        syncCurrentSong({ root: rootSel.value });
+        this.updateKeyLabels();
+
+        this.loadProgression();
+        this.refreshPreview();
     }
 
     // ---------- Morceaux : enregistrer/charger plusieurs chansons séparées ----------
@@ -3565,30 +3616,48 @@ class HarmoBoxApp {
     // Chaque appel qui modifie la grille (ajout, suppression, modification, déplacement,
     // copier-coller, parties) capture l'état AVANT mutation via pushUndo(), avant d'appeler
     // saveProgressionSections(). Toute nouvelle action après un undo efface la pile de redo.
+    // Chaque entrée retient aussi la tonalité globale du moment (pas seulement les accords) : la
+    // plupart des actions annulables ne la touchent pas (restauration = no-op sur ce point-là), mais
+    // la transposition de tout le morceau (transposeSong) la modifie EN MÊME TEMPS que les accords —
+    // sans ça, un Ctrl+Z après une transposition remettrait les accords dans l'ancienne tonalité tout
+    // en laissant affichée la nouvelle, un état incohérent que l'utilisateur n'a jamais demandé.
     pushUndo(sections) {
-        this.undoStack.push(JSON.parse(JSON.stringify(sections))); // copie profonde
+        const root = document.getElementById('global-root').value;
+        this.undoStack.push(JSON.stringify({ sections, root }));
         if (this.undoStack.length > this.undoLimit) this.undoStack.shift();
         this.redoStack = [];
         this.updateUndoRedoButtons();
     }
 
+    // Restaure la tonalité globale mémorisée dans une entrée d'historique si elle diffère de
+    // l'actuelle (no-op sinon) — voir le commentaire de pushUndo.
+    restoreHistoryRoot(root) {
+        const rootSel = document.getElementById('global-root');
+        if (!root || root === rootSel.value) return;
+        rootSel.value = root;
+        syncCurrentSong({ root });
+        this.updateKeyLabels();
+    }
+
     undo() {
         if (this.undoStack.length === 0) { this.flashHint('Rien à annuler'); return; }
-        const current = loadProgressionSections();
-        this.redoStack.push(JSON.parse(JSON.stringify(current)));
-        const prev = this.undoStack.pop();
-        saveProgressionSections(prev);
-        this.afterHistoryRestore(prev);
+        const current = { sections: loadProgressionSections(), root: document.getElementById('global-root').value };
+        this.redoStack.push(JSON.stringify(current));
+        const prev = JSON.parse(this.undoStack.pop());
+        saveProgressionSections(prev.sections);
+        this.restoreHistoryRoot(prev.root);
+        this.afterHistoryRestore(prev.sections);
         this.flashHint('Annulé');
     }
 
     redo() {
         if (this.redoStack.length === 0) { this.flashHint('Rien à rétablir'); return; }
-        const current = loadProgressionSections();
-        this.undoStack.push(JSON.parse(JSON.stringify(current)));
-        const next = this.redoStack.pop();
-        saveProgressionSections(next);
-        this.afterHistoryRestore(next);
+        const current = { sections: loadProgressionSections(), root: document.getElementById('global-root').value };
+        this.undoStack.push(JSON.stringify(current));
+        const next = JSON.parse(this.redoStack.pop());
+        saveProgressionSections(next.sections);
+        this.restoreHistoryRoot(next.root);
+        this.afterHistoryRestore(next.sections);
         this.flashHint('Rétabli');
     }
 
