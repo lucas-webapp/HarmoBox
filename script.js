@@ -3980,6 +3980,8 @@ class HarmoBoxApp {
 
         const voice = +cell.dataset.voice, step = +cell.dataset.step;
         const wasOn = cell.classList.contains('on');
+        const chord = this.readChord();
+        const { pattern, tie } = this.getLiveSeqPattern(chord);
 
         // Si la croche touchée appartient à une note existante ET qu'elle en est le DÉBUT, la FIN,
         // ou l'unique croche, un glissé pourra étirer/raccourcir la note depuis ce bord. Mais un
@@ -3987,8 +3989,6 @@ class HarmoBoxApp {
         // d'une note : cliquer ne modifie jamais rien, seul un vrai glissé le fait.
         let resize = null;
         if (wasOn) {
-            const chord = this.readChord();
-            const { pattern, tie } = this.getLiveSeqPattern(chord);
             let start = step, end = step;
             while (start > 0 && pattern[start - 1].includes(voice) && tie[start].includes(voice)) start--;
             while (end + 1 < pattern.length && pattern[end + 1].includes(voice) && tie[end + 1].includes(voice)) end++;
@@ -4003,12 +4003,16 @@ class HarmoBoxApp {
 
         // Ctrl/Cmd enfoncé : le tap (sans glisser) ajoutera/retirera cette note de la sélection au
         // lieu de la remplacer — voir onSeqPointerUp. N'affecte pas le glissé de peinture/effacement.
+        // origOnSteps (peinture uniquement) : instantané, AVANT ce geste, des croches actives de cette
+        // voix — sert à détecter qu'on peint juste à côté d'une note déjà là (voir onSeqPointerMove),
+        // pour la prolonger au lieu de créer une seconde note non liée juste accolée à la première.
         this.seqDrag = {
             mode: 'paint', voice, wasOn, startStep: step, lastStep: step, moved: false,
             rowCells: null, touched: {}, additive: e.ctrlKey || e.metaKey,
             resize, resizeChanged: false, crossedThreshold: false,
             curStart: resize ? resize.noteStart : null, curEnd: resize ? resize.noteEnd : null,
-            noteEl: null, startX: e.clientX, startY: e.clientY
+            noteEl: null, startX: e.clientX, startY: e.clientY,
+            origOnSteps: resize ? null : pattern.map(cell => cell.includes(voice)),
         };
 
         this._onSeqMove = (ev) => this.onSeqPointerMove(ev);
@@ -4087,10 +4091,24 @@ class HarmoBoxApp {
         const paintOn = !d.wasOn;
         const newFrom = Math.min(step, d.startStep), newTo = Math.max(step, d.startStep);
 
+        // Fusionne avec une note déjà là, juste avant ou juste après la zone peinte (état d'AVANT ce
+        // geste, voir origOnSteps), au lieu de toujours attaquer une nouvelle note à l'endroit où le
+        // doigt a touché en premier — sans quoi glisser depuis la case vide juste à côté d'une note
+        // pour l'« étirer » créait une seconde note non liée juste accolée à la première : visuellement
+        // scindée en deux, et seule cette nouvelle partie se sélectionnait ensuite.
+        const mergeLeft = paintOn && newFrom > 0 && d.origOnSteps[newFrom - 1];
+        const mergeRight = paintOn && newTo + 1 < d.origOnSteps.length && d.origOnSteps[newTo + 1];
+
+        // La note existante à droite, si fusion, continue maintenant ce qu'on vient de peindre : sa
+        // toute première croche (hors de [newFrom, newTo]) passe donc aussi sous la responsabilité de
+        // ce geste (suivie/restaurable comme le reste — voir d.touched — si le glissé revient en
+        // arrière avant d'être relâché).
+        const effTo = mergeRight ? newTo + 1 : newTo;
+
         // Aller-retour du geste : restaure hors de la nouvelle plage les croches déjà modifiées
         if (d.rangeFrom != null) {
             for (let s = d.rangeFrom; s <= d.rangeTo; s++) {
-                if (s < newFrom || s > newTo) {
+                if (s < newFrom || s > effTo) {
                     const orig = d.touched[s];
                     this.applySeqCell(d.voice, s, orig.on, orig.tied);
                 }
@@ -4098,11 +4116,15 @@ class HarmoBoxApp {
         }
         for (let s = newFrom; s <= newTo; s++) {
             this.rememberSeqOriginalState(d, s);
-            const tied = paintOn && (s !== d.startStep);
-            this.applySeqCell(d.voice, s, paintOn, tied);
+            const isAttack = paintOn && !mergeLeft && s === newFrom;
+            this.applySeqCell(d.voice, s, paintOn, paintOn && !isAttack);
+        }
+        if (mergeRight) {
+            this.rememberSeqOriginalState(d, newTo + 1);
+            this.applySeqCell(d.voice, newTo + 1, true, true);
         }
         d.rangeFrom = newFrom;
-        d.rangeTo = newTo;
+        d.rangeTo = effTo;
         d.lastStep = step;
     }
 
