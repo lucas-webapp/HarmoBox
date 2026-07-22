@@ -1253,12 +1253,16 @@ button:active { transform: translateY(1px); }
 }
 
 /* Un accord qui dure plusieurs mesures n'affiche plus qu'une page à la fois (voir seqPageBars/
-   renderSequencer et .seq-page-nav) : cette page est dimensionnée pour tenir sans scroll. overflow-x
-   reste posé en filet de sécurité pour les rares signatures où une seule mesure resterait malgré
-   tout plus large que l'écran (ex. 7/8), jamais comme mécanisme normal de navigation — un scroll
-   continu se confondait au doigt avec le geste d'étirement d'une note. */
+   renderSequencer et .seq-page-nav), et les colonnes de pas sont en 1fr PUR (pas de largeur
+   plancher) : la page occupe TOUJOURS exactement la largeur disponible, jamais plus — aucun
+   débordement possible, donc rien à scroller, même au doigt sur un petit téléphone. touch-action
+   coupe court à toute tentative du navigateur de faire défiler ce conteneur nativement (comme
+   .seq-cell) : un scroll, même résiduel, se confondait au doigt avec le geste d'étirement d'une
+   note. overflow-x reste posé en tout dernier recours (ex. zoom navigateur très élevé), jamais
+   comme mécanisme normal de navigation. */
 .seq-scroll {
     overflow-x: auto;
+    touch-action: pan-y;
     padding-bottom: 2px;
 }
 
@@ -1266,7 +1270,7 @@ button:active { transform: translateY(1px); }
     display: grid;
     gap: 4px 0; /* espacement vertical normal ; l'horizontal est géré case par case (voir .seq-cell-b) */
     align-items: center;
-    min-width: 100%;
+    width: 100%;
 }
 
 .seq-label {
@@ -1275,6 +1279,16 @@ button:active { transform: translateY(1px); }
     text-align: right;
     padding-right: 4px;
     white-space: nowrap;
+}
+
+/* Numéro de temps sous la grille (recommence à 1 à chaque mesure) : repère discret, aligné sur le
+   début du temps plutôt que posé au milieu — même esprit que .row-measure dans la grille d'accords. */
+.seq-beat-label {
+    font-size: var(--fs-2xs);
+    color: var(--text-muted);
+    opacity: 0.7;
+    padding-top: 3px;
+    font-variant-numeric: tabular-nums;
 }
 
 .seq-cell {

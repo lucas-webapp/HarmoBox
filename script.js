@@ -4347,7 +4347,12 @@ class HarmoBoxApp {
 
         // La colonne des noms de voix (max-content) se resserre à la largeur réelle du texte affiché
         // (ex. "C3", "F#3") au lieu d'une largeur fixe généreuse qui laissait un vide à gauche.
-        let html = `<div class="seq-scroll"><div class="seq-grid" style="grid-template-columns: max-content repeat(${pageSteps}, minmax(20px, 1fr));">`;
+        // Colonnes de pas en 1fr PUR, sans largeur plancher (contrairement à avant la pagination) :
+        // une page doit TOUJOURS tenir sans le moindre débordement horizontal, quelle que soit la
+        // largeur d'écran — un plancher, même modeste, suffisait à forcer un débordement (et donc un
+        // vrai scroll tactile) sur les téléphones étroits pour une simple mesure en 4/4, ce qui
+        // recréait exactement le conflit scroll/étirement que la pagination visait à éliminer.
+        let html = `<div class="seq-scroll"><div class="seq-grid" style="grid-template-columns: max-content repeat(${pageSteps}, 1fr);">`;
 
         // Cases de la grille : zones de clic/glisser (toujours présentes, sous les notes visuelles).
         // Placement explicite (grid-row/grid-column) sur TOUT le monde : les notes ci-dessous se
@@ -4425,6 +4430,17 @@ class HarmoBoxApp {
             }
         }
         html += notesHtml;
+
+        // Numéros de temps en petit sous la grille (1, 2, 3... à chaque début de temps, recommence à
+        // 1 à chaque mesure) : pour repérer d'un coup d'œil où tombe chaque temps, comme les numéros
+        // de mesure sous la grille d'accords principale.
+        const beatRow = voices + 1;
+        let beatLabelsHtml = '';
+        for (let s = pageStart; s < pageEnd; s += SEQ_STEPS_PER_BEAT) {
+            const beatNum = (Math.floor(s / SEQ_STEPS_PER_BEAT) % beatsPerBar) + 1;
+            beatLabelsHtml += `<div class="seq-beat-label" style="grid-row:${beatRow}; grid-column:${s - pageStart + 2};">${beatNum}</div>`;
+        }
+        html += beatLabelsHtml;
 
         html += `</div></div>`;
 
