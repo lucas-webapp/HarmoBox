@@ -400,6 +400,13 @@ main {
     padding: 13px 10px;
     font-size: var(--fs-base);
 }
+/* Bouton « boucler la partie » : reste compact au milieu des boutons de lecture qui, eux, s'étirent */
+.transport #toggle-loop-section {
+    flex: none;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+}
 
 #current-chord-display {
     text-align: center;

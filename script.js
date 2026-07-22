@@ -877,6 +877,7 @@ class HarmoBoxApp {
         this.metronome.volume.value = percentToDb(this.metronomeVolumePercent);
 
         this.activeSection = 0;    // partie (couplet/refrain/...) ciblée par les contrôles courants
+        this.loopActiveSection = false; // boucle la partie active au lieu de jouer toute la grille (bouton Progression)
         this.selectedIndex = null; // accord sélectionné dans la grille (au sein de la partie active)
         this.editingIndex = null;  // accord en cours de modification (au sein de la partie active)
         this.drag = null;          // état de glisser-déposer
@@ -954,6 +955,15 @@ class HarmoBoxApp {
             this.metronomeDuringPlayback = !this.metronomeDuringPlayback;
             e.currentTarget.classList.toggle('active', this.metronomeDuringPlayback);
             localStorage.setItem(METRONOME_KEY, this.metronomeDuringPlayback ? '1' : '0');
+        };
+
+        // Boucle la partie active (bouton Progression) au lieu de jouer toute la grille — pratique
+        // pour retravailler un couplet/refrain en boucle sans tout rejouer depuis le début à chaque
+        // fois. Se désactive-t-elle en cours de lecture : la boucle en cours va jusqu'à son terme
+        // naturel plutôt que de couper brutalement (voir playProgression).
+        document.getElementById('toggle-loop-section').onclick = (e) => {
+            this.loopActiveSection = !this.loopActiveSection;
+            e.currentTarget.classList.toggle('active', this.loopActiveSection);
         };
 
         // Révèle/masque les accords moins courants (diminués, augmentés, enrichis...) dans le
@@ -1342,19 +1352,27 @@ class HarmoBoxApp {
     }
 
     // Joue la chanson en entier : toutes les parties (couplet, refrain, ...) mises bout à bout, dans
-    // leur ordre d'affichage.
+    // leur ordre d'affichage. Si this.loopActiveSection est activé (bouton dédié), ne joue QUE la
+    // partie active, et la boucle indéfiniment jusqu'à Stop (voir la fin de la fonction).
     async playProgression() {
         await Tone.start();
         this.stopAll();
 
         const sections = loadProgressionSections();
+        const loop = this.loopActiveSection;
         const flat = []; // { section, index, data } à plat, dans l'ordre de lecture
-        sections.forEach((sec, si) => sec.chords.forEach((data, ci) => flat.push({ section: si, index: ci, data })));
+        if (loop) {
+            const sec = sections[this.activeSection];
+            if (sec) sec.chords.forEach((data, ci) => flat.push({ section: this.activeSection, index: ci, data }));
+        } else {
+            sections.forEach((sec, si) => sec.chords.forEach((data, ci) => flat.push({ section: si, index: ci, data })));
+        }
         if (flat.length === 0) return;
 
-        // Démarre depuis l'accord en surbrillance si présent, sinon depuis le tout début
+        // Démarre depuis l'accord en surbrillance si présent, sinon depuis le tout début — non
+        // pertinent en mode boucle : chaque tour rejoue la partie depuis son tout premier accord.
         let startPos = 0;
-        if (this.selectedIndex != null) {
+        if (!loop && this.selectedIndex != null) {
             const pos = flat.findIndex(c => c.section === this.activeSection && c.index === this.selectedIndex);
             if (pos >= 0) startPos = pos;
         }
@@ -1419,7 +1437,18 @@ class HarmoBoxApp {
         });
 
         Tone.Transport.schedule((t) => {
-            Tone.Draw.schedule(() => { this.clearViz(); this.highlightPlaying(null, null); this.isPlaying = false; }, t);
+            Tone.Draw.schedule(() => {
+                // Boucle encore active et lecture non interrompue entre-temps (bouton Stop) -> on
+                // relance directement un tour complet (avec son propre décompte) plutôt que de
+                // s'arrêter ; sinon, comportement habituel de fin de lecture.
+                if (loop && this.loopActiveSection && this.isPlaying) {
+                    this.playProgression();
+                } else {
+                    this.clearViz();
+                    this.highlightPlaying(null, null);
+                    this.isPlaying = false;
+                }
+            }, t);
         }, timeOffset);
 
         Tone.Transport.start();
