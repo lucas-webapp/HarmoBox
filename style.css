@@ -553,6 +553,10 @@ main {
 .icon-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 .icon-btn:disabled:active { transform: none; box-shadow: 0 1px 2px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.03); }
 
+/* Bouton Séquenceur : cible plus large que les autres icon-btn de l'en-tête (28px), pour un usage
+   fréquent — au doigt comme à la souris. */
+#toggle-sequencer { width: 46px; }
+
 .select-group {
     display: flex;
     gap: 10px;
@@ -1248,7 +1252,11 @@ button:active { transform: translateY(1px); }
     border-top: 1px solid var(--border);
 }
 
-/* Défile horizontalement plutôt que d'écraser les cases quand l'accord dure plusieurs mesures */
+/* Un accord qui dure plusieurs mesures n'affiche plus qu'une page à la fois (voir seqPageBars/
+   renderSequencer et .seq-page-nav) : cette page est dimensionnée pour tenir sans scroll. overflow-x
+   reste posé en filet de sécurité pour les rares signatures où une seule mesure resterait malgré
+   tout plus large que l'écran (ex. 7/8), jamais comme mécanisme normal de navigation — un scroll
+   continu se confondait au doigt avec le geste d'étirement d'une note. */
 .seq-scroll {
     overflow-x: auto;
     padding-bottom: 2px;
@@ -1358,6 +1366,28 @@ button:active { transform: translateY(1px); }
 .seq-note.selected {
     border-color: rgba(255, 255, 255, 0.85);
     box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.7), 0 0 6px rgba(0, 230, 118, 0.35);
+}
+
+/* Note liée à une croche hors-page (mesure précédente/suivante, voir seqPageBars) : bord plat côté
+   coupure plutôt qu'arrondi, pour montrer qu'elle continue au-delà de ce qui est affiché. */
+.seq-note.clip-start { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.seq-note.clip-end { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+
+/* Navigation par mesure(s) du séquenceur : un saut net d'une page à l'autre plutôt qu'un scroll
+   continu, qui se confondait au doigt avec le geste d'étirement d'une note (voir renderSequencer). */
+.seq-page-nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 8px;
+}
+.seq-page-label {
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    min-width: 9em;
+    text-align: center;
 }
 
 .seq-presets {

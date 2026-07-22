@@ -10,6 +10,8 @@ const ICONS = {
     trash: '<path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>',
     up: '<path d="M12 19V5"/><path d="m5 12 7-7 7 7"/>',
     down: '<path d="M12 5v14"/><path d="m5 12 7 7 7-7"/>',
+    'chevron-left': '<path d="m15 18-6-6 6-6"/>',
+    'chevron-right': '<path d="m9 18 6-6-6-6"/>',
     play: '<path d="M8 5v14l11-7z" fill="currentColor" stroke="none"/>',
     stop: '<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none"/>'
 };
@@ -283,6 +285,14 @@ function beatsPerRowFor(beatsPerBar) {
     return beatsPerBar * bars;
 }
 
+// Nombre de mesures affichées d'un coup dans le séquenceur (pour un accord qui en dure plusieurs) :
+// une pleine mesure en 4/4, mais 2 en 2/4 (deux fois moins de temps chacune) ou 1 seule dès que la
+// mesure est plus longue que 4 temps (5/4, 6/8...) — même largeur visuelle cible qu'une mesure en 4/4,
+// pour ne jamais afficher ni trop peu ni trop de croches d'un coup quelle que soit la signature.
+function seqPageBars(beatsPerBar) {
+    return Math.max(1, Math.round(4 / beatsPerBar));
+}
+
 // Réglages d'accord : Entrée depuis l'un d'eux ajoute/modifie directement (moins de clics)
 const CHORD_PARAM_IDS = ['root', 'quality', 'duration', 'inversion', 'drop', 'octave', 'bass', 'playStyle', 'instrument'];
 
@@ -477,14 +487,19 @@ function serializeSeqPattern(pattern, tie) {
     return pattern.map((voices, s) => voices.map(v => (tie[s] || []).includes(v) ? `${v}t` : `${v}`).join(',')).join(';');
 }
 
-// Ajuste un motif à la durée/voix courantes : tronque ou complète par du silence, retire les
-// voix devenues hors plage (ex. accord passé de tétrade à triade). Préserve le reste tel quel.
+// Ajuste un motif à la durée/voix courantes : tronque s'il est devenu trop long, ou le RÉPÈTE en
+// boucle s'il est devenu trop court (ex. un accord tenu qu'on étire de 1 à 4 mesures continue de
+// sonner sur toute sa durée, au lieu de laisser les mesures ajoutées totalement silencieuses — c'est
+// ce second cas qui produisait un séquenceur apparemment « mort » au-delà de la longueur d'origine).
+// Retire aussi les voix devenues hors plage (ex. accord passé de tétrade à triade).
 function resizeSeqPattern(pattern, tie, steps, voices) {
+    const srcLen = pattern.length;
     const outP = [], outT = [];
     for (let i = 0; i < steps; i++) {
-        const v = (pattern[i] || []).filter(x => x >= 0 && x < voices);
+        const srcIdx = srcLen > 0 ? (i % srcLen) : i;
+        const v = (pattern[srcIdx] || []).filter(x => x >= 0 && x < voices);
         outP.push(v);
-        outT.push((tie[i] || []).filter(x => v.includes(x)));
+        outT.push((tie[srcIdx] || []).filter(x => v.includes(x)));
     }
     return { pattern: outP, tie: outT };
 }
@@ -1204,6 +1219,7 @@ class HarmoBoxApp {
         this.seqTouched = false;   // l'utilisateur a-t-il personnalisé le motif pour l'accord en cours ?
         this.seqSelections = []; // notes du séquenceur sélectionnées : [{ voice, start, end }, ...]
         this.seqDrag = null;       // état de glisser en cours sur le séquenceur
+        this.seqPage = 0;          // mesure(s) affichée(s) pour un accord qui en dure plusieurs (voir seqPageBars)
 
         // Garder le métronome pendant la lecture de la grille (pas seulement au décompte) : une
         // préférence d'usage, mémorisée d'une session à l'autre comme le choix d'instrument.
@@ -2065,6 +2081,7 @@ class HarmoBoxApp {
         const chord = new Chord(d.root, d.quality, beatsFromData(d), d.inversion, d.drop, octaveFromData(d), d.bass);
         this.seqTouched = true; // le motif résolu ci-dessous fait autorité, on ne le régénère plus tant qu'on ne touche pas un réglage
         this.seqSelections = [];
+        this.seqPage = 0; // nouvel accord chargé pour édition : on repart de sa première mesure
         this.clearSeqHistory(); // nouvel accord chargé pour édition : l'historique précédent ne s'applique plus
         const { pattern, tie } = this.resolveSeqPatternForData(chord, d);
         this.setLiveSeqPattern(pattern, tie);
@@ -4313,9 +4330,24 @@ class HarmoBoxApp {
         const steps = chord.beats * SEQ_STEPS_PER_BEAT;
         const { pattern, tie } = this.getLiveSeqPattern(chord);
 
+        // Un accord qui dure plusieurs mesures ne montre qu'une « page » à la fois (une mesure en
+        // 4/4, deux en 2/4, une seule dès que la mesure est plus longue que 4 temps — voir
+        // seqPageBars) plutôt que tout défiler d'un coup : sur mobile, un glissé pour étirer une
+        // note se confondait avec le geste de scroll natif du navigateur. Naviguer d'une page à
+        // l'autre se fait par un vrai saut (boutons ‹ ›), jamais par un scroll continu qui pourrait
+        // à nouveau entrer en conflit avec l'étirement.
+        const beatsPerBar = this.beatsPerBar();
+        const stepsPerBar = beatsPerBar * SEQ_STEPS_PER_BEAT;
+        const stepsPerPage = seqPageBars(beatsPerBar) * stepsPerBar;
+        const totalPages = Math.max(1, Math.ceil(steps / stepsPerPage));
+        this.seqPage = Math.min(Math.max(0, this.seqPage), totalPages - 1);
+        const pageStart = this.seqPage * stepsPerPage;
+        const pageEnd = Math.min(steps, pageStart + stepsPerPage);
+        const pageSteps = pageEnd - pageStart;
+
         // La colonne des noms de voix (max-content) se resserre à la largeur réelle du texte affiché
         // (ex. "C3", "F#3") au lieu d'une largeur fixe généreuse qui laissait un vide à gauche.
-        let html = `<div class="seq-scroll"><div class="seq-grid" style="grid-template-columns: max-content repeat(${steps}, minmax(11px, 1fr));">`;
+        let html = `<div class="seq-scroll"><div class="seq-grid" style="grid-template-columns: max-content repeat(${pageSteps}, minmax(20px, 1fr));">`;
 
         // Cases de la grille : zones de clic/glisser (toujours présentes, sous les notes visuelles).
         // Placement explicite (grid-row/grid-column) sur TOUT le monde : les notes ci-dessous se
@@ -4325,22 +4357,28 @@ class HarmoBoxApp {
         // Chaque paire de cases (double-croches s pair/impair) partage visuellement le même
         // rectangle qu'avant (voir .seq-cell-a/.seq-cell-b dans le CSS) : la résolution de clic/
         // glisser est fine, mais rien ne change à l'œil tant qu'une note n'utilise pas cette finesse.
+        // `data-step` garde l'indice ABSOLU (pas relatif à la page) : le glissé/étirement (voir
+        // onSeqPointerDown et findSeqStepAt, qui ne connaissent que les cases réellement dans le
+        // DOM, donc celles de la page affichée) continue de raisonner sur le motif complet.
         let rowIndex = 0;
         for (let r = voices - 1; r >= 0; r--) {
             rowIndex++;
             html += `<div class="seq-label" style="grid-row:${rowIndex}; grid-column:1;">${noteNames[r]}</div>`;
-            for (let s = 0; s < steps; s++) {
+            for (let s = pageStart; s < pageEnd; s++) {
+                const col = s - pageStart;
                 const beatStart = (s % SEQ_STEPS_PER_BEAT === 0) ? ' beat-start' : '';
                 const pairCls = (s % 2 === 0) ? ' seq-cell-a' : ' seq-cell-b';
                 // Croche au début ou à la fin d'une note : indice visuel discret (curseur) qu'un
                 // glissé depuis là peut étirer/raccourcir la note (pas de poignée visible séparée).
+                // Se base sur le motif COMPLET (pas la page) : une note qui continue sur la page
+                // suivante n'affiche jamais ce curseur à la coupure, seul son vrai bord le fait.
                 const isEdge = pattern[s].includes(r) && (
                     !(s > 0 && pattern[s - 1].includes(r) && tie[s].includes(r)) ||
                     !(s + 1 < steps && pattern[s + 1].includes(r) && tie[s + 1].includes(r))
                 );
                 const edgeCls = isEdge ? ' seq-cell-edge' : '';
                 const onCls = pattern[s].includes(r) ? ' on' : '';
-                html += `<div class="seq-cell${pairCls}${beatStart}${edgeCls}${onCls}" data-step="${s}" data-voice="${r}" style="grid-row:${rowIndex}; grid-column:${s + 2};"></div>`;
+                html += `<div class="seq-cell${pairCls}${beatStart}${edgeCls}${onCls}" data-step="${s}" data-voice="${r}" style="grid-row:${rowIndex}; grid-column:${col + 2};"></div>`;
             }
         }
 
@@ -4354,29 +4392,56 @@ class HarmoBoxApp {
         rowIndex = 0;
         for (let r = voices - 1; r >= 0; r--) {
             rowIndex++;
-            let s = 0;
-            while (s < steps) {
+            let s = pageStart;
+            while (s < pageEnd) {
                 if (!pattern[s].includes(r)) { s++; continue; }
                 const runStart = s;
+                // Une note déjà en cours dès le premier pas visible de la page (liée à la croche
+                // précédente, hors champ) est affichée « coupée » à ce bord plutôt que ronde, pour ne
+                // pas laisser croire qu'elle commence ici (voir .seq-note.clip-start).
+                const clipStart = (runStart === pageStart) && runStart > 0
+                    && pattern[runStart - 1].includes(r) && tie[runStart].includes(r);
                 s++;
                 while (s < steps && pattern[s].includes(r) && tie[s].includes(r)) s++;
-                const runEnd = s - 1;
-                const runLen = s - runStart;
+                const trueRunEnd = s - 1;
+                // Idem à l'autre bout : la note continue au-delà de la page affichée -> coupée aussi
+                // (voir .seq-note.clip-end), et le rendu s'arrête au dernier pas visible.
+                const runEnd = Math.min(trueRunEnd, pageEnd - 1);
+                const clipEnd = trueRunEnd > runEnd;
+                s = runEnd + 1;
+                const runLen = runEnd - runStart + 1;
                 const shape = runLen > 1 ? 'run' : 'single';
                 const role = roleMap[midis[r]] || 'ext';
                 const isSelected = this.seqSelections.some(sel => sel.voice === r && sel.start === runStart);
                 const sel = isSelected ? ' selected' : '';
+                const clipCls = (clipStart ? ' clip-start' : '') + (clipEnd ? ' clip-end' : '');
                 // Si la note finit sur la 2e moitié d'un rectangle (voir .seq-cell-b), la case de
                 // fond s'arrête 4px avant le bord de la piste (son margin-right) pour laisser le
                 // vrai espacement avant la paire suivante — sans ce même retrait, la pilule (qui
-                // occupe toute la piste) dépasserait légèrement de ce rectangle de fond.
-                const trimEnd = (runEnd % 2 === 1) ? ' margin-right:4px;' : '';
-                notesHtml += `<div class="seq-note ${shape} role-${role}${sel}" data-voice="${r}" data-start="${runStart}" data-end="${runEnd}" style="grid-row:${rowIndex}; grid-column:${runStart + 2} / span ${runLen};${trimEnd}"></div>`;
+                // occupe toute la piste) dépasserait légèrement de ce rectangle de fond. Pas de
+                // retrait si la note est coupée par la page : elle doit occuper toute la largeur.
+                const trimEnd = (!clipEnd && runEnd % 2 === 1) ? ' margin-right:4px;' : '';
+                notesHtml += `<div class="seq-note ${shape} role-${role}${sel}${clipCls}" data-voice="${r}" data-start="${runStart}" data-end="${trueRunEnd}" style="grid-row:${rowIndex}; grid-column:${runStart - pageStart + 2} / span ${runLen};${trimEnd}"></div>`;
             }
         }
         html += notesHtml;
 
         html += `</div></div>`;
+
+        // Navigation par page (uniquement si l'accord déborde d'une page) : un vrai saut, jamais du
+        // scroll continu — voir le commentaire plus haut sur le conflit avec l'étirement tactile.
+        if (totalPages > 1) {
+            const barsPerPage = seqPageBars(beatsPerBar);
+            const totalBars = Math.ceil(steps / stepsPerBar);
+            const firstBar = this.seqPage * barsPerPage + 1;
+            const lastBar = Math.min(totalBars, firstBar + barsPerPage - 1);
+            const label = (firstBar === lastBar) ? `Mesure ${firstBar} / ${totalBars}` : `Mesures ${firstBar}-${lastBar} / ${totalBars}`;
+            html += `<div class="seq-page-nav">
+                <button type="button" id="seq-page-prev" class="icon-btn" ${this.seqPage === 0 ? 'disabled' : ''} title="Mesure précédente" aria-label="Mesure précédente">${svgIcon('chevron-left')}</button>
+                <span class="seq-page-label">${label}</span>
+                <button type="button" id="seq-page-next" class="icon-btn" ${this.seqPage === totalPages - 1 ? 'disabled' : ''} title="Mesure suivante" aria-label="Mesure suivante">${svgIcon('chevron-right')}</button>
+            </div>`;
+        }
         // Les préréglages rythmiques (Tenu, Noire...) se choisissent désormais uniquement via le
         // menu déroulant Lecture ; cette rangée ne garde que l'écoute directe et le nettoyage.
         const hasSelection = this.seqSelections.length > 0;
@@ -4411,6 +4476,13 @@ class HarmoBoxApp {
         if (playBtn) playBtn.onclick = () => this.playCurrent();
         const stopBtn = document.getElementById('seq-stop');
         if (stopBtn) stopBtn.onclick = () => this.stopAll();
+
+        // Navigation par page : saut direct d'une mesure (ou groupe de mesures) à l'autre, jamais de
+        // scroll continu (voir le commentaire plus haut sur le conflit avec l'étirement tactile).
+        const prevBtn = document.getElementById('seq-page-prev');
+        if (prevBtn) prevBtn.onclick = () => { this.seqPage--; this.renderSequencer(); };
+        const nextBtn = document.getElementById('seq-page-next');
+        if (nextBtn) nextBtn.onclick = () => { this.seqPage++; this.renderSequencer(); };
     }
 
     // Clic sur une case : sélectionne (surbrillance) + écoute l'accord, sauf si l'utilisateur a
