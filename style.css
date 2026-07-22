@@ -573,10 +573,11 @@ main {
 }
 .accord-grid select { min-width: 0; }
 
-/* Renversement/drop/octave : masqués par défaut (voir toggle-advanced) — des réglages de voicing
-   fins que la plupart des accords n'utilisent jamais, inutile de les imposer à chaque saisie.
-   Réapparaissent automatiquement en modifiant un accord qui s'en sert déjà (revealAdvancedIfNeeded),
-   comme les accords/basse moins courants ci-dessus. */
+/* Renversement/drop/octave : masqués par défaut, révélés par le même bouton « … » que les qualités
+   moins courantes (voir toggle-complex-quality/activateMoreOptions) — des réglages de voicing fins
+   que la plupart des accords n'utilisent jamais, inutile de les imposer à chaque saisie.
+   Réapparaissent aussi automatiquement en modifiant un accord qui s'en sert déjà
+   (revealAdvancedIfNeeded), comme la basse moins courante ci-dessus. */
 .advanced-grid { margin-top: 10px; }
 
 /* Sélecteur de basse différente (accord « sur » une note), masqué par défaut — voir toggle-bass.

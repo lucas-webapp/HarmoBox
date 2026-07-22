@@ -1285,11 +1285,13 @@ class HarmoBoxApp {
             e.currentTarget.classList.toggle('active', this.loopActiveSection);
         };
 
-        // Révèle/masque les accords moins courants (diminués, augmentés, enrichis...) dans le
-        // menu Qualité, sans les faire disparaître de la valeur déjà choisie si elle en fait partie.
-        // Retire/réinsère réellement les <option> du DOM (voir toggleSelectOptions) plutôt que de
-        // jouer sur `hidden`, qui n'est pas fiable sur tous les navigateurs (Safari iOS notamment
-        // continue d'afficher des <option hidden> dans le sélecteur natif).
+        // Révèle/masque, d'un même bouton (« … »), tout ce qui est secondaire pour la plupart des
+        // accords : qualités moins courantes (diminués, augmentés, enrichis...) ET renversement/drop/
+        // octave — regroupés plutôt que répartis sur plusieurs boutons, qui faisaient un peu double
+        // emploi. Les qualités passent par un vrai retrait/réinsertion des <option> du DOM (voir
+        // toggleSelectOptions) plutôt que par `hidden`, qui n'est pas fiable sur tous les navigateurs
+        // (Safari iOS notamment continue d'afficher des <option hidden> dans le sélecteur natif) ; les
+        // champs avancés, eux, sont juste un bloc qu'on montre/cache (voir #advanced-fields).
         const qualitySelect = document.getElementById('quality');
         this._complexQualityOptions = Array.from(qualitySelect.querySelectorAll('option.opt-complex'));
         this.toggleSelectOptions(qualitySelect, this._complexQualityOptions, false); // masqué par défaut
@@ -1297,26 +1299,17 @@ class HarmoBoxApp {
             const btn = e.currentTarget;
             const show = !btn.classList.contains('active');
             this.toggleSelectOptions(qualitySelect, this._complexQualityOptions, show);
+            document.getElementById('advanced-fields').hidden = !show;
             btn.classList.toggle('active', show);
         };
 
         // Révèle/masque le sélecteur de basse différente (accord « sur » une note, ex. Cmaj7/D) : ne
         // remet jamais la valeur choisie à « Aucune » en masquant — juste le contrôle qui se range,
-        // comme les accords/modes moins courants ci-dessus.
+        // comme les options secondaires ci-dessus.
         document.getElementById('toggle-bass').onclick = (e) => {
             const btn = e.currentTarget;
             const show = !btn.classList.contains('active');
             document.getElementById('bass-row').hidden = !show;
-            btn.classList.toggle('active', show);
-        };
-
-        // Révèle/masque renversement/drop/octave : des réglages de voicing fins, rarement utilisés,
-        // masqués par défaut pour alléger la carte Accord (voir revealAdvancedIfNeeded pour la
-        // réapparition automatique en modifiant un accord qui s'en sert déjà).
-        document.getElementById('toggle-advanced').onclick = (e) => {
-            const btn = e.currentTarget;
-            const show = !btn.classList.contains('active');
-            document.getElementById('advanced-fields').hidden = !show;
             btn.classList.toggle('active', show);
         };
 
@@ -1494,15 +1487,24 @@ class HarmoBoxApp {
         });
     }
 
-    // Révèle le menu Qualité/Mode complet AVANT d'y affecter une valeur venue de données sauvegardées
-    // (accord ou morceau enregistré avec une qualité/un mode moins courant) — sinon, l'option
-    // correspondante n'existe pas encore dans le DOM (voir toggleSelectOptions) et l'affectation
-    // échouerait silencieusement. Même principe que pour la basse différente (voir editChord).
-    revealComplexQualityIfNeeded(quality) {
+    // Active le mode « plus d'options » du bouton « … » : qualités moins courantes ET renversement/
+    // drop/octave ensemble (voir le onclick de toggle-complex-quality) — un seul bouton, un seul état
+    // « actif », pour les deux à la fois. Ne fait rien s'il est déjà actif.
+    activateMoreOptions() {
         const btn = document.getElementById('toggle-complex-quality');
-        if (btn.classList.contains('active') || !this._complexQualityOptions.some(o => o.value === quality)) return;
+        if (btn.classList.contains('active')) return;
         this.toggleSelectOptions(document.getElementById('quality'), this._complexQualityOptions, true);
+        document.getElementById('advanced-fields').hidden = false;
         btn.classList.add('active');
+    }
+
+    // Révèle le menu Qualité complet AVANT d'y affecter une valeur venue de données sauvegardées
+    // (accord enregistré avec une qualité moins courante) — sinon, l'option correspondante n'existe
+    // pas encore dans le DOM (voir toggleSelectOptions) et l'affectation échouerait silencieusement.
+    // Même principe que pour la basse différente (voir editChord).
+    revealComplexQualityIfNeeded(quality) {
+        if (!this._complexQualityOptions.some(o => o.value === quality)) return;
+        this.activateMoreOptions();
     }
 
     revealComplexModeIfNeeded(mode) {
@@ -1517,16 +1519,13 @@ class HarmoBoxApp {
 
     // Révèle renversement/drop/octave en modifiant un accord qui s'en sert déjà (l'un des trois
     // s'écarte de son réglage par défaut), pour ne pas les laisser masqués sous les yeux de qui édite
-    // sans le savoir — même principe que la basse (voir editChord) et les qualités/modes complexes.
+    // sans le savoir — même principe que la basse (voir editChord) et les qualités complexes.
     revealAdvancedIfNeeded(d) {
-        const btn = document.getElementById('toggle-advanced');
-        if (btn.classList.contains('active')) return;
         const needsAdvanced = (parseInt(d.inversion) || 0) !== 0
             || (d.drop && d.drop !== 'none')
             || octaveFromData(d) !== 3;
         if (!needsAdvanced) return;
-        document.getElementById('advanced-fields').hidden = false;
-        btn.classList.add('active');
+        this.activateMoreOptions();
     }
 
     // Lit les réglages de l'interface et renvoie un Chord
