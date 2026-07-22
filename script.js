@@ -643,13 +643,18 @@ class Chord {
 
         // Basse différente (accord « sur » une note, ex. Cmaj7/D) : ajoutée SOUS la voix la plus
         // grave actuelle, sans toucher au reste du voicing (renversement/drop restent ceux définis
-        // par ailleurs pour les voix du dessus) — degree=null -> orthographe générique de la tonalité
-        // à l'affichage (ce n'est pas une note « de l'accord », voir spellChordTone).
+        // par ailleurs pour les voix du dessus). Sa fonction (rôle/degré, donc sa couleur et son
+        // orthographe) suit celle de la note de l'accord qui partage sa classe de hauteur — ex. un Mi
+        // en basse sur un Cmaj7 est sa tierce, pas sa fondamentale. Si aucune voix de l'accord ne
+        // partage cette classe de hauteur (note réellement étrangère à l'accord, ex. Cmaj7/D), elle
+        // est traitée comme une extension (« Autres » dans la légende), orthographiée génériquement.
         if (this.bass) {
             const lowestMidi = Math.min(...voiced.map(v => v.midi));
             let bassMidi = NOTES.indexOf(this.bass) + 12 * (this.octave + 1);
             while (bassMidi >= lowestMidi) bassMidi -= 12;
-            voiced.push({ midi: bassMidi, role: 'root', degree: null });
+            const bassSemi = ((NOTES.indexOf(this.bass) - NOTES.indexOf(this.root)) % 12 + 12) % 12;
+            const match = notes.find(n => ((n.semi % 12) + 12) % 12 === bassSemi);
+            voiced.push({ midi: bassMidi, role: match ? match.role : 'ext', degree: match ? match.degree : null });
         }
 
         return voiced.sort((a, b) => a.midi - b.midi);
