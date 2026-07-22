@@ -1846,7 +1846,17 @@ class HarmoBoxApp {
                 const runDur = stepTime(runStart + runLen) - t0; // durée réelle de la plage, groove compris
                 const dur = held ? (runDur - 0.1) : Math.max(0.05, runDur - Math.min(0.06, stepDur * 0.2));
                 Tone.Transport.schedule((t) => {
-                    instrument.triggerAttackRelease(notes[voice], dur, t + humanize, vel);
+                    // Un instrument à échantillons (Piano) peut ne pas encore avoir fini de charger ses
+                    // sons (réseau lent, ou lecture démarrée dans la même seconde que le choix de
+                    // l'instrument) : sans ce filet, l'exception levée ici interrompait le traitement
+                    // des évènements suivants du transport — la grille entière (surbrillance, barre de
+                    // lecture, chiffrage affiché) restait figée après le tout premier accord concerné,
+                    // même si celui-ci ne jouait qu'un silence à la place de la note manquante.
+                    try {
+                        instrument.triggerAttackRelease(notes[voice], dur, t + humanize, vel);
+                    } catch (e) {
+                        console.warn('Note ignorée (instrument pas encore prêt) :', e.message);
+                    }
                 }, t0);
             }
         }
