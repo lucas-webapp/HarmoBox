@@ -1717,6 +1717,7 @@ class HarmoBoxApp {
                     <input type="text" class="prog-title" data-section="${si}" placeholder="Titre de la partie (ex. Couplet 1)" value="${titleVal}">
                     <button type="button" class="icon-btn prog-section-transpose" data-section="${si}" data-semitones="-1" title="Transposer cette partie d'un demi-ton vers le bas" aria-label="Transposer cette partie vers le bas">${svgIcon('down')}</button>
                     <button type="button" class="icon-btn prog-section-transpose" data-section="${si}" data-semitones="1" title="Transposer cette partie d'un demi-ton vers le haut" aria-label="Transposer cette partie vers le haut">${svgIcon('up')}</button>
+                    <button type="button" class="icon-btn prog-section-duplicate" data-section="${si}" title="Dupliquer cette partie" aria-label="Dupliquer cette partie">${svgIcon('duplicate')}</button>
                     ${canDelete ? `<button type="button" class="prog-section-del" data-section="${si}" title="Supprimer cette partie" aria-label="Supprimer cette partie">${svgIcon('trash')}</button>` : ''}
                 </div>
                 <div class="chord-grid" data-section="${si}" style="${gridStyle}">${gridInner}</div>
@@ -1733,6 +1734,9 @@ class HarmoBoxApp {
         });
         host.querySelectorAll('.prog-section-transpose').forEach(btn => {
             btn.onclick = (e) => { e.stopPropagation(); this.transposeSection(+btn.dataset.section, +btn.dataset.semitones); };
+        });
+        host.querySelectorAll('.prog-section-duplicate').forEach(btn => {
+            btn.onclick = (e) => { e.stopPropagation(); this.duplicateSection(+btn.dataset.section); };
         });
 
         this.updateSaveButtons();
@@ -1807,6 +1811,22 @@ class HarmoBoxApp {
         else if (this.activeSection > s) this.activeSection--;
         this.selectedIndex = null;
 
+        this.loadProgression();
+    }
+
+    // Duplique une partie entière (titre + tous ses accords), juste après elle — même esprit que
+    // dupliquer un seul accord (bouton ⧉ de chaque case), mais pour toute une partie d'un coup (ex.
+    // partir d'un couplet existant pour en écrire un second plutôt que de tout reconstruire à la main).
+    duplicateSection(s) {
+        const sections = loadProgressionSections();
+        const sec = sections[s];
+        if (!sec) return;
+        this.pushUndo(sections);
+        const copy = { title: sec.title ? `${sec.title} (copie)` : '', chords: sec.chords.map(c => ({ ...c })) };
+        sections.splice(s + 1, 0, copy);
+        saveProgressionSections(sections);
+        this.activeSection = s + 1;
+        this.selectedIndex = null;
         this.loadProgression();
     }
 
