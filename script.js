@@ -238,6 +238,16 @@ function beatsFromData(data) {
     return 4;
 }
 
+// Nombre de mesures d'une partie (somme des durées de ses accords / temps par mesure) — pour un
+// coup d'œil rapide sur sa longueur (grille et export PDF), utile pour une synthèse du morceau.
+// Un entier la plupart du temps ; jusqu'à 1 décimale si une partie s'arrête au milieu d'une mesure
+// (rare, mais possible selon les durées choisies et la signature rythmique).
+function sectionMeasureCount(sec, beatsPerBar) {
+    const totalBeats = sec.chords.reduce((sum, c) => sum + beatsFromData(c), 0);
+    const count = totalBeats / beatsPerBar;
+    return Number.isInteger(count) ? String(count) : count.toFixed(1);
+}
+
 // Octave de base d'un accord (défaut 3 = C3, compatibilité avec les sauvegardes sans octave)
 function octaveFromData(data) {
     return (data.octave != null) ? parseInt(data.octave) : 3;
@@ -1727,10 +1737,12 @@ class HarmoBoxApp {
             const titleVal = (sec.title || '').replace(/"/g, '&quot;');
             const canDelete = sections.length > 1;
             const sectionColor = SECTION_COLORS[si % SECTION_COLORS.length];
+            const measureCountEl = history.length > 0 ? `<span class="prog-section-measures">${sectionMeasureCount(sec, beatsPerBar)} mes.</span>` : '';
             return `
             <div class="prog-section${isActive ? ' active' : ''}" style="--section-color: ${sectionColor}">
                 <div class="prog-section-head">
                     <input type="text" class="prog-title" data-section="${si}" placeholder="Titre de la partie (ex. Couplet 1)" value="${titleVal}">
+                    ${measureCountEl}
                     <button type="button" class="icon-btn prog-section-transpose" data-section="${si}" data-semitones="-1" title="Transposer cette partie d'un demi-ton vers le bas" aria-label="Transposer cette partie vers le bas">${svgIcon('down')}</button>
                     <button type="button" class="icon-btn prog-section-transpose" data-section="${si}" data-semitones="1" title="Transposer cette partie d'un demi-ton vers le haut" aria-label="Transposer cette partie vers le haut">${svgIcon('up')}</button>
                     <button type="button" class="icon-btn prog-section-duplicate" data-section="${si}" title="Dupliquer cette partie" aria-label="Dupliquer cette partie">${svgIcon('duplicate')}</button>
@@ -2703,7 +2715,8 @@ class HarmoBoxApp {
         const allChords = []; // à plat, dans l'ordre de lecture, pour la page 2
         sections.forEach((sec, si) => {
             const title = (sec.title && sec.title.trim()) ? sec.title : `Partie ${si + 1}`;
-            page1 += `<h2 class="print-section-title">${escapeHtml(title)}</h2>`;
+            const measuresSuffix = sec.chords.length > 0 ? ` <span class="print-section-measures">— ${sectionMeasureCount(sec, beatsPerBar)} mesures</span>` : '';
+            page1 += `<h2 class="print-section-title">${escapeHtml(title)}${measuresSuffix}</h2>`;
             if (!sec.chords.length) {
                 page1 += `<div class="print-empty">—</div>`;
                 return;

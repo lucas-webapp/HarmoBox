@@ -875,6 +875,15 @@ button:active { transform: translateY(1px); }
     border-bottom-color: var(--accent);
 }
 
+/* Nombre de mesures de la partie : repère rapide (ex. pour une synthèse du morceau), abrégé pour
+   rester compact à côté du titre et des boutons ▲▼⧉🗑. */
+.prog-section-measures {
+    flex: none;
+    font-size: var(--fs-2xs);
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
 .prog-section-del {
     flex: none;
     width: 26px;
@@ -1409,6 +1418,7 @@ select.song-select-narrow {
     padding-bottom: 4px;
     border-bottom: 1px solid #ccc;
 }
+.print-section-measures { font-size: var(--fs-sm); font-weight: 400; color: #888; }
 .print-empty { color: #888; font-size: var(--fs-sm); margin-bottom: 10px; }
 
 .print-chord-row {
