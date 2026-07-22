@@ -1310,6 +1310,16 @@ class HarmoBoxApp {
             btn.classList.toggle('active', show);
         };
 
+        // Révèle/masque renversement/drop/octave : des réglages de voicing fins, rarement utilisés,
+        // masqués par défaut pour alléger la carte Accord (voir revealAdvancedIfNeeded pour la
+        // réapparition automatique en modifiant un accord qui s'en sert déjà).
+        document.getElementById('toggle-advanced').onclick = (e) => {
+            const btn = e.currentTarget;
+            const show = !btn.classList.contains('active');
+            document.getElementById('advanced-fields').hidden = !show;
+            btn.classList.toggle('active', show);
+        };
+
         // Même principe pour les modes moins courants (dorien, phrygien, lydien, mixolydien, locrien).
         // Majeur/mineur restent nommés ainsi tant que les autres modes sont masqués (plus parlant pour
         // qui ne les connaît pas) ; une fois les 5 autres modes affichés, ils reprennent leur vrai nom
@@ -1502,6 +1512,20 @@ class HarmoBoxApp {
         this.toggleSelectOptions(modeSelect, this._complexModeOptions, true);
         modeSelect.querySelector('option[value="maj"]').textContent = 'Ionien';
         modeSelect.querySelector('option[value="min"]').textContent = 'Éolien';
+        btn.classList.add('active');
+    }
+
+    // Révèle renversement/drop/octave en modifiant un accord qui s'en sert déjà (l'un des trois
+    // s'écarte de son réglage par défaut), pour ne pas les laisser masqués sous les yeux de qui édite
+    // sans le savoir — même principe que la basse (voir editChord) et les qualités/modes complexes.
+    revealAdvancedIfNeeded(d) {
+        const btn = document.getElementById('toggle-advanced');
+        if (btn.classList.contains('active')) return;
+        const needsAdvanced = (parseInt(d.inversion) || 0) !== 0
+            || (d.drop && d.drop !== 'none')
+            || octaveFromData(d) !== 3;
+        if (!needsAdvanced) return;
+        document.getElementById('advanced-fields').hidden = false;
         btn.classList.add('active');
     }
 
@@ -2025,6 +2049,7 @@ class HarmoBoxApp {
         this.revealComplexQualityIfNeeded(d.quality);
         document.getElementById('quality').value = d.quality;
         document.getElementById('duration').value = String(beatsFromData(d));
+        this.revealAdvancedIfNeeded(d);
         document.getElementById('octave').value = String(octaveFromData(d));
         document.getElementById('inversion').value = d.inversion;
         document.getElementById('drop').value = d.drop;

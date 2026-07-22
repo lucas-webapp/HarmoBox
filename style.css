@@ -560,11 +560,9 @@ main {
 }
 .select-group + .select-group { margin-top: 10px; }
 
-/* Carte Accord : grille à 3 colonnes partagée par les deux rangées (au lieu de deux .select-group
-   indépendants) pour que chaque colonne s'aligne pile d'une rangée à l'autre — note/qualité/durée,
-   renversement/drop/octave. minmax(0,1fr) laisse les colonnes se réduire ensemble plutôt que
-   déborder si le contenu est plus large que prévu. Les boutons « ⋯ »/basse vivent désormais dans
-   .card-head-actions (en-tête de la carte), plus dans la grille elle-même. */
+/* Carte Accord : grille à 3 colonnes (note/qualité/durée). minmax(0,1fr) laisse les colonnes se
+   réduire ensemble plutôt que déborder si le contenu est plus large que prévu. Les boutons « ⋯ »/
+   basse/avancé vivent dans .card-head-actions (en-tête de la carte), plus dans la grille elle-même. */
 /* Mobile : 2 colonnes (3 lignes) — 3 colonnes serrées tronquaient le texte des select (ex. "1 mesure"
    -> "1 mesur", "Sans drop" -> "Sans dro"). Repasse à 3 colonnes sur grand écran (voir plus bas),
    où le clavier/souris tolère mieux des select plus étroits. */
@@ -574,6 +572,12 @@ main {
     gap: 10px;
 }
 .accord-grid select { min-width: 0; }
+
+/* Renversement/drop/octave : masqués par défaut (voir toggle-advanced) — des réglages de voicing
+   fins que la plupart des accords n'utilisent jamais, inutile de les imposer à chaque saisie.
+   Réapparaissent automatiquement en modifiant un accord qui s'en sert déjà (revealAdvancedIfNeeded),
+   comme les accords/basse moins courants ci-dessus. */
+.advanced-grid { margin-top: 10px; }
 
 /* Sélecteur de basse différente (accord « sur » une note), masqué par défaut — voir toggle-bass.
    Même principe que .groove-group : une étiquette + un select, sur une rangée dédiée sous la grille. */

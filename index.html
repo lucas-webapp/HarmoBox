@@ -88,6 +88,9 @@
                             <button type="button" id="toggle-bass" class="icon-btn" title="Choisir une note de basse différente (accord « sur » une note)" aria-label="Choisir une note de basse différente">
                                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v10"/><path d="M8 9l4 4 4-4"/><circle cx="12" cy="19" r="2.2" fill="currentColor" stroke="none"/></svg>
                             </button>
+                            <button type="button" id="toggle-advanced" class="icon-btn" title="Réglages avancés (renversement, drop, octave)" aria-label="Réglages avancés">
+                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/><circle cx="8" cy="6" r="1.8" fill="currentColor" stroke="none"/><circle cx="16" cy="12" r="1.8" fill="currentColor" stroke="none"/><circle cx="10" cy="18" r="1.8" fill="currentColor" stroke="none"/></svg>
+                            </button>
                         </div>
                     </div>
                     <div class="accord-grid">
@@ -122,6 +125,8 @@
                             <option value="8">2 mesures</option>
                             <option value="16">4 mesures</option>
                         </select>
+                    </div>
+                    <div class="accord-grid advanced-grid" id="advanced-fields" hidden>
                         <select id="inversion">
                             <option value="0">Fond.</option><option value="1">1er renv.</option><option value="2">2e renv.</option>
                             <option value="3">3e renv.</option>
