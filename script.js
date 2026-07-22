@@ -830,6 +830,22 @@ class MidiTrackBuilder {
 const GM_PROGRAM = { piano: 0, epiano: 4, pad: 88, strings: 50, organ: 80, bell: 89 };
 const MIDI_PPQ = 480; // pulsations par noire (doit être divisible par SEQ_STEPS_PER_BEAT)
 
+// Fréquence d'échantillonnage du rendu audio hors-temps réel (export MP3, voir plus bas) : 44,1 kHz,
+// standard universel, largement suffisant pour des accords/nappes (pas de contenu ultrasonique à capter).
+const MP3_SAMPLE_RATE = 44100;
+
+// Convertit un canal audio Float32 (-1..1, format natif Web Audio) en PCM 16 bits signé, tel
+// qu'attendu par l'encodeur MP3 (lame.min.js). Écrêté à [-1, 1] par sécurité (un instrument mal réglé
+// pourrait dépasser légèrement l'amplitude nominale).
+function floatTo16BitPCM(f32) {
+    const out = new Int16Array(f32.length);
+    for (let i = 0; i < f32.length; i++) {
+        const s = Math.max(-1, Math.min(1, f32[i]));
+        out[i] = Math.round(s < 0 ? s * 32768 : s * 32767);
+    }
+    return out;
+}
+
 class HarmoBoxApp {
     constructor() {
         // Volume général : agit APRÈS les deux réglages spécifiques ci-dessous (accords, métronome),
@@ -1077,6 +1093,7 @@ class HarmoBoxApp {
 
         document.getElementById('export-pdf').onclick = () => this.exportPdf();
         document.getElementById('export-midi').onclick = () => this.exportMidi();
+        document.getElementById('export-audio').onclick = () => this.exportAudio();
     }
 
     // Lit les réglages de l'interface et renvoie un Chord
@@ -2586,6 +2603,129 @@ class HarmoBoxApp {
         a.click();
         a.remove();
         URL.revokeObjectURL(url);
+    }
+
+    // ---------- Export audio (.mp3, encodage LAME embarqué — voir lame.min.js) ----------
+    // Reprend la même résolution de motif que l'export MIDI (resolveSeqPatternForData) et le même
+    // regroupement des croches liées en une seule note tenue : ce qu'on entend dans l'appli est ce qui
+    // se retrouve dans le fichier, sans le décompte ni le métronome (comme pour l'export MIDI).
+    //
+    // Rendu hors-temps réel (Tone.Offline) avec des instruments dédiés à ce rendu, connectés
+    // directement à la sortie du contexte hors-ligne — jamais ceux du cache de lecture live
+    // (this.instrumentCache), qui restent liés au contexte audio temps réel et ne peuvent pas se
+    // connecter à un contexte hors-ligne. On ne passe PAS non plus par Tone.Transport ici (à la
+    // différence de la lecture live et de l'export MIDI) : à l'intérieur d'un rendu Tone.Offline,
+    // Tone.Transport.schedule ne déclenche fiablement aucun son avec cette version de Tone.js — chaque
+    // note est donc déclenchée directement à son instant absolu (secondes depuis le début du rendu).
+    async renderProgressionBuffer() {
+        const bpm = parseInt(document.getElementById('bpm').value) || 120;
+        const grooveRatio = this.grooveRatio();
+        const lead = 0.1, tail = 3; // marge de tête + queue (laisse sonner la release des nappes/synthés)
+
+        const sections = loadProgressionSections();
+        let totalBeats = 0;
+        sections.forEach(sec => sec.chords.forEach(data => { totalBeats += beatsFromData(data); }));
+        if (totalBeats === 0) return null; // grille vide -> rien à rendre
+
+        const secPerBeat = 60 / bpm;
+        const duration = lead + totalBeats * secPerBeat + tail;
+        const generalVolumePercent = this.generalVolumePercent;
+        const chordVolumePercent = this.chordVolumePercent;
+
+        return Tone.Offline(() => {
+            Tone.Destination.volume.value = percentToDb(generalVolumePercent);
+            const volumeNode = new Tone.Volume(percentToDb(chordVolumePercent)).toDestination();
+            const instruments = new Map(); // clé instrument -> instance dédiée à ce rendu
+            const instrumentFor = (key) => {
+                if (!INSTRUMENT_BANKS[key]) key = 'piano';
+                if (!instruments.has(key)) instruments.set(key, INSTRUMENT_BANKS[key].build().connect(volumeNode));
+                return instruments.get(key);
+            };
+
+            let timeOffset = lead;
+            sections.forEach(sec => {
+                sec.chords.forEach(data => {
+                    const beats = beatsFromData(data);
+                    const chord = new Chord(data.root, data.quality, beats, data.inversion, data.drop, octaveFromData(data), data.bass);
+                    const notes = chord.getNotes();
+                    const { pattern, tie } = this.resolveSeqPatternForData(chord, data);
+                    const steps = pattern.length;
+                    const stepDur = secPerBeat / SEQ_STEPS_PER_BEAT;
+                    const stepTime = (s) => timeOffset + grooveStepOffset(s, stepDur, grooveRatio);
+                    const instrument = instrumentFor(data.instrument || 'piano');
+
+                    // Une voix à la fois : regroupe ses croches liées et contiguës en une seule note
+                    // (même logique que schedulePlayback/buildMidiFile), plutôt qu'une attaque par croche.
+                    for (let voice = 0; voice < notes.length; voice++) {
+                        let s = 0;
+                        while (s < steps) {
+                            if (!pattern[s].includes(voice)) { s++; continue; }
+                            const runStart = s;
+                            s++;
+                            while (s < steps && pattern[s].includes(voice) && tie[s].includes(voice)) s++;
+                            const runLen = s - runStart;
+                            const held = (runLen === steps);
+                            const onBeat = (runStart % SEQ_STEPS_PER_BEAT === 0);
+                            const vel = held ? 1 : (onBeat ? 0.78 + Math.random() * 0.1 : 0.6 + Math.random() * 0.12);
+                            const humanize = held ? 0 : Math.random() * 0.02;
+                            const t0 = stepTime(runStart);
+                            const runDur = stepTime(runStart + runLen) - t0; // durée réelle, groove compris
+                            const dur = held ? (runDur - 0.1) : Math.max(0.05, runDur - Math.min(0.06, stepDur * 0.2));
+                            instrument.triggerAttackRelease(notes[voice], dur, t0 + humanize, vel);
+                        }
+                    }
+                    timeOffset += beats * secPerBeat;
+                });
+            });
+        }, duration, 2, MP3_SAMPLE_RATE);
+    }
+
+    // Encode un AudioBuffer (rendu par Tone.Offline) en MP3 via lamejs (lame.min.js, vendu en local,
+    // chargé dans index.html). Découpage par blocs de 1152 échantillons, taille de trame standard MP3.
+    audioBufferToMp3(audioBuffer) {
+        const left = floatTo16BitPCM(audioBuffer.getChannelData(0));
+        const right = audioBuffer.numberOfChannels > 1 ? floatTo16BitPCM(audioBuffer.getChannelData(1)) : left;
+        const encoder = new lamejs.Mp3Encoder(2, audioBuffer.sampleRate, 192);
+        const blockSize = 1152;
+        const chunks = [];
+        for (let i = 0; i < left.length; i += blockSize) {
+            const mp3buf = encoder.encodeBuffer(left.subarray(i, i + blockSize), right.subarray(i, i + blockSize));
+            if (mp3buf.length > 0) chunks.push(mp3buf);
+        }
+        const end = encoder.flush();
+        if (end.length > 0) chunks.push(end);
+        return new Blob(chunks, { type: 'audio/mpeg' });
+    }
+
+    // Bouton à côté de l'export MIDI : rend le morceau entier hors-temps réel puis l'encode en MP3,
+    // prêt à écouter ou partager sans DAW ni lecteur MIDI.
+    async exportAudio() {
+        if (!getCurrentSongId()) {
+            this.saveCurrentAsSong();
+            if (!getCurrentSongId()) return; // enregistrement annulé -> pas d'export
+        }
+        const btn = document.getElementById('export-audio');
+        btn.disabled = true;
+        this.flashHint('Génération du MP3…', 60000);
+        try {
+            const toneBuffer = await this.renderProgressionBuffer();
+            if (!toneBuffer) { this.flashHint('Grille vide — rien à exporter'); return; }
+            const blob = this.audioBufferToMp3(toneBuffer.get());
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${this.getCurrentSongName().replace(/[\\/:*?"<>|]+/g, '_')}.mp3`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+            this.flashHint('MP3 téléchargé');
+        } catch (err) {
+            console.error(err);
+            this.flashHint('Échec de l’export MP3');
+        } finally {
+            btn.disabled = false;
+        }
     }
 
     // ---------- Grille interactive : tap (écoute), glisser (déplacer) ----------
