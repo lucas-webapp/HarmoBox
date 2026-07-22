@@ -591,6 +591,20 @@ select:disabled {
     gap: 8px;
 }
 
+/* Bouton tap tempo : compact, à côté du libellé BPM ; un bref flash confirme chaque tap pris en compte */
+.tap-tempo-btn {
+    flex: none;
+    padding: 5px 10px;
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    transition: background-color 0.1s, border-color 0.1s;
+}
+.tap-tempo-btn.tapped {
+    background: rgba(0, 230, 118, 0.22);
+    border-color: rgba(0, 230, 118, 0.5);
+}
+
 .groove-group {
     display: flex;
     align-items: center;

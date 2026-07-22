@@ -895,6 +895,7 @@ class HarmoBoxApp {
         this.clipboard = null;     // presse-papier (copier/coller d'accords)
         this.pianoWindow = null;   // fenêtre clavier courante
         this._lastTap = null;      // pour le double-tap (suppression mobile)
+        this.tapTimes = [];        // horodatages du tap tempo (voir handleTapTempo)
         this.isPlaying = false;    // une lecture (accord/progression) est-elle en cours ?
         this.seqOpen = false;      // panneau séquenceur ouvert ou non (indépendant du style de lecture)
         this.seqTouched = false;   // l'utilisateur a-t-il personnalisé le motif pour l'accord en cours ?
@@ -1026,6 +1027,8 @@ class HarmoBoxApp {
             bpmSlider.value = v;
             syncCurrentSong({ bpm: v });
         });
+
+        document.getElementById('tap-tempo').onclick = () => this.handleTapTempo();
 
         document.getElementById('global-root').onchange = () => {
             syncCurrentSong({ root: document.getElementById('global-root').value });
@@ -2060,6 +2063,35 @@ class HarmoBoxApp {
     // selon le cas), les deux endroits qui font cliquer le métronome n'ont pas à s'en soucier.
     playMetronomeClick(accent, time) {
         METRONOME_SOUNDS[this.metronomeSoundKey].trigger(this.metronome, accent, time);
+    }
+
+    // Tap tempo : cliquer plusieurs fois au rythme voulu règle le BPM sans avoir à connaître ni taper
+    // une valeur précise. Repart de zéro si plus de 2s s'écoulent entre deux taps (on considère alors
+    // une nouvelle estimation, pas la continuation d'un tempo très lent) ; ne garde que les 8 derniers
+    // taps pour rester réactif à un changement de rythme en cours de route plutôt que de figer une
+    // moyenne sur toute la session.
+    handleTapTempo() {
+        const now = performance.now();
+        if (this.tapTimes.length > 0 && now - this.tapTimes[this.tapTimes.length - 1] > 2000) this.tapTimes = [];
+        this.tapTimes.push(now);
+        if (this.tapTimes.length > 8) this.tapTimes.shift();
+
+        if (this.tapTimes.length >= 2) {
+            const intervals = [];
+            for (let i = 1; i < this.tapTimes.length; i++) intervals.push(this.tapTimes[i] - this.tapTimes[i - 1]);
+            const avgMs = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+            const bpm = Math.min(240, Math.max(60, Math.round(60000 / avgMs)));
+            document.getElementById('bpm').value = bpm;
+            document.getElementById('bpm-val').value = bpm;
+            syncCurrentSong({ bpm });
+        }
+
+        // Flash bref pour confirmer que le tap a bien été pris en compte, même avant qu'un BPM
+        // puisse être calculé (dès le tout premier tap)
+        const btn = document.getElementById('tap-tempo');
+        btn.classList.add('tapped');
+        clearTimeout(this._tapFlashTimer);
+        this._tapFlashTimer = setTimeout(() => btn.classList.remove('tapped'), 120);
     }
 
     // Change le son du métronome : l'ancien instrument est proprement libéré (.dispose()) avant de
