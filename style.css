@@ -516,8 +516,6 @@ main {
     gap: 6px;
     flex: none;
 }
-.transpose-actions { align-items: center; gap: 8px; }
-.transpose-label { font-size: var(--fs-xs); color: var(--text-muted); }
 
 .icon-btn {
     flex: none;
@@ -1056,7 +1054,19 @@ button:active { transform: translateY(1px); }
     touch-action: none;
     overflow: hidden;
     user-select: none;
+    -webkit-user-select: none;
+    /* Empêche la loupe/le menu (Copier, Rechercher...) que Safari iOS affiche sur un appui long sur
+       du texte, qui parasitait le double-tap (modifier) et l'appui long (menu contextuel) — voir
+       aussi .cell-sym/.cell-roman/.cell-meta/.cell-cont ci-dessous, le texte lui-même en hérite mal
+       sur certaines versions. */
+    -webkit-touch-callout: none;
     transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.grid-cell .cell-sym, .grid-cell .cell-roman, .grid-cell .cell-meta, .grid-cell .cell-cont {
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
 }
 
 /* Barre de mesure : bord gauche nettement plus marqué qu'un simple bord de case (celles-ci ont
@@ -1114,28 +1124,31 @@ button:active { transform: translateY(1px); }
 
 .cell-cont { font-size: var(--fs-xs); color: var(--text-muted); font-weight: 400; }
 
-/* Poignée d'étirement (durée) : zone de préhension large (tactile) avec un simple repère visuel fin,
-   au bord droit du DERNIER segment d'un accord (voir onResizeStart) */
+/* Poignées d'étirement (durée) : zone de préhension large (tactile) avec un simple repère visuel
+   fin — bord droit du DERNIER segment (change la fin de l'accord) et bord gauche du PREMIER segment
+   (change son début, aux dépens de l'accord précédent) — voir onResizeStart. */
 .cell-resize {
     position: absolute;
     top: 0;
-    right: 0;
     width: 14px;
     height: 100%;
     cursor: col-resize;
     touch-action: none;
     z-index: 3;
 }
+.cell-resize-right { right: 0; }
+.cell-resize-left { left: 0; }
 .cell-resize::after {
     content: '';
     position: absolute;
     top: 18%;
     bottom: 18%;
-    right: 3px;
     width: 2px;
     border-radius: 1px;
     background: rgba(255, 255, 255, 0.18);
 }
+.cell-resize-right::after { right: 3px; }
+.cell-resize-left::after { left: 3px; }
 .cell-resize:hover::after, .cell-resize:active::after { background: var(--accent); }
 
 .cell-roman {
@@ -1407,6 +1420,17 @@ select.song-select-narrow {
 }
 .mode-field select { flex: 4; min-width: 0; }
 .mode-field .icon-btn { flex: 1; min-width: 24px; width: auto; height: auto; padding: 0; }
+
+/* Tonalité + transposition du morceau, groupées comme .mode-field : c'est le morceau (sa tonalité
+   affichée juste à côté) qui est transposé, pas seulement une partie de la grille. */
+.root-field {
+    display: flex;
+    flex: 1 1 0;
+    min-width: 0;
+    gap: 4px;
+}
+.root-field select { flex: 3; min-width: 0; }
+.root-field .icon-btn { flex: 1; min-width: 20px; width: auto; height: auto; padding: 0; }
 
 /* Libellé de bouton en deux versions (ex. "sélection" / "Sélect.") : la version courte ne s'affiche
    que sur écran étroit, là où la version complète ne rentre pas (voir #seq-delete-selection). */

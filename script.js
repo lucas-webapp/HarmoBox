@@ -1415,6 +1415,11 @@ class HarmoBoxApp {
             this.closeContextMenu();
             if (t && t.type === 'chord') this.duplicateChord(t.section, t.index);
         };
+        document.querySelector('[data-ctx-action="sequencer"]').onclick = () => {
+            const t = this.contextMenuTarget;
+            this.closeContextMenu();
+            if (t && t.type === 'chord') this.openSequencerFor(t.section, t.index);
+        };
         document.querySelector('[data-ctx-action="delete"]').onclick = () => {
             const t = this.contextMenuTarget;
             this.closeContextMenu();
@@ -2182,17 +2187,23 @@ class HarmoBoxApp {
                     const romanEl = s.isFirst ? `<span class="cell-roman">${roman}</span>` : '';
                     const metaEl = s.isFirst ? `<span class="cell-meta">${styleLabel}</span>` : '';
                     const contFlag = (s.split && !s.isFirst) ? ' <span class="cell-cont">↩</span>' : '';
-                    // Poignée d'étirement (durée) : uniquement sur le DERNIER segment d'un accord (le
-                    // seul bord qui représente vraiment sa fin), absente pendant un glisser-déposer.
-                    const resizeEl = (s.isLast && !cls.includes('drag-placeholder'))
-                        ? `<div class="cell-resize" data-section="${si}" data-index="${s.index}" title="Glisser pour changer la durée"></div>` : '';
+                    // Poignées d'étirement (durée) : bord droit sur le DERNIER segment (change la fin
+                    // de l'accord), bord gauche sur le PREMIER segment s'il existe un accord précédent
+                    // dans la même partie (change son début, en empruntant/rendant des temps à ce
+                    // précédent — voir onResizeStart) ; absentes pendant un glisser-déposer.
+                    const notDragging = !cls.includes('drag-placeholder');
+                    const resizeRightEl = (s.isLast && notDragging)
+                        ? `<div class="cell-resize cell-resize-right" data-section="${si}" data-index="${s.index}" data-edge="right" title="Glisser pour changer la durée"></div>` : '';
+                    const resizeLeftEl = (s.isFirst && s.index > 0 && notDragging)
+                        ? `<div class="cell-resize cell-resize-left" data-section="${si}" data-index="${s.index}" data-edge="left" title="Glisser pour changer la durée"></div>` : '';
 
                     return `
                     <div class="${cls}" data-section="${si}" data-index="${s.index}" style="${style}" title="Toucher pour écouter · double-clic/double-tap pour modifier · clic droit/appui long pour plus d'options">
                         ${romanEl}
                         <span class="cell-sym">${sym}${contFlag}</span>
                         ${metaEl}
-                        ${resizeEl}
+                        ${resizeLeftEl}
+                        ${resizeRightEl}
                     </div>`;
                 }).join('') + cells.filter(s => s.barStart).map(s => `
                     <div class="row-measure" style="grid-column: ${s.col + 1} / span 1; grid-row: ${s.row * 2 + 2};">${s.barNumber}</div>`
@@ -2237,11 +2248,11 @@ class HarmoBoxApp {
             const section = +cell.dataset.section, index = +cell.dataset.index;
             this.attachContextMenuTrigger(cell, () => ({ type: 'chord', section, index }));
         });
-        // Poignée d'étirement : glisser le bord droit d'un accord change sa durée sans repasser par
-        // le panneau Accord. stopPropagation empêche aussi le glisser-déposer (réordonner) de la
-        // grille de se déclencher pour le même geste (délégué plus haut, sur #progression-sections).
+        // Poignées d'étirement : glisser un bord d'un accord change sa durée sans repasser par le
+        // panneau Accord. stopPropagation empêche aussi le glisser-déposer (réordonner) de la grille
+        // de se déclencher pour le même geste (délégué plus haut, sur #progression-sections).
         host.querySelectorAll('.cell-resize').forEach(handle => {
-            handle.addEventListener('pointerdown', (e) => this.onResizeStart(e, +handle.dataset.section, +handle.dataset.index));
+            handle.addEventListener('pointerdown', (e) => this.onResizeStart(e, +handle.dataset.section, +handle.dataset.index, handle.dataset.edge));
         });
 
         this.updateSaveButtons();
@@ -3078,10 +3089,11 @@ class HarmoBoxApp {
         this.contextMenuTarget = target;
         const menu = document.getElementById('context-menu');
         // Libellé et actions disponibles diffèrent selon le type de cible (morceau/dossier : Renommer
-        // + Supprimer ; accord : Modifier + Dupliquer + Supprimer).
+        // + Supprimer ; accord : Modifier + Dupliquer + Séquenceur + Supprimer).
         const isChord = target && target.type === 'chord';
         menu.querySelector('[data-ctx-action="rename"] .ctx-label').textContent = isChord ? 'Modifier' : 'Renommer';
         menu.querySelector('[data-ctx-action="duplicate"]').hidden = !isChord;
+        menu.querySelector('[data-ctx-action="sequencer"]').hidden = !isChord;
         menu.hidden = false;
         const pad = 8;
         const left = Math.min(x, window.innerWidth - menu.offsetWidth - pad);
@@ -3691,7 +3703,7 @@ class HarmoBoxApp {
 
         if (!d.moved) {
             const now = Date.now();
-            const isSecondTap = this._lastTap && this._lastTap.section === d.section && this._lastTap.index === d.index && (now - this._lastTap.time) < 350;
+            const isSecondTap = this._lastTap && this._lastTap.section === d.section && this._lastTap.index === d.index && (now - this._lastTap.time) < 420;
             if (isSecondTap) {
                 this._lastTap = null;
                 this.editChord(d.section, d.index); // double-clic/double-tap = modifier
@@ -3709,24 +3721,31 @@ class HarmoBoxApp {
 
     // ---------- Étirement d'un accord (durée) directement dans la grille ----------
     // Glisser la poignée au bord droit du DERNIER segment d'un accord change sa durée par pas d'un
-    // temps entier (comme toutes les durées de l'appli), sans repasser par le panneau Accord.
-    onResizeStart(e, section, index) {
+    // temps entier (comme toutes les durées de l'appli), sans repasser par le panneau Accord. Le
+    // bord GAUCHE du PREMIER segment fait de même mais symétriquement : il emprunte/rend des temps à
+    // l'accord PRÉCÉDENT (glisser vers la gauche agrandit l'accord courant et réduit le précédent
+    // d'autant, et inversement) — les deux accords restent toujours à 1 temps minimum.
+    onResizeStart(e, section, index, edge) {
         if (e.button != null && e.button !== 0) return; // clic gauche / toucher uniquement
         e.stopPropagation(); // n'ouvre pas aussi le glisser-déposer (réordonner) de la grille
         e.preventDefault();
         const sections = loadProgressionSections();
-        const data = sections[section] && sections[section].chords[index];
+        const history = sections[section] && sections[section].chords;
+        const data = history && history[index];
         if (!data) return;
+        const prevData = (edge === 'left') ? history[index - 1] : null;
+        if (edge === 'left' && !prevData) return; // pas d'accord précédent à réduire
         const grid = e.target.closest('.chord-grid');
         const beatsPerRow = parseInt(grid.dataset.beatsPerRow) || 16;
         const colWidth = grid.getBoundingClientRect().width / beatsPerRow;
 
         this.resize = {
-            section, index,
+            section, index, edge,
             startX: e.clientX,
             startBeats: beatsFromData(data),
+            startPrevBeats: prevData ? beatsFromData(prevData) : null,
             colWidth,
-            lastBeats: beatsFromData(data),
+            lastDelta: 0,
         };
         this._onResizeMove = (ev) => this.onResizeMove(ev);
         this._onResizeEnd = () => this.onResizeEnd();
@@ -3739,16 +3758,30 @@ class HarmoBoxApp {
         const r = this.resize;
         if (!r) return;
         e.preventDefault();
-        const deltaBeats = Math.round((e.clientX - r.startX) / r.colWidth);
-        const beats = Math.max(1, r.startBeats + deltaBeats);
-        if (beats === r.lastBeats) return;
-        r.lastBeats = beats;
+        const dxBeats = Math.round((e.clientX - r.startX) / r.colWidth);
+
+        let delta; // temps ajoutés à l'accord courant (bord droit : direct : bord gauche : inversé,
+                   // glisser à gauche = dx négatif doit AGRANDIR l'accord courant)
+        if (r.edge === 'left') {
+            delta = -dxBeats;
+            // bornes : l'accord courant et le précédent restent chacun à 1 temps minimum
+            delta = Math.max(1 - r.startBeats, Math.min(r.startPrevBeats - 1, delta));
+        } else {
+            delta = Math.max(1 - r.startBeats, dxBeats);
+        }
+        if (delta === r.lastDelta) return;
+        r.lastDelta = delta;
 
         if (!r.pushedUndo) { this.pushUndo(loadProgressionSections()); r.pushedUndo = true; }
         const sections = loadProgressionSections();
-        const data = sections[r.section] && sections[r.section].chords[r.index];
+        const history = sections[r.section] && sections[r.section].chords;
+        const data = history && history[r.index];
         if (!data) return;
-        data.beats = beats;
+        data.beats = r.startBeats + delta;
+        if (r.edge === 'left') {
+            const prevData = history[r.index - 1];
+            if (prevData) prevData.beats = r.startPrevBeats - delta;
+        }
         saveProgressionSections(sections);
         this.loadProgression();
     }
@@ -4196,6 +4229,17 @@ class HarmoBoxApp {
         if (!this.seqOpen) this.seqSelections = [];
         document.getElementById('toggle-sequencer').classList.toggle('active', this.seqOpen);
         this.renderSequencer();
+    }
+
+    // Menu contextuel d'un accord de la grille (« Séquenceur ») : le charge dans le panneau Accord
+    // (comme Modifier) ET ouvre directement le séquenceur en grand, pour éviter l'aller-retour
+    // modifier-puis-ouvrir-le-panneau quand on veut juste peaufiner son rythme.
+    openSequencerFor(section, index) {
+        this.editChord(section, index);
+        this.seqOpen = true;
+        document.getElementById('toggle-sequencer').classList.add('active');
+        this.renderSequencer();
+        document.getElementById('arp-sequencer').scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
     renderSequencer() {

@@ -35,6 +35,10 @@
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
             <span class="ctx-label">Dupliquer</span>
         </button>
+        <button type="button" data-ctx-action="sequencer" hidden>
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20v-6"/><path d="M10 20V6"/><path d="M16 20v-9"/><path d="M20 20v-4"/></svg>
+            <span class="ctx-label">Séquenceur</span>
+        </button>
         <button type="button" data-ctx-action="delete">
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
             <span class="ctx-label">Supprimer</span>
@@ -214,11 +218,19 @@
                     </div>
                     <select id="song-select" class="compact song-select-full"></select>
                     <div class="song-row">
-                        <select id="global-root" class="compact song-select-narrow" title="Tonalité">
-                            <option value="C">C</option><option value="C#">C#</option><option value="D">D</option><option value="D#">D#</option>
-                            <option value="E">E</option><option value="F">F</option><option value="F#">F#</option><option value="G">G</option>
-                            <option value="G#">G#</option><option value="A">A</option><option value="A#">A#</option><option value="B">B</option>
-                        </select>
+                        <div class="root-field">
+                            <select id="global-root" class="compact song-select-narrow" title="Tonalité">
+                                <option value="C">C</option><option value="C#">C#</option><option value="D">D</option><option value="D#">D#</option>
+                                <option value="E">E</option><option value="F">F</option><option value="F#">F#</option><option value="G">G</option>
+                                <option value="G#">G#</option><option value="A">A</option><option value="A#">A#</option><option value="B">B</option>
+                            </select>
+                            <button type="button" id="transpose-song-down" class="icon-btn" title="Transposer tout le morceau d'un demi-ton vers le bas" aria-label="Transposer tout le morceau vers le bas">
+                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="m5 12 7 7 7-7"/></svg>
+                            </button>
+                            <button type="button" id="transpose-song-up" class="icon-btn" title="Transposer tout le morceau d'un demi-ton vers le haut" aria-label="Transposer tout le morceau vers le haut">
+                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
+                            </button>
+                        </div>
                         <div class="mode-field">
                             <select id="global-mode" class="compact song-select-narrow" title="Mode">
                                 <option value="maj">Majeur</option><option value="min">Mineur</option>
@@ -284,15 +296,6 @@
             <section class="history-section">
                 <div class="card-head">
                     <h2>Grille d'accords</h2>
-                    <div class="card-head-actions transpose-actions">
-                        <span class="transpose-label">Transposer</span>
-                        <button type="button" id="transpose-song-down" class="icon-btn" title="Transposer tout le morceau d'un demi-ton vers le bas" aria-label="Transposer tout le morceau vers le bas">
-                            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="m5 12 7 7 7-7"/></svg>
-                        </button>
-                        <button type="button" id="transpose-song-up" class="icon-btn" title="Transposer tout le morceau d'un demi-ton vers le haut" aria-label="Transposer tout le morceau vers le haut">
-                            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
-                        </button>
-                    </div>
                 </div>
                 <div class="quick-add-row">
                     <input type="text" id="quick-add-input" class="quick-add-input" placeholder="Ajout rapide : C, Am7, F#dim, Bbadd9..." autocomplete="off" autocapitalize="off" spellcheck="false">
