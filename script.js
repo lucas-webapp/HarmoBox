@@ -1278,7 +1278,18 @@ class HarmoBoxApp {
     }
 
     setupEventListeners() {
-        document.getElementById('play').onclick = () => this.playCurrent();
+        // Bouton « Accord » : tant qu'un accord de la grille est SÉLECTIONNÉ (simple clic) sans être
+        // EN COURS DE MODIFICATION (double-clic), on veut entendre CELUI-LÀ — pas l'accord « en train
+        // d'être défini » dans le panneau (readChord(), qui peut dater d'une modification précédente
+        // sans rapport). Dès qu'on modifie réellement (editingIndex non nul), le panneau redevient
+        // prioritaire : on y prévisualise les changements non enregistrés (voir editChord/playCurrent).
+        document.getElementById('play').onclick = () => {
+            if (this.editingIndex == null && this.selectedIndex != null) {
+                this.playSavedChord(this.activeSection, this.selectedIndex);
+            } else {
+                this.playCurrent();
+            }
+        };
         document.getElementById('save').onclick = () => this.saveCurrent();
         document.getElementById('save-insert').onclick = () => this.saveCurrent(this.selectedIndex);
         document.getElementById('quick-add-btn').onclick = () => this.addQuickChord();
@@ -1483,6 +1494,20 @@ class HarmoBoxApp {
         document.addEventListener('pointerdown', (e) => {
             const menu = document.getElementById('context-menu');
             if (!menu.hidden && !menu.contains(e.target)) this.closeContextMenu();
+        });
+
+        // Désélectionne l'accord de la grille dès qu'on clique ailleurs (en dehors de la grille et du
+        // menu contextuel) — évite l'ambiguïté entre l'accord SÉLECTIONNÉ (voir bouton « Accord »
+        // ci-dessus) et l'accord affiché dans le panneau, une fois qu'on est passé à autre chose.
+        // En phase 'click' (pas 'pointerdown') : un bouton comme « Grille » lit encore selectedIndex
+        // (démarrage depuis l'accord en surbrillance) dans son propre clic AVANT que celui-ci ne
+        // remonte jusqu'ici et déselectionne.
+        document.addEventListener('click', (e) => {
+            if (this.selectedIndex == null) return;
+            if (e.target.closest('.chord-grid')) return;
+            if (e.target.closest('#context-menu')) return;
+            this.selectedIndex = null;
+            this.loadProgression();
         });
 
         document.getElementById('export-pdf').onclick = () => this.exportPdf();

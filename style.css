@@ -1053,7 +1053,11 @@ button:active { transform: translateY(1px); }
 
 .grid-cell {
     position: relative;
-    background: var(--card-bg);
+    background-color: var(--card-bg);
+    /* Reflet général très discret (sheen du haut vers le centre) sur TOUTES les cases, quel que soit
+       leur état — background-image (séparé de background-color, que .selected/.editing/.playing
+       changent ci-dessous) pour qu'il reste visible dans tous les cas sans le redéfinir partout. */
+    background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0) 45%);
     border: 1px solid #2a2a2a;
     padding: 4px 6px;
     display: flex;
@@ -1090,23 +1094,24 @@ button:active { transform: translateY(1px); }
 .grid-cell:hover { background: #1c1c1c; border-color: #555; z-index: 1; }
 
 .grid-cell.selected {
-    background: #0f1c14;
-    border-color: var(--accent);
-    box-shadow: inset 0 0 0 1px var(--accent);
+    background-color: #0f1c14;
+    border-color: rgba(0, 230, 118, 0.5);
+    box-shadow: inset 0 0 0 1px rgba(0, 230, 118, 0.32), 0 0 7px rgba(0, 230, 118, 0.14);
     z-index: 2;
 }
 
 .grid-cell.editing {
-    background: #20180a;
-    border-color: #ffb300;
-    box-shadow: inset 0 0 0 1px #ffb300;
+    background-color: #20180a;
+    border-color: rgba(255, 179, 0, 0.5);
+    box-shadow: inset 0 0 0 1px rgba(255, 179, 0, 0.32), 0 0 7px rgba(255, 179, 0, 0.14);
     z-index: 2;
 }
 
-/* Accord en cours de lecture : vert légèrement plus foncé que la sélection, bord accent plus épais */
+/* Accord en cours de lecture : vert légèrement plus foncé que la sélection, halo doux plutôt qu'un
+   anneau plein — reste distinct de .selected (un peu plus present) sans redevenir criard. */
 .grid-cell.playing {
-    background: #0a1a0f;
-    box-shadow: inset 0 0 0 2px var(--accent);
+    background-color: #0a1a0f;
+    box-shadow: inset 0 0 0 1.5px rgba(0, 230, 118, 0.55), 0 0 10px rgba(0, 230, 118, 0.2);
     z-index: 3;
 }
 
@@ -1124,7 +1129,7 @@ button:active { transform: translateY(1px); }
     left: 0;
     bottom: 1px;
     width: 1.5px;
-    height: 38%;
+    height: 28%;
     pointer-events: none;
     border-radius: 1px;
     background: linear-gradient(to top, rgba(255, 255, 255, 0.65) 0%, rgba(255, 255, 255, 0) 100%);
