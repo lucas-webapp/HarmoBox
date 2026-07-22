@@ -73,6 +73,64 @@ const QUALITY_LABEL = {
     add9: 'add9', add11: 'add11', maj9: 'maj9', m9: 'm9', dom9: '9', dom11: '11', dom13: '13'
 };
 
+// ---------- Saisie rapide au clavier (grille) ----------
+// Alias reconnus pour chaque qualité, clé = suffixe normalisé (espaces retirés, en minuscules) une
+// fois la fondamentale extraite. "m"/"min" = mineur (convention universelle) ; le majeur ne
+// s'abrège JAMAIS en un simple "M" à ce stade (voir plus bas, traité séparément AVANT la mise en
+// minuscule) pour éviter la confusion avec "m" (mineur) une fois tout passé en minuscules.
+const QUALITY_ALIASES = {
+    '': 'maj', 'maj': 'maj', 'ma': 'maj', 'major': 'maj',
+    'm': 'min', 'min': 'min', 'mi': 'min', 'minor': 'min', '-': 'min',
+    '7': 'dom7', 'dom7': 'dom7',
+    'maj7': 'maj7', 'ma7': 'maj7',
+    'm7': 'min7', 'min7': 'min7', 'mi7': 'min7', '-7': 'min7',
+    'sus2': 'sus2',
+    'sus4': 'sus4', 'sus': 'sus4',
+    '6': '6',
+    'm6': 'm6', 'min6': 'm6', '-6': 'm6',
+    'dim': 'dim', '°': 'dim', 'o': 'dim',
+    'dim7': 'dim7', '°7': 'dim7', 'o7': 'dim7',
+    'm7b5': 'm7b5', 'm7-5': 'm7b5', 'min7b5': 'm7b5', 'ø': 'm7b5', 'ø7': 'm7b5', 'halfdim': 'm7b5', 'halfdim7': 'm7b5',
+    'aug': 'aug', '+': 'aug',
+    'add9': 'add9',
+    'add11': 'add11',
+    'maj9': 'maj9', 'ma9': 'maj9',
+    'm9': 'm9', 'min9': 'm9',
+    '9': 'dom9', 'dom9': 'dom9',
+    '11': 'dom11', 'dom11': 'dom11',
+    '13': 'dom13', 'dom13': 'dom13',
+};
+
+// Parse un symbole d'accord tapé au clavier (ex. "Cm7", "F#dim", "Bbadd9", "DM7") en { root, quality
+// } exploitable par Chord, ou null si non reconnu. Toujours en position fondamentale : la saisie
+// rapide sert à poser vite une grille, pas à régler un voicing précis (renversement/drop/basse
+// restent modifiables ensuite en double-cliquant la case, comme n'importe quel accord).
+function parseChordSymbol(input) {
+    const s = (input || '').trim();
+    if (!s) return null;
+    const m = s.match(/^([A-Ga-g])(#|b)?(.*)$/);
+    if (!m) return null;
+    const [, letter, accidental, rawRest] = m;
+
+    const BASE_PC = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+    let pc = BASE_PC[letter.toUpperCase()];
+    if (accidental === '#') pc += 1;
+    else if (accidental === 'b') pc -= 1;
+    pc = ((pc % 12) + 12) % 12;
+    const root = NOTES[pc];
+
+    const rest = rawRest.trim();
+    // Convention jazz répandue : M/M7/M9 en MAJUSCULE = majeur — vérifié avant la normalisation en
+    // minuscules (sinon "M7" serait confondu avec "m7", mineur 7e).
+    if (rest === 'M') return { root, quality: 'maj' };
+    if (rest === 'M7') return { root, quality: 'maj7' };
+    if (rest === 'M9') return { root, quality: 'maj9' };
+
+    const suffix = rest.replace(/\s+/g, '').toLowerCase();
+    const quality = QUALITY_ALIASES[suffix];
+    return quality ? { root, quality } : null;
+}
+
 // Tonalités majeures qui s'écrivent conventionnellement avec des bémols (Db, Eb, F, Ab, Bb) :
 // moins d'altérations que leur équivalent en dièses (ex. Db = 5b vs C# = 7#). Toutes les autres
 // tonalités majeures (C, G, D, A, E, B, F#) s'écrivent avec des dièses.
@@ -1177,6 +1235,10 @@ class HarmoBoxApp {
         document.getElementById('play').onclick = () => this.playCurrent();
         document.getElementById('save').onclick = () => this.saveCurrent();
         document.getElementById('save-insert').onclick = () => this.saveCurrent(this.selectedIndex);
+        document.getElementById('quick-add-btn').onclick = () => this.addQuickChord();
+        document.getElementById('quick-add-input').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); this.addQuickChord(); }
+        });
         document.getElementById('play-prog').onclick = () => this.playProgression();
         document.getElementById('stop').onclick = () => this.stopAll();
 
@@ -1892,6 +1954,49 @@ class HarmoBoxApp {
         this.loadProgression();
     }
 
+    // Saisie rapide (voir parseChordSymbol) : ajoute directement un accord à la fin de la partie
+    // active, toujours en position fondamentale (sans renversement/drop/basse — modifiables ensuite
+    // en double-cliquant la case comme n'importe quel accord), à la durée et au style de lecture/
+    // instrument actuellement réglés dans le panneau Accord. Pensée pour poser vite une grille au
+    // clavier, sans toucher aux menus déroulants.
+    addQuickChord() {
+        const input = document.getElementById('quick-add-input');
+        const parsed = parseChordSymbol(input.value);
+        if (!parsed) {
+            this.flashHint('Accord non reconnu (ex. Cm7, F#dim, Bbadd9)');
+            return;
+        }
+        const beats = parseInt(document.getElementById('duration').value) || 4;
+        const playStyle = document.getElementById('playStyle').value;
+        const instrument = document.getElementById('instrument').value;
+        const chord = new Chord(parsed.root, parsed.quality, beats, 0, 'none', 3, null);
+        const voices = chord.getMidiNotes().length;
+        const { pattern, tie } = seqPreset(playStyle, voices, beats * SEQ_STEPS_PER_BEAT);
+        const data = {
+            root: parsed.root,
+            quality: parsed.quality,
+            beats,
+            octave: 3,
+            inversion: 0,
+            drop: 'none',
+            bass: null,
+            playStyle,
+            instrument,
+            arpPattern: serializeSeqPattern(pattern, tie),
+            seqEdited: false,
+        };
+
+        const sections = loadProgressionSections();
+        this.pushUndo(sections);
+        sections[this.activeSection].chords.push(data);
+        saveProgressionSections(sections);
+        this.loadProgression();
+
+        input.value = '';
+        input.focus();
+        this.flashHint(`${noteNameForPc(NOTES.indexOf(parsed.root), this.useFlatsForRoot(parsed.root))}${QUALITY_LABEL[parsed.quality]} ajouté`);
+    }
+
     // Passe les contrôles en mode « modification » d'un accord existant
     editChord(section, index) {
         const sections = loadProgressionSections();
@@ -2077,12 +2182,17 @@ class HarmoBoxApp {
                     const romanEl = s.isFirst ? `<span class="cell-roman">${roman}</span>` : '';
                     const metaEl = s.isFirst ? `<span class="cell-meta">${styleLabel}</span>` : '';
                     const contFlag = (s.split && !s.isFirst) ? ' <span class="cell-cont">↩</span>' : '';
+                    // Poignée d'étirement (durée) : uniquement sur le DERNIER segment d'un accord (le
+                    // seul bord qui représente vraiment sa fin), absente pendant un glisser-déposer.
+                    const resizeEl = (s.isLast && !cls.includes('drag-placeholder'))
+                        ? `<div class="cell-resize" data-section="${si}" data-index="${s.index}" title="Glisser pour changer la durée"></div>` : '';
 
                     return `
                     <div class="${cls}" data-section="${si}" data-index="${s.index}" style="${style}" title="Toucher pour écouter · double-clic/double-tap pour modifier · clic droit/appui long pour plus d'options">
                         ${romanEl}
                         <span class="cell-sym">${sym}${contFlag}</span>
                         ${metaEl}
+                        ${resizeEl}
                     </div>`;
                 }).join('') + cells.filter(s => s.barStart).map(s => `
                     <div class="row-measure" style="grid-column: ${s.col + 1} / span 1; grid-row: ${s.row * 2 + 2};">${s.barNumber}</div>`
@@ -2102,7 +2212,7 @@ class HarmoBoxApp {
                     <button type="button" class="icon-btn prog-section-duplicate" data-section="${si}" title="Dupliquer cette partie" aria-label="Dupliquer cette partie">${svgIcon('duplicate')}</button>
                     ${canDelete ? `<button type="button" class="prog-section-del" data-section="${si}" title="Supprimer cette partie" aria-label="Supprimer cette partie">${svgIcon('trash')}</button>` : ''}
                 </div>
-                <div class="chord-grid" data-section="${si}" style="${gridStyle}">${gridInner}</div>
+                <div class="chord-grid" data-section="${si}" data-beats-per-row="${beatsPerRowFor(beatsPerBar)}" style="${gridStyle}">${gridInner}</div>
             </div>`;
         }).join('');
 
@@ -2126,6 +2236,12 @@ class HarmoBoxApp {
         host.querySelectorAll('.grid-cell').forEach(cell => {
             const section = +cell.dataset.section, index = +cell.dataset.index;
             this.attachContextMenuTrigger(cell, () => ({ type: 'chord', section, index }));
+        });
+        // Poignée d'étirement : glisser le bord droit d'un accord change sa durée sans repasser par
+        // le panneau Accord. stopPropagation empêche aussi le glisser-déposer (réordonner) de la
+        // grille de se déclencher pour le même geste (délégué plus haut, sur #progression-sections).
+        host.querySelectorAll('.cell-resize').forEach(handle => {
+            handle.addEventListener('pointerdown', (e) => this.onResizeStart(e, +handle.dataset.section, +handle.dataset.index));
         });
 
         this.updateSaveButtons();
@@ -3589,6 +3705,59 @@ class HarmoBoxApp {
         this.selectedIndex = this._shiftIndex(this.selectedIndex, d.origIndex, d.index);
         this.editingIndex = this._shiftIndex(this.editingIndex, d.origIndex, d.index);
         this.loadProgression();
+    }
+
+    // ---------- Étirement d'un accord (durée) directement dans la grille ----------
+    // Glisser la poignée au bord droit du DERNIER segment d'un accord change sa durée par pas d'un
+    // temps entier (comme toutes les durées de l'appli), sans repasser par le panneau Accord.
+    onResizeStart(e, section, index) {
+        if (e.button != null && e.button !== 0) return; // clic gauche / toucher uniquement
+        e.stopPropagation(); // n'ouvre pas aussi le glisser-déposer (réordonner) de la grille
+        e.preventDefault();
+        const sections = loadProgressionSections();
+        const data = sections[section] && sections[section].chords[index];
+        if (!data) return;
+        const grid = e.target.closest('.chord-grid');
+        const beatsPerRow = parseInt(grid.dataset.beatsPerRow) || 16;
+        const colWidth = grid.getBoundingClientRect().width / beatsPerRow;
+
+        this.resize = {
+            section, index,
+            startX: e.clientX,
+            startBeats: beatsFromData(data),
+            colWidth,
+            lastBeats: beatsFromData(data),
+        };
+        this._onResizeMove = (ev) => this.onResizeMove(ev);
+        this._onResizeEnd = () => this.onResizeEnd();
+        window.addEventListener('pointermove', this._onResizeMove, { passive: false });
+        window.addEventListener('pointerup', this._onResizeEnd);
+        window.addEventListener('pointercancel', this._onResizeEnd);
+    }
+
+    onResizeMove(e) {
+        const r = this.resize;
+        if (!r) return;
+        e.preventDefault();
+        const deltaBeats = Math.round((e.clientX - r.startX) / r.colWidth);
+        const beats = Math.max(1, r.startBeats + deltaBeats);
+        if (beats === r.lastBeats) return;
+        r.lastBeats = beats;
+
+        if (!r.pushedUndo) { this.pushUndo(loadProgressionSections()); r.pushedUndo = true; }
+        const sections = loadProgressionSections();
+        const data = sections[r.section] && sections[r.section].chords[r.index];
+        if (!data) return;
+        data.beats = beats;
+        saveProgressionSections(sections);
+        this.loadProgression();
+    }
+
+    onResizeEnd() {
+        window.removeEventListener('pointermove', this._onResizeMove);
+        window.removeEventListener('pointerup', this._onResizeEnd);
+        window.removeEventListener('pointercancel', this._onResizeEnd);
+        this.resize = null;
     }
 
     // Crée un clone flottant de la case en cours de déplacement

@@ -931,6 +931,27 @@ button:active { transform: translateY(1px); }
      letter-spacing: 0.03em;
      margin-bottom: 15px;
 }
+/* Saisie rapide : ajoute un accord tapé (ex. "Cm7") directement en fin de partie, sans passer par
+   les menus déroulants (voir parseChordSymbol/addQuickChord). */
+.quick-add-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+.quick-add-input {
+    flex: 1;
+    min-width: 0;
+    background: #1c1e24;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-main);
+    font: inherit;
+    font-size: var(--fs-sm);
+    padding: 10px 12px;
+}
+.quick-add-input:focus { outline: none; border-color: var(--accent); }
+.quick-add-input::placeholder { color: var(--text-muted); }
+
 /* Une partie de la chanson (couplet, refrain, ...) : titre éditable + sa propre grille. */
 .prog-section {
     margin-bottom: 22px;
@@ -1038,8 +1059,9 @@ button:active { transform: translateY(1px); }
     transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-/* Barre de mesure : bord gauche plus marqué en début de mesure */
-.grid-cell.bar-start { border-left: 2px solid #5c5c5c; }
+/* Barre de mesure : bord gauche nettement plus marqué qu'un simple bord de case (celles-ci ont
+   déjà toutes une bordure fine, sans ça la limite de mesure ne se distinguerait pas du reste). */
+.grid-cell.bar-start { border-left: 3px solid rgba(255, 255, 255, 0.4); }
 
 /* Segments d'un accord scindé : bord de coupe en pointillé */
 .grid-cell.seg-first { border-right: 1px dashed #5a5a5a; }
@@ -1091,6 +1113,30 @@ button:active { transform: translateY(1px); }
 }
 
 .cell-cont { font-size: var(--fs-xs); color: var(--text-muted); font-weight: 400; }
+
+/* Poignée d'étirement (durée) : zone de préhension large (tactile) avec un simple repère visuel fin,
+   au bord droit du DERNIER segment d'un accord (voir onResizeStart) */
+.cell-resize {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 14px;
+    height: 100%;
+    cursor: col-resize;
+    touch-action: none;
+    z-index: 3;
+}
+.cell-resize::after {
+    content: '';
+    position: absolute;
+    top: 18%;
+    bottom: 18%;
+    right: 3px;
+    width: 2px;
+    border-radius: 1px;
+    background: rgba(255, 255, 255, 0.18);
+}
+.cell-resize:hover::after, .cell-resize:active::after { background: var(--accent); }
 
 .cell-roman {
     position: absolute;
