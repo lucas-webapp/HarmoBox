@@ -1124,9 +1124,11 @@ button:active { transform: translateY(1px); }
 
 .cell-cont { font-size: var(--fs-xs); color: var(--text-muted); font-weight: 400; }
 
-/* Poignées d'étirement (durée) : zone de préhension large (tactile) avec un simple repère visuel
-   fin — bord droit du DERNIER segment (change la fin de l'accord) et bord gauche du PREMIER segment
-   (change son début, aux dépens de l'accord précédent) — voir onResizeStart. */
+/* Poignées d'étirement (durée) : zone de préhension large (tactile), SANS repère visuel — bord droit
+   du DERNIER segment (change la fin de l'accord) et bord gauche du PREMIER segment (change son
+   début, aux dépens de l'accord précédent) — voir onResizeStart. Restent pleinement fonctionnelles
+   (zone invisible + curseur col-resize au survol) mais ne dessinent plus de trait, pour ne pas
+   ajouter de repères visuels en plus de ceux des mesures (voir .cell-tick). */
 .cell-resize {
     position: absolute;
     top: 0;
@@ -1138,18 +1140,23 @@ button:active { transform: translateY(1px); }
 }
 .cell-resize-right { right: 0; }
 .cell-resize-left { left: 0; }
-.cell-resize::after {
-    content: '';
+
+/* Repère de mesure À L'INTÉRIEUR d'un accord qui dure plusieurs mesures (zébrure de fond posée en
+   background-image inline, voir buildInnerZebra) : un trait vertical très fin à chaque limite de
+   mesure, jamais au centre — le dégradé l'estompe complètement au milieu de la case pour ne jamais
+   couper le symbole de l'accord, et le rend un peu plus visible près des bords haut/bas. */
+.cell-tick {
     position: absolute;
-    top: 18%;
-    bottom: 18%;
-    width: 2px;
-    border-radius: 1px;
-    background: rgba(255, 255, 255, 0.18);
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    pointer-events: none;
+    background: linear-gradient(to bottom,
+        rgba(255, 255, 255, 0.4) 0%,
+        rgba(255, 255, 255, 0) 42%,
+        rgba(255, 255, 255, 0) 58%,
+        rgba(255, 255, 255, 0.4) 100%);
 }
-.cell-resize-right::after { right: 3px; }
-.cell-resize-left::after { left: 3px; }
-.cell-resize:hover::after, .cell-resize:active::after { background: var(--accent); }
 
 .cell-roman {
     position: absolute;

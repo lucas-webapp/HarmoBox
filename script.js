@@ -303,6 +303,18 @@ function sectionMeasureCount(sec, beatsPerBar) {
     return Number.isInteger(count) ? String(count) : count.toFixed(1);
 }
 
+// Fond zébré (une mesure sur deux, +5% de blanc) pour un segment qui s'étend sur plusieurs mesures :
+// sans repère, un accord long reste un seul bloc plein, impossible de voir combien de temps il dure.
+// L'alternance se base sur le numéro de mesure ABSOLU du segment (s.barNumber), pas sur sa position
+// dans le segment, pour que la phase reste cohérente d'un accord à l'autre le long de la grille.
+function buildInnerZebra(s, beatsPerBar) {
+    const mw = (beatsPerBar / s.span) * 100; // largeur d'une mesure, en % de la largeur du segment
+    const firstOn = (s.barNumber % 2 === 0);
+    return firstOn
+        ? `repeating-linear-gradient(90deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.05) ${mw}%, transparent ${mw}%, transparent ${mw * 2}%)`
+        : `repeating-linear-gradient(90deg, transparent 0%, transparent ${mw}%, rgba(255,255,255,0.05) ${mw}%, rgba(255,255,255,0.05) ${mw * 2}%)`;
+}
+
 // Octave de base d'un accord (défaut 3 = C3, compatibilité avec les sauvegardes sans octave)
 function octaveFromData(data) {
     return (data.octave != null) ? parseInt(data.octave) : 3;
@@ -2109,7 +2121,14 @@ class HarmoBoxApp {
                 const row = Math.floor(pos / beatsPerRow);
                 const col = pos % beatsPerRow;
                 const span = Math.min(remaining, beatsPerRow - col);
-                segs.push({ index: i, row, col, span, barStart: (pos % beatsPerBar === 0), barNumber: Math.floor(pos / beatsPerBar) + 1 });
+                // Limites de mesure INTERNES à ce segment (un accord qui dure plusieurs mesures sans
+                // être coupé de ligne) : jamais à pos elle-même (déjà couverte par barStart), une par
+                // mesure entièrement contenue dans le segment.
+                const innerBars = [];
+                for (let b = pos - (pos % beatsPerBar) + beatsPerBar; b < pos + span; b += beatsPerBar) {
+                    innerBars.push({ offset: b - pos, barNumber: Math.floor(b / beatsPerBar) + 1 });
+                }
+                segs.push({ index: i, row, col, span, barStart: (pos % beatsPerBar === 0), barNumber: Math.floor(pos / beatsPerBar) + 1, innerBars });
                 pos += span;
                 remaining -= span;
             }
@@ -2182,11 +2201,22 @@ class HarmoBoxApp {
                     if (s.barStart) cls += ' bar-start';
                     // police réduite pour les segments courts (peu de temps)
                     if (s.span === 1) cls += ' sz1'; else if (s.span === 2) cls += ' sz2';
-                    const style = `grid-column: ${s.col + 1} / span ${s.span}; grid-row: ${s.row * 2 + 1};`;
+                    // Accord qui dure plusieurs mesures sans être coupé de ligne : zébrure de fond très
+                    // fine (une mesure sur deux) pour voir sa durée d'un coup d'œil, sans repère sur les
+                    // accords courts (inutile, et ça alourdirait la grille pour rien).
+                    const hasInnerBars = s.innerBars.length > 0;
+                    const zebra = hasInnerBars ? `background-image: ${buildInnerZebra(s, beatsPerBar)};` : '';
+                    const style = `grid-column: ${s.col + 1} / span ${s.span}; grid-row: ${s.row * 2 + 1}; ${zebra}`;
 
                     const romanEl = s.isFirst ? `<span class="cell-roman">${roman}</span>` : '';
                     const metaEl = s.isFirst ? `<span class="cell-meta">${styleLabel}</span>` : '';
                     const contFlag = (s.split && !s.isFirst) ? ' <span class="cell-cont">↩</span>' : '';
+                    // Petits traits à chaque limite de mesure interne, positionnés en % de la largeur du
+                    // segment (colonnes de largeur égale au sein d'une même grille) — le dégradé qui les
+                    // compose (voir .cell-tick) les estompe vers le centre pour ne jamais couper le texte.
+                    const ticksEl = hasInnerBars
+                        ? s.innerBars.map(ib => `<span class="cell-tick" style="left: ${(ib.offset / s.span) * 100}%;"></span>`).join('')
+                        : '';
                     // Poignées d'étirement (durée) : bord droit sur le DERNIER segment (change la fin
                     // de l'accord), bord gauche sur le PREMIER segment s'il existe un accord précédent
                     // dans la même partie (change son début, en empruntant/rendant des temps à ce
@@ -2202,11 +2232,14 @@ class HarmoBoxApp {
                         ${romanEl}
                         <span class="cell-sym">${sym}${contFlag}</span>
                         ${metaEl}
+                        ${ticksEl}
                         ${resizeLeftEl}
                         ${resizeRightEl}
                     </div>`;
                 }).join('') + cells.filter(s => s.barStart).map(s => `
                     <div class="row-measure" style="grid-column: ${s.col + 1} / span 1; grid-row: ${s.row * 2 + 2};">${s.barNumber}</div>`
+                ).join('') + cells.flatMap(s => s.innerBars.map(ib => `
+                    <div class="row-measure" style="grid-column: ${s.col + ib.offset + 1} / span 1; grid-row: ${s.row * 2 + 2};">${ib.barNumber}</div>`)
                 ).join('');
             }
 
