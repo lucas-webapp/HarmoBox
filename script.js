@@ -1691,11 +1691,13 @@ class HarmoBoxApp {
                 gridInner = `<div class="empty-hint">Aucun accord. Règle un accord puis « Ajouter » pour le placer ici.</div>`;
             } else {
                 const { cells, rows, beatsPerRow } = this.layoutProgression(history, beatsPerBar);
-                // Une ligne de grille sur deux (impaire) porte les accords, l'autre (paire, fine —
-                // "auto") les numéros de mesure juste en dessous. this.row se réfère toujours à une
-                // ligne d'ACCORDS (0, 1, 2...) : ×2+1 pour sa ligne CSS, ×2+2 pour la ligne des numéros
-                // juste après elle (voir plus bas, en fin de gridInner).
-                gridStyle = `grid-template-rows: repeat(${rows}, var(--row-h) auto); grid-template-columns: repeat(${beatsPerRow}, 1fr);`;
+                // Une ligne de grille sur deux (impaire) porte les accords, l'autre (paire, fine et de
+                // hauteur EXPLICITE --measure-row-h, jamais "auto" — plus robuste d'un navigateur à
+                // l'autre qu'un dimensionnement intrinsèque basé sur le contenu) les numéros de mesure
+                // juste en dessous. this.row se réfère toujours à une ligne d'ACCORDS (0, 1, 2...) :
+                // ×2+1 pour sa ligne CSS, ×2+2 pour la ligne des numéros juste après elle (voir plus
+                // bas, en fin de gridInner).
+                gridStyle = `grid-template-rows: repeat(${rows}, var(--row-h) var(--measure-row-h)); grid-template-columns: repeat(${beatsPerRow}, 1fr);`;
                 gridInner = cells.map(s => {
                     const h = history[s.index];
                     const roman = this.getRomanNumeral(gRoot, gMode, h.root, h.quality);

@@ -913,6 +913,7 @@ button:active { transform: translateY(1px); }
 /* Grille d'accords façon lead sheet */
 .chord-grid {
     --row-h: 64px;
+    --measure-row-h: 15px;
     display: grid;
     grid-template-columns: repeat(16, 1fr); /* par défaut (grille vide) ; posé dynamiquement en JS sinon,
                                                 selon la signature rythmique du morceau */
@@ -1032,12 +1033,14 @@ button:active { transform: translateY(1px); }
 /* Numéro de mesure : fine ligne dédiée juste sous chaque ligne d'accords (voir gridStyle/loadProgression,
    une ligne de grille sur deux), alignée sur le début de la mesure plutôt que posée sur l'accord lui-même. */
 .row-measure {
-    align-self: start;
-    padding: 2px 0 0 2px;
+    height: var(--measure-row-h);
+    line-height: var(--measure-row-h);
+    padding: 0 0 0 2px;
     font-size: var(--fs-2xs);
     font-weight: 700;
     color: var(--text-muted);
     opacity: 0.7;
+    overflow: hidden;
 }
 
 .cell-meta {
