@@ -297,9 +297,16 @@ function seqPageBars(beatsPerBar) {
 // Réglages d'accord : Entrée depuis l'un d'eux ajoute/modifie directement (moins de clics)
 const CHORD_PARAM_IDS = ['root', 'quality', 'duration', 'inversion', 'drop', 'octave', 'bass', 'playStyle', 'instrument'];
 
-// Récupère la durée en temps d'un accord sauvegardé (compatibilité : anciens formats en "measures")
+// Récupère la durée en temps d'un accord sauvegardé (compatibilité : anciens formats en "measures").
+// Blindé contre une valeur corrompue (ex. chaîne vide, texte, 0 ou négatif) : sans ce garde-fou, un
+// seul accord avec un `beats` invalide produisait un total NaN pour toute sa partie ("NaN mes." dans
+// l'en-tête) et une case quasi invisible dans la grille (span dégénéré) — repli sur 4 temps (comme
+// si la durée n'était pas renseignée du tout) plutôt que de propager la valeur invalide plus loin.
 function beatsFromData(data) {
-    if (data.beats != null) return parseInt(data.beats);
+    if (data.beats != null) {
+        const n = parseInt(data.beats);
+        return (Number.isFinite(n) && n >= 1) ? n : 4;
+    }
     if (data.measures != null) return (parseInt(data.measures) || 1) * 4; // ancien format
     return 4;
 }
@@ -3616,6 +3623,7 @@ class HarmoHubApp {
     // même édition en ligne que les boutons ✎ ; « Supprimer » déclenche la même action que 🗑.
     attachContextMenuTrigger(el, targetFn) {
         el.addEventListener('contextmenu', (e) => {
+            if (el.querySelector('.cell-sym-input')) return; // édition inline en cours, voir plus bas
             e.preventDefault();
             this.openContextMenu(e.clientX, e.clientY, targetFn());
         });
@@ -3623,6 +3631,12 @@ class HarmoHubApp {
         let pressTimer = null, startX = 0, startY = 0, longPressed = false;
         el.addEventListener('touchstart', (e) => {
             if (e.touches.length !== 1) return;
+            // Édition inline du symbole en cours sur CETTE case (voir startInlineChordSymbolEdit) :
+            // elle remplace juste le texte affiché par un <input>, la case elle-même (et donc ce
+            // long-press) reste montée tout du long. Sans ce garde-fou, un appui un peu long sur le
+            // champ pendant qu'on tape (ou pour repositionner le curseur) rouvrait le menu contextuel
+            // PAR-DESSUS le clavier/champ actif, bloquant la saisie — vu sur téléphone.
+            if (el.querySelector('.cell-sym-input')) return;
             longPressed = false;
             startX = e.touches[0].clientX;
             startY = e.touches[0].clientY;
@@ -4669,6 +4683,10 @@ class HarmoHubApp {
         const grid = e.target.closest('.chord-grid');
         const beatsPerRow = parseInt(grid.dataset.beatsPerRow) || 16;
         const colWidth = grid.getBoundingClientRect().width / beatsPerRow;
+        // Grille pas encore mesurable (largeur nulle : masquée, en transition...) : pas de division
+        // par zéro plus loin (onResizeMove), qui produirait un delta Infinity/NaN et corromprait
+        // durablement la durée de l'accord (voir beatsFromData).
+        if (!(colWidth > 0)) return;
 
         this.resize = {
             section, index, edge,
