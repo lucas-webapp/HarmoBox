@@ -579,12 +579,10 @@ main {
 }
 .select-group + .select-group { margin-top: 10px; }
 
-/* Carte Accord : grille à 3 colonnes (note/qualité/durée). minmax(0,1fr) laisse les colonnes se
-   réduire ensemble plutôt que déborder si le contenu est plus large que prévu. Les boutons « ⋯ »/
-   basse/avancé vivent dans .card-head-actions (en-tête de la carte), plus dans la grille elle-même. */
-/* Mobile : 2 colonnes (3 lignes) — 3 colonnes serrées tronquaient le texte des select (ex. "1 mesure"
-   -> "1 mesur", "Sans drop" -> "Sans dro"). Repasse à 3 colonnes sur grand écran (voir plus bas),
-   où le clavier/souris tolère mieux des select plus étroits. */
+/* Carte Accord : grille à 2 colonnes (note/qualité — la durée a rejoint .select-group dans la carte
+   Lecture). minmax(0,1fr) laisse les colonnes se réduire ensemble plutôt que déborder si le contenu
+   est plus large que prévu. Les boutons « ⋯ »/basse/avancé vivent dans .card-head-actions (en-tête de
+   la carte), plus dans la grille elle-même. */
 .accord-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -592,32 +590,27 @@ main {
 }
 .accord-grid select { min-width: 0; }
 
-/* Champ texte au-dessus des sélecteurs racine/qualité (voir updateChordSymbolInput) : reflète toujours
-   l'accord actuellement réglé, qu'il soit tout juste sélectionné dans la grille (voir editChord) ou en
-   train d'être créé — taper un nouveau symbole (ex. "Dm7") modifie racine ET qualité d'un coup, sans
-   passer par les deux menus déroulants séparément. Même style que .quick-add-input, cohérent. */
-.chord-symbol-input {
-    display: block;
-    width: 100%;
+/* Sélecteur de son, dans l'en-tête de la carte Lecture (à côté du titre, voir index.html) plutôt que
+   dans .select-group : évite un 3e menu déroulant en pleine largeur pour un réglage qu'on change bien
+   moins souvent que le style de jeu. flex-grow modéré : prend la place laissée par le titre et les
+   icônes d'action, sans jamais les pousser hors du en-tête. */
+.card-head-select {
+    flex: 1 1 auto;
     min-width: 0;
-    background: #1c1e24;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    color: var(--text-main);
-    font: inherit;
-    font-size: var(--fs-sm);
-    padding: 10px 12px;
-    margin-bottom: 10px;
+    max-width: 128px;
+    padding: 5px 8px;
+    font-size: var(--fs-xs);
 }
-.chord-symbol-input:focus { outline: none; border-color: var(--accent); }
-.chord-symbol-input::placeholder { color: var(--text-muted); }
 
 /* Renversement/drop/octave : masqués par défaut, révélés par le même bouton « … » que les qualités
    moins courantes (voir toggle-complex-quality/activateMoreOptions) — des réglages de voicing fins
    que la plupart des accords n'utilisent jamais, inutile de les imposer à chaque saisie.
    Réapparaissent aussi automatiquement en modifiant un accord qui s'en sert déjà
    (revealAdvancedIfNeeded), comme la basse moins courante ci-dessus. */
-.advanced-grid { margin-top: 10px; }
+/* Renversement/drop/octave : toujours 3 colonnes, indépendamment du nombre de colonnes de
+   .accord-grid (2 depuis que la durée en est partie) — sinon la 3e case (octave) retomberait seule
+   sur sa propre ligne. */
+.advanced-grid { margin-top: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
 /* Sélecteur de basse différente (accord « sur » une note), masqué par défaut — voir toggle-bass.
    Même principe que .groove-group : une étiquette + un select, sur une rangée dédiée sous la grille. */
@@ -1250,45 +1243,6 @@ button:active { transform: translateY(1px); }
 .cell-resize-right { right: 0; }
 .cell-resize-left { left: 0; }
 
-/* Bouton dédié pour entrer en édition (voir editChord), en plus du double-clic/double-tap existant
-   — évite de modifier un accord par un double-tap accidentel : discret (opacité réduite) tant qu'on
-   ne survole/focus pas la case, bien visible ensuite. Toujours un peu visible même sans survol (pas
-   de hover tactile) pour rester repérable au doigt. Au-dessus des poignées d'étirement (z-index). */
-.cell-edit-btn {
-    position: absolute;
-    top: 2px;
-    right: 2px;
-    z-index: 4;
-    /* Le sélecteur générique `button` (voir plus bas) pose min-width:120px/padding:16px/flex:1 : sans
-       les annuler ici, min-width l'emporterait sur le width:18px ci-dessous (plancher CSS), rendant
-       le bouton géant et couvrant toute la case au lieu de son seul coin. */
-    flex: none;
-    min-width: 0;
-    min-height: 0;
-    width: 18px;
-    height: 18px;
-    padding: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: none;
-    border-radius: 4px;
-    background: rgba(255, 255, 255, 0.08);
-    color: var(--text-muted);
-    opacity: 0.4;
-    cursor: pointer;
-    touch-action: manipulation;
-    transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
-}
-.cell-edit-btn .icon { width: 11px; height: 11px; }
-.grid-cell:hover .cell-edit-btn,
-.cell-edit-btn:hover,
-.cell-edit-btn:focus-visible {
-    opacity: 1;
-    background: rgba(255, 179, 0, 0.22);
-    color: #ffb300;
-}
-
 /* Repère de mesure À L'INTÉRIEUR d'un accord qui dure plusieurs mesures (zébrure de fond posée en
    background-image inline, voir buildInnerZebra) : un trait vertical très fin à chaque limite de
    mesure, jamais au centre — le dégradé l'estompe complètement au milieu de la case pour ne jamais
@@ -1326,9 +1280,37 @@ button:active { transform: translateY(1px); }
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 100%;
+    cursor: text; /* distingue du grab du reste de la case : cliquer ici modifie le texte directement */
 }
 
 .grid-cell.selected .cell-sym { color: var(--accent); }
+
+/* Édition inline du texte d'un accord (clic sur .cell-sym, voir startInlineChordSymbolEdit) : ce
+   champ remplace le symbole EN PLACE, même gabarit visuel pour ne pas faire "sauter" la case, mais
+   interactif — contrairement à .cell-sym et consorts, dont le texte/touch-action est désactivé
+   ci-dessus pour ne pas gêner le glisser-déposer/l'appui long. */
+.cell-sym-input {
+    font: inherit;
+    font-size: var(--fs-lg);
+    font-weight: 700;
+    color: var(--text-main);
+    line-height: 1;
+    text-align: center;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid var(--accent);
+    border-radius: 4px;
+    padding: 1px 3px;
+    width: 90%;
+    max-width: 100%;
+    min-width: 0;
+    touch-action: manipulation;
+    user-select: text;
+    -webkit-user-select: text;
+    -webkit-touch-callout: default;
+}
+.cell-sym-input:focus { outline: none; }
+.grid-cell.sz2 .cell-sym-input { font-size: var(--fs-base); }
+.grid-cell.sz1 .cell-sym-input { font-size: var(--fs-xs); }
 
 /* Numéro de mesure : fine ligne dédiée juste sous chaque ligne d'accords (voir gridStyle/loadProgression,
    une ligne de grille sur deux), alignée sur le début de la mesure plutôt que posée sur l'accord lui-même. */
@@ -1742,7 +1724,8 @@ select.song-select-narrow {
     .control-card h2 { font-size: var(--fs-sm); margin-bottom: 8px; }
     .select-group { gap: 8px; }
     .select-group + .select-group { margin-top: 8px; }
-    .accord-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+    .accord-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .advanced-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     select { padding: 9px 10px; font-size: var(--fs-select); min-width: 0; }
     button { padding: 10px; font-size: var(--fs-base); }
     .bpm-group { margin-top: 10px; gap: 6px; }

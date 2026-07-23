@@ -1504,34 +1504,6 @@ class HarmoBoxApp {
             });
         });
 
-        // Champ texte au-dessus des sélecteurs (voir updateChordSymbolInput) : taper un symbole
-        // modifie racine ET qualité d'un coup — pour un accord tout juste chargé en édition
-        // (editChord) aussi bien qu'un nouvel accord en cours de réglage. Valide au blur (Entrée s'y
-        // ramène) plutôt qu'au fil de la frappe, comme les autres saisies de texte de l'appli.
-        const symbolInput = document.getElementById('chord-symbol-input');
-        const commitChordSymbol = () => {
-            const parsed = parseChordSymbol(symbolInput.value);
-            if (!parsed) {
-                if (symbolInput.value.trim()) this.flashHint('Accord non reconnu (ex. Cm7, F#dim, Bbadd9)');
-                this.refreshPreview(); // remet le texte correspondant aux réglages actuels
-                return;
-            }
-            this.revealComplexQualityIfNeeded(parsed.quality);
-            document.getElementById('root').value = parsed.root;
-            document.getElementById('quality').value = parsed.quality;
-            this.seqSelections = [];
-            this.clearSeqHistory();
-            hasUnsavedChanges = true;
-            this.refreshPreview();
-            this.renderSequencer();
-        };
-        symbolInput.addEventListener('blur', commitChordSymbol);
-        symbolInput.addEventListener('keydown', (e) => {
-            e.stopPropagation();
-            if (e.key === 'Enter') { e.preventDefault(); symbolInput.blur(); }
-            else if (e.key === 'Escape') { e.preventDefault(); this.refreshPreview(); symbolInput.blur(); }
-        });
-
         // Choisir un style de lecture réinitialise le motif sur le point de départ correspondant
         document.getElementById('playStyle').onchange = () => {
             const chord = this.readChord();
@@ -1786,17 +1758,6 @@ class HarmoBoxApp {
         this.ensurePianoWindow(midis);
         this.updateViz(midis, chord.getRoleMap());
         this.ensureGuitarDiagram(chord);
-        this.updateChordSymbolInput(chord.root, chord.quality, useFlats);
-    }
-
-    // Tient #chord-symbol-input à jour avec l'accord actuellement réglé (racine + qualité seulement :
-    // renversement/drop/basse ne se représentent pas dans un symbole court) — appelé depuis
-    // refreshPreview, donc à chaque changement de réglage ou chargement d'un accord (editChord). Ne
-    // touche jamais au champ pendant qu'on y tape (on n'écraserait pas une saisie en cours).
-    updateChordSymbolInput(root, quality, useFlats) {
-        const input = document.getElementById('chord-symbol-input');
-        if (!input || document.activeElement === input) return;
-        input.value = noteNameForPc(NOTES.indexOf(root), useFlats) + (QUALITY_LABEL[quality] ?? '');
     }
 
     // Calcule une fenêtre clavier (multiple de 12, alignée sur des Do) englobant l'accord,
@@ -2720,8 +2681,6 @@ class HarmoBoxApp {
 
                     const romanEl = s.isFirst ? `<span class="cell-roman">${roman}</span>` : '';
                     const metaEl = s.isFirst ? `<span class="cell-meta">${styleLabel}</span>` : '';
-                    const editBtnEl = (s.isFirst && !cls.includes('drag-placeholder'))
-                        ? `<button type="button" class="cell-edit-btn" data-section="${si}" data-index="${s.index}" title="Modifier cet accord" aria-label="Modifier cet accord">${svgIcon('pencil')}</button>` : '';
                     const contFlag = (s.split && !s.isFirst) ? ' <span class="cell-cont">↩</span>' : '';
                     // Petits traits à chaque limite de mesure interne, positionnés en % de la largeur du
                     // segment (colonnes de largeur égale au sein d'une même grille) — le dégradé qui les
@@ -2740,12 +2699,11 @@ class HarmoBoxApp {
                         ? `<div class="cell-resize cell-resize-left" data-section="${si}" data-index="${s.index}" data-edge="left" title="Glisser pour changer la durée"></div>` : '';
 
                     return `
-                    <div class="${cls}" data-section="${si}" data-index="${s.index}" style="${style}" title="Toucher pour écouter · double-clic/double-tap pour modifier · clic droit/appui long pour plus d'options">
+                    <div class="${cls}" data-section="${si}" data-index="${s.index}" style="${style}" title="Toucher pour écouter · cliquer le nom pour le modifier · double-clic/double-tap pour l'édition complète · clic droit/appui long pour plus d'options">
                         ${romanEl}
                         <span class="cell-sym">${sym}${contFlag}</span>
                         ${metaEl}
                         ${ticksEl}
-                        ${editBtnEl}
                         ${resizeLeftEl}
                         ${resizeRightEl}
                     </div>`;
@@ -2765,8 +2723,6 @@ class HarmoBoxApp {
                 <div class="prog-section-head">
                     <input type="text" class="prog-title" data-section="${si}" placeholder="Section" value="${titleVal}">
                     ${measureCountEl}
-                    <button type="button" class="icon-btn prog-section-transpose" data-section="${si}" data-semitones="-1" title="Transposer cette partie d'un demi-ton vers le bas" aria-label="Transposer cette partie vers le bas">${svgIcon('down')}</button>
-                    <button type="button" class="icon-btn prog-section-transpose" data-section="${si}" data-semitones="1" title="Transposer cette partie d'un demi-ton vers le haut" aria-label="Transposer cette partie vers le haut">${svgIcon('up')}</button>
                     <button type="button" class="icon-btn prog-section-duplicate" data-section="${si}" title="Dupliquer cette partie" aria-label="Dupliquer cette partie">${svgIcon('duplicate')}</button>
                     ${canDelete ? `<button type="button" class="prog-section-del" data-section="${si}" title="Supprimer cette partie" aria-label="Supprimer cette partie">${svgIcon('trash')}</button>` : ''}
                 </div>
@@ -2781,9 +2737,6 @@ class HarmoBoxApp {
         });
         host.querySelectorAll('.prog-section-del').forEach(btn => {
             btn.onclick = (e) => { e.stopPropagation(); this.deleteSection(+btn.dataset.section); };
-        });
-        host.querySelectorAll('.prog-section-transpose').forEach(btn => {
-            btn.onclick = (e) => { e.stopPropagation(); this.transposeSection(+btn.dataset.section, +btn.dataset.semitones); };
         });
         host.querySelectorAll('.prog-section-duplicate').forEach(btn => {
             btn.onclick = (e) => { e.stopPropagation(); this.duplicateSection(+btn.dataset.section); };
@@ -2894,20 +2847,6 @@ class HarmoBoxApp {
         saveProgressionSections(sections);
         this.activeSection = s + 1;
         this.selectedIndex = null;
-        this.loadProgression();
-    }
-
-    // Transpose tous les accords d'UNE partie de `semitones` demi-tons (boutons ▲▼ dans l'en-tête de
-    // la partie). La tonalité globale n'est volontairement pas touchée : transposer une seule partie
-    // s'éloigne de la tonalité affichée pour les autres, ce qui est le but recherché (modulation,
-    // adaptation ponctuelle à une voix...), pas une erreur à corriger.
-    transposeSection(s, semitones) {
-        const sections = loadProgressionSections();
-        const sec = sections[s];
-        if (!sec || sec.chords.length === 0) return;
-        this.pushUndo(sections);
-        sec.chords = sec.chords.map(c => transposeChordData(c, semitones));
-        saveProgressionSections(sections);
         this.loadProgression();
     }
 
@@ -4269,18 +4208,8 @@ class HarmoBoxApp {
         const gridEl = e.target.closest('.chord-grid');
         if (!gridEl) return;
         if (e.target.closest('.grid-cell-add')) return; // laisse le clic focaliser normalement le champ
+        if (e.target.closest('.cell-sym-input')) return; // édition inline en cours (voir startInlineChordSymbolEdit) : laisse le focus/curseur natif faire son travail
         const section = +gridEl.dataset.section;
-
-        // Bouton dédié « modifier » (voir .cell-edit-btn) : entre en édition directement, sans passer
-        // par le double-clic/double-tap (qui reste possible en plus) — n'ouvre pas aussi le
-        // glisser-déposer de la case.
-        const editBtn = e.target.closest('.cell-edit-btn');
-        if (editBtn) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.editChord(section, parseInt(editBtn.dataset.index));
-            return;
-        }
 
         const cell = e.target.closest('.grid-cell');
         if (cell) {
@@ -4301,6 +4230,10 @@ class HarmoBoxApp {
                 // (voir le seuil dans onGridPointerMove) SUIVI d'un glisser — un tap-glisser immédiat
                 // reste un déplacement, comme avant.
                 copy: e.ctrlKey || e.metaKey,
+                // Clic pile sur le symbole affiché (voir onGridPointerUp) : un tap sans glisser dessus
+                // ouvre directement l'édition inline de son texte plutôt que de sélectionner/écouter
+                // l'accord — bien plus rapide que passer par le mode édition complet.
+                symTarget: !!e.target.closest('.cell-sym'),
             };
             this._onMove = (ev) => this.onGridPointerMove(ev);
             this._onUp = (ev) => this.onGridPointerUp(ev);
@@ -4380,6 +4313,13 @@ class HarmoBoxApp {
         if (d.menuShown && !d.moved) return;
 
         if (!d.moved) {
+            if (d.symTarget) {
+                // Tap/clic pile sur le texte de l'accord (voir onGridPointerDown) : édition inline
+                // immédiate, pas de sélection/écoute ni d'attente d'un éventuel second tap.
+                this._lastTap = null;
+                this.startInlineChordSymbolEdit(d.section, d.index, d.cell);
+                return;
+            }
             const now = Date.now();
             const isSecondTap = this._lastTap && this._lastTap.section === d.section && this._lastTap.index === d.index && (now - this._lastTap.time) < 420;
             if (isSecondTap) {
@@ -4418,6 +4358,65 @@ class HarmoBoxApp {
         if (this.editingIndex != null && this.editingIndex >= insertAt) this.editingIndex++;
         this.selectedIndex = insertAt; // sélectionne la copie, comme duplicateChord (menu contextuel)
         this.loadProgression();
+    }
+
+    // Édition directe du texte d'un accord déjà en place (voir onGridPointerUp, tap sur .cell-sym) :
+    // remplace le symbole affiché par un champ texte pré-rempli avec ce qui est déjà à l'écran (donc
+    // déjà correctement orthographié dièses/bémols dans ce contexte), sur le même modèle que la case
+    // "+" (addChordFromSymbol/parseChordSymbol) — seuls racine et qualité changent, tout le reste de
+    // l'accord (durée, style, instrument, renversement/drop/basse) reste inchangé. La basse éventuelle
+    // ("C7/E") et le repère de continuation ("↩") sont retirés du texte proposé : parseChordSymbol ne
+    // sait lire qu'un symbole racine+qualité, pas une basse — cohérent avec la saisie rapide existante,
+    // où renversement/drop/basse restent réglables uniquement en ouvrant le mode édition complet.
+    startInlineChordSymbolEdit(section, index, cell) {
+        cell = cell || document.querySelector(`.grid-cell[data-section="${section}"][data-index="${index}"]`);
+        const symEl = cell && cell.querySelector('.cell-sym');
+        if (!symEl || symEl.tagName === 'INPUT') return; // déjà en édition ou case introuvable
+
+        let displayText = (symEl.textContent || '').trim();
+        displayText = displayText.replace(/↩\s*$/, '').trim();
+        displayText = displayText.replace(/\/.*$/, '').trim();
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'cell-sym-input';
+        input.value = displayText;
+        input.autocomplete = 'off';
+        input.autocapitalize = 'off';
+        input.spellcheck = false;
+        symEl.replaceWith(input);
+        input.focus();
+        input.select();
+
+        let done = false;
+        const commit = () => {
+            if (done) return;
+            done = true;
+            const parsed = parseChordSymbol(input.value);
+            if (!parsed) {
+                if (input.value.trim()) this.flashHint('Accord non reconnu (ex. Cm7, F#dim, Bbadd9)');
+                this.loadProgression();
+                return;
+            }
+            const sections = loadProgressionSections();
+            const data = sections[section] && sections[section].chords[index];
+            if (!data) { this.loadProgression(); return; }
+            this.pushUndo(sections);
+            data.root = parsed.root;
+            data.quality = parsed.quality;
+            saveProgressionSections(sections);
+            hasUnsavedChanges = true;
+            // Si c'est l'accord actuellement en mode édition complète, resynchronise le panneau Accord
+            // (réglages/séquenceur) avec la nouvelle racine/qualité plutôt que de le laisser périmé.
+            if (this.editingIndex === index && this.activeSection === section) this.editChord(section, index);
+            else this.loadProgression();
+        };
+        input.addEventListener('blur', commit);
+        input.addEventListener('keydown', (e) => {
+            e.stopPropagation();
+            if (e.key === 'Enter') { e.preventDefault(); commit(); }
+            else if (e.key === 'Escape') { e.preventDefault(); done = true; this.loadProgression(); }
+        });
     }
 
     // ---------- Plage à boucler (glisser sur la ligne des numéros de mesure) ----------
