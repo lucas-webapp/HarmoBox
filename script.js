@@ -708,8 +708,22 @@ class Chord {
     }
 
     // Notes voisées, avec leur fonction (role) et leur degré (pour l'orthographe) conservés à
-    // travers renversements et drops
+    // travers renversements et drops. Triée du grave à l'aigu — l'ordre attendu partout où l'affichage
+    // seul compte (clavier, PDF, libellés). Pour le séquenceur, qui STOCKE ses motifs par index de
+    // voix, voir plutôt getSeqVoices()/_computeVoices() : leur ordre reste stable même quand une basse
+    // différente est activée/désactivée, ce que ce tri par hauteur ne garantit pas (voir plus bas).
     getVoiced() {
+        return this._computeVoices().sort((a, b) => a.midi - b.midi);
+    }
+
+    // Même voicing que getVoiced(), mais SANS le tri final par hauteur : la basse (si présente) reste
+    // en dernière position (son ajout n'est qu'un push, voir plus bas), donc l'index d'une voix du
+    // CORPS de l'accord (fondamentale/tierce/quinte/7e...) ne dépend jamais de la présence ou non
+    // d'une basse différente. Sert exclusivement au séquenceur (voir getSeqVoices), qui STOCKE ses
+    // motifs par index de voix : avec getVoiced() (triée), ajouter une basse insère une nouvelle voix
+    // la plus grave en TÊTE de tableau et décale l'index de toutes les voix existantes d'un cran —
+    // exactement le bug observé (motif/couleurs qui se décalent d'une voix quand la basse est activée).
+    _computeVoices() {
         let notes = this.getIntervals();
 
         const inversion = this.getEffectiveInversion();
@@ -755,7 +769,7 @@ class Chord {
             voiced.push({ midi: bassMidi, role: match ? match.role : 'ext', degree: match ? match.degree : null });
         }
 
-        return voiced.sort((a, b) => a.midi - b.midi);
+        return voiced;
     }
 
     // Numéros MIDI, triés du plus grave au plus aigu
@@ -773,6 +787,26 @@ class Chord {
     getDisplayNotes(useFlats = false, withOctave = true) {
         const rootPc = NOTES.indexOf(this.root);
         return this.getVoiced().map(v => spellChordTone(rootPc, useFlats, v.degree, v.midi, withOctave));
+    }
+
+    // ---- Variantes « séquenceur » : mêmes notes, ordre STABLE de _computeVoices() (voir plus haut)
+    // au lieu de l'ordre trié par hauteur — à utiliser PARTOUT où un index de voix est apparié à un
+    // motif du séquenceur (pattern/tie stockés par index), jamais pour un simple affichage isolé.
+    getSeqVoices() {
+        return this._computeVoices();
+    }
+
+    getSeqMidiNotes() {
+        return this._computeVoices().map(v => v.midi);
+    }
+
+    getSeqNotes() {
+        return this._computeVoices().map(v => Tone.Frequency(v.midi, "midi").toNote());
+    }
+
+    getSeqDisplayNotes(useFlats = false, withOctave = true) {
+        const rootPc = NOTES.indexOf(this.root);
+        return this._computeVoices().map(v => spellChordTone(rootPc, useFlats, v.degree, v.midi, withOctave));
     }
 
     // { 60: "root", 64: "third", ... } pour colorer le clavier (indexé par MIDI, indépendant de l'orthographe)
@@ -1516,12 +1550,23 @@ class HarmoHubApp {
             const show = !btn.classList.contains('active');
             this.toggleSelectOptions(qualitySelect, this._complexQualityOptions, show);
             document.getElementById('advanced-fields').hidden = !show;
+            // La basse différente n'a de sens qu'en mode accords complexes (voir toggle-bass
+            // ci-dessous) : son bouton se masque avec le reste, et son contrôle se range avec lui s'il
+            // était ouvert — sans jamais toucher à la valeur choisie (voir toggle-bass, même principe
+            // que les autres options avancées).
+            const bassBtn = document.getElementById('toggle-bass');
+            bassBtn.hidden = !show;
+            if (!show) {
+                document.getElementById('bass-row').hidden = true;
+                bassBtn.classList.remove('active');
+            }
             btn.classList.toggle('active', show);
         };
 
         // Révèle/masque le sélecteur de basse différente (accord « sur » une note, ex. Cmaj7/D) : ne
         // remet jamais la valeur choisie à « Aucune » en masquant — juste le contrôle qui se range,
-        // comme les options secondaires ci-dessus.
+        // comme les options secondaires ci-dessus. Le bouton lui-même n'est accessible qu'en mode
+        // accords complexes (voir toggle-complex-quality et activateMoreOptions).
         document.getElementById('toggle-bass').onclick = (e) => {
             const btn = e.currentTarget;
             const show = !btn.classList.contains('active');
@@ -1602,7 +1647,7 @@ class HarmoHubApp {
             this.seqTouched = true;
             this.seqSelections = [];
             this.clearSeqHistory(); // nouveau motif de départ : l'ancien historique ne s'applique plus
-            const { pattern, tie } = seqPreset(document.getElementById('playStyle').value, chord.getMidiNotes().length, chord.beats * SEQ_STEPS_PER_BEAT);
+            const { pattern, tie } = seqPreset(document.getElementById('playStyle').value, chord.getSeqMidiNotes().length, chord.beats * SEQ_STEPS_PER_BEAT);
             this.setLiveSeqPattern(pattern, tie);
             this.renderSequencer();
             this.refreshPreview();
@@ -1762,6 +1807,7 @@ class HarmoHubApp {
         if (btn.classList.contains('active')) return;
         this.toggleSelectOptions(document.getElementById('quality'), this._complexQualityOptions, true);
         document.getElementById('advanced-fields').hidden = false;
+        document.getElementById('toggle-bass').hidden = false; // la basse différente n'a de sens qu'ici
         btn.classList.add('active');
     }
 
@@ -2123,7 +2169,7 @@ class HarmoHubApp {
         this.stopAll();
 
         const chord = this.readChord();
-        const notes = chord.getNotes();
+        const notes = chord.getSeqNotes();
         this.refreshPreview();
 
         const { pattern: seqPattern, tie: seqTie } = this.getLiveSeqPattern(chord);
@@ -2131,7 +2177,7 @@ class HarmoHubApp {
         const secPerBeat = 60 / bpm;
         const instrumentKey = document.getElementById('instrument').value;
 
-        this.schedulePlayback(notes, chord.getMidiNotes(), seqPattern, seqTie, secPerBeat, 0.1, chord.getRoleMap(), instrumentKey, chord, true);
+        this.schedulePlayback(notes, chord.getSeqMidiNotes(), seqPattern, seqTie, secPerBeat, 0.1, chord.getRoleMap(), instrumentKey, chord, true);
         this.isPlaying = true;
 
         // Attend que l'instrument (Piano notamment : ses sons se chargent depuis internet) soit prêt
@@ -2243,9 +2289,9 @@ class HarmoHubApp {
         flat.slice(startPos).forEach(({ section, index, data }) => {
             const beats = beatsFromData(data);
             const chord = new Chord(data.root, data.quality, beats, data.inversion, data.drop, octaveFromData(data), data.bass);
-            const notes = chord.getNotes();
+            const notes = chord.getSeqNotes();
             const { pattern: seqPattern, tie: seqTie } = this.resolveSeqPatternForData(chord, data);
-            this.schedulePlayback(notes, chord.getMidiNotes(), seqPattern, seqTie, secPerBeat, timeOffset, chord.getRoleMap(), data.instrument || 'piano', chord, false, { section, index });
+            this.schedulePlayback(notes, chord.getSeqMidiNotes(), seqPattern, seqTie, secPerBeat, timeOffset, chord.getRoleMap(), data.instrument || 'piano', chord, false, { section, index });
 
             // Métronome maintenu pendant la lecture (option activée) : un clic par temps de l'accord,
             // accentué sur le 1er temps de chaque mesure — indépendant des notes de l'accord jouées.
@@ -2598,6 +2644,10 @@ class HarmoHubApp {
 
         document.getElementById('root').value = d.root;
         this.revealComplexQualityIfNeeded(d.quality);
+        // La basse différente n'est accessible qu'en mode accords complexes (voir toggle-bass) : un
+        // accord qui en a une doit donc révéler ce mode même si sa qualité, elle, reste courante
+        // (ex. Cmaj/D) — sinon le contrôle resterait affiché sans son bouton pour le rouvrir/masquer.
+        if (d.bass) this.activateMoreOptions();
         document.getElementById('quality').value = d.quality;
         document.getElementById('duration').value = String(beatsFromData(d));
         this.syncDurationPicker(); // reflète la nouvelle valeur sur le bouton/menu d'icônes (voir setupDurationPicker)
@@ -4153,7 +4203,7 @@ class HarmoHubApp {
             sec.chords.forEach(data => {
                 const beats = beatsFromData(data);
                 const chord = new Chord(data.root, data.quality, beats, data.inversion, data.drop, octaveFromData(data), data.bass);
-                const midis = chord.getMidiNotes();
+                const midis = chord.getSeqMidiNotes();
                 const { pattern, tie } = this.resolveSeqPatternForData(chord, data);
                 const steps = pattern.length;
                 const { builder, channel } = trackFor(data.instrument || 'piano');
@@ -4261,7 +4311,7 @@ class HarmoHubApp {
                 sec.chords.forEach(data => {
                     const beats = beatsFromData(data);
                     const chord = new Chord(data.root, data.quality, beats, data.inversion, data.drop, octaveFromData(data), data.bass);
-                    const notes = chord.getNotes();
+                    const notes = chord.getSeqNotes();
                     const { pattern, tie } = this.resolveSeqPatternForData(chord, data);
                     const steps = pattern.length;
                     const stepDur = secPerBeat / SEQ_STEPS_PER_BEAT;
@@ -5021,7 +5071,7 @@ class HarmoHubApp {
     // Renvoie { pattern, tie }.
     getLiveSeqPattern(chord) {
         const steps = chord.beats * SEQ_STEPS_PER_BEAT;
-        const voices = chord.getMidiNotes().length;
+        const voices = chord.getSeqMidiNotes().length;
         const { pattern, tie } = parseSeqPattern(document.getElementById('arpPattern').value);
         return resizeSeqPattern(pattern, tie, steps, voices);
     }
@@ -5036,7 +5086,7 @@ class HarmoHubApp {
     syncSeqPatternForCurrentChord() {
         const chord = this.readChord();
         const steps = chord.beats * SEQ_STEPS_PER_BEAT;
-        const voices = chord.getMidiNotes().length;
+        const voices = chord.getSeqMidiNotes().length;
         let result;
         if (this.seqTouched) {
             const parsed = parseSeqPattern(document.getElementById('arpPattern').value);
@@ -5054,7 +5104,7 @@ class HarmoHubApp {
     // plutôt que de faire confiance à un arpPattern hérité qui ne correspond à rien. Renvoie { pattern, tie }.
     resolveSeqPatternForData(chord, data) {
         const steps = chord.beats * SEQ_STEPS_PER_BEAT;
-        const voices = chord.getMidiNotes().length;
+        const voices = chord.getSeqMidiNotes().length;
         const style = data.playStyle || 'held';
         const trustStored = data.seqEdited || style === 'arpeggio';
         if (!trustStored) return seqPreset(style, voices, steps);
@@ -5462,12 +5512,18 @@ class HarmoHubApp {
         host.hidden = !this.seqOpen;
         if (!this.seqOpen) return;
 
-        const midis = chord.getMidiNotes();
-        const noteNames = chord.getDisplayNotes(this.useFlatsForRoot(chord.root));
+        const midis = chord.getSeqMidiNotes();
+        const noteNames = chord.getSeqDisplayNotes(this.useFlatsForRoot(chord.root));
         const roleMap = chord.getRoleMap(); // même code couleur que le clavier : fondamentale/tierce/quinte/7e/extensions
         const voices = midis.length;
         const steps = chord.beats * SEQ_STEPS_PER_BEAT;
         const { pattern, tie } = this.getLiveSeqPattern(chord);
+
+        // Ordre d'AFFICHAGE des lignes (la plus aiguë en haut, comme un piano-roll), à ne jamais
+        // confondre avec l'index de voix `r` (identité stable utilisée par le motif/pattern — voir
+        // getSeqMidiNotes) : la basse, si présente, garde toujours le DERNIER index mais doit
+        // s'afficher tout en BAS, pas en haut — d'où ce tri séparé, purement visuel.
+        const rowOrder = Array.from({ length: voices }, (_, i) => i).sort((a, b) => midis[b] - midis[a]);
 
         // Un accord qui dure plusieurs mesures ne montre qu'une « page » à la fois (une mesure en
         // 4/4, deux en 2/4, une seule dès que la mesure est plus longue que 4 temps — voir
@@ -5507,7 +5563,7 @@ class HarmoHubApp {
         // onSeqPointerDown et findSeqStepAt, qui ne connaissent que les cases réellement dans le
         // DOM, donc celles de la page affichée) continue de raisonner sur le motif complet.
         let rowIndex = 0;
-        for (let r = voices - 1; r >= 0; r--) {
+        for (const r of rowOrder) {
             rowIndex++;
             html += `<div class="seq-label" style="grid-row:${rowIndex}; grid-column:1;">${noteNames[r]}</div>`;
             for (let s = pageStart; s < pageEnd; s++) {
@@ -5536,7 +5592,7 @@ class HarmoHubApp {
         // depuis ce bord (voir onSeqPointerDown) ; ailleurs, un glissé peint/efface comme avant.
         let notesHtml = '';
         rowIndex = 0;
-        for (let r = voices - 1; r >= 0; r--) {
+        for (const r of rowOrder) {
             rowIndex++;
             let s = pageStart;
             while (s < pageEnd) {
@@ -5693,8 +5749,8 @@ class HarmoHubApp {
         if (!data) return;
 
         const chord = new Chord(data.root, data.quality, beatsFromData(data), data.inversion, data.drop, octaveFromData(data), data.bass);
-        const notes = chord.getNotes();
-        const midis = chord.getMidiNotes();
+        const notes = chord.getSeqNotes();
+        const midis = chord.getSeqMidiNotes();
         const roleMap = chord.getRoleMap();
         const useFlats = this.useFlatsForRoot(chord.root);
 

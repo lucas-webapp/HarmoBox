@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>HarmoHub</title>
-    <link rel="stylesheet" href="style.css?v=202607234000">
+    <link rel="stylesheet" href="style.css?v=202607235000">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
 </head>
@@ -106,7 +106,9 @@
                             <button type="button" id="toggle-complex-quality" class="icon-btn" title="Afficher plus d'options (accords enrichis, renversement, drop, octave...)" aria-label="Afficher plus d'options">
                                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>
                             </button>
-                            <button type="button" id="toggle-bass" class="icon-btn" title="Choisir une note de basse différente (accord « sur » une note)" aria-label="Choisir une note de basse différente">
+                            <!-- N'a de sens qu'en mode accords complexes (voir toggle-complex-quality) : masqué
+                                 par défaut, révélé avec le reste des options avancées (activateMoreOptions). -->
+                            <button type="button" id="toggle-bass" class="icon-btn" hidden title="Choisir une note de basse différente (accord « sur » une note)" aria-label="Choisir une note de basse différente">
                                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v10"/><path d="M8 9l4 4 4-4"/><circle cx="12" cy="19" r="2.2" fill="currentColor" stroke="none"/></svg>
                             </button>
                         </div>
@@ -411,6 +413,6 @@
          script.js) — vendu en local plutôt qu'hébergé sur un CDN. Projet LAME (lame.sourceforge.net),
          licence LGPL. -->
     <script src="lame.min.js"></script>
-    <script src="script.js?v=202607234000"></script>
+    <script src="script.js?v=202607235000"></script>
 </body>
 </html>
