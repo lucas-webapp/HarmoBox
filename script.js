@@ -2696,12 +2696,16 @@ class HarmoHubApp {
         const gMode = document.getElementById('global-mode').value;
         const useFlats = useFlatsForKey(NOTES.indexOf(gRoot), gMode);
         const beatsPerBar = this.beatsPerBar();
+        // Notation "Nt" = rejoué toutes les N temps (Nt stac. : en détaché) — délibérément distincte
+        // du vocabulaire de la durée (Noire/Blanche/1 mesure...) affiché par ailleurs pour cet accord :
+        // les deux se confondaient sinon (même mots, deux notions différentes — nombre d'appuis
+        // PENDANT la durée, pas la durée elle-même). Voir aussi #playStyle dans index.html.
         const styleMap = {
-            held: 'Tenu', pulsed: 'Noire stac.', arpeggio: 'Manuel',
-            ronde_maintenu: 'Ronde', ronde_staccato: 'Ronde stac.',
-            blanche_maintenu: 'Blanche', blanche_staccato: 'Blanche stac.',
-            noire_maintenu: 'Noire', noire_staccato: 'Noire stac.',
-            croche_maintenu: 'Croche', croche_staccato: 'Croche stac.'
+            held: 'Tenu', pulsed: '1t stac.', arpeggio: 'Manuel',
+            ronde_maintenu: '4t', ronde_staccato: '4t stac.',
+            blanche_maintenu: '2t', blanche_staccato: '2t stac.',
+            noire_maintenu: '1t', noire_staccato: '1t stac.',
+            croche_maintenu: '½t', croche_staccato: '½t stac.'
         };
         const dragging = !!(this.drag && this.drag.moved);
 

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>HarmoHub</title>
-    <link rel="stylesheet" href="style.css?v=202607232830">
+    <link rel="stylesheet" href="style.css?v=202607232900">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
 </head>
@@ -178,19 +178,19 @@
                         </div>
                     </div>
                     <div class="select-group">
-                        <select id="playStyle">
-                            <option value="held">Tenu</option>
-                            <optgroup label="Maintenu (soutenu)">
-                                <option value="ronde_maintenu">Ronde</option>
-                                <option value="blanche_maintenu">Blanche</option>
-                                <option value="noire_maintenu">Noire</option>
-                                <option value="croche_maintenu">Croche</option>
+                        <select id="playStyle" title="Style de jeu — combien de fois l'accord est rejoué PENDANT sa durée (réglée à côté), pas sa durée elle-même">
+                            <option value="held">Tenu (1 seul appui)</option>
+                            <optgroup label="Rejoué, son continu">
+                                <option value="ronde_maintenu">Toutes les 4 temps</option>
+                                <option value="blanche_maintenu">Toutes les 2 temps</option>
+                                <option value="noire_maintenu">À chaque temps</option>
+                                <option value="croche_maintenu">2 fois par temps</option>
                             </optgroup>
-                            <optgroup label="Staccato (détaché)">
-                                <option value="ronde_staccato">Ronde</option>
-                                <option value="blanche_staccato">Blanche</option>
-                                <option value="noire_staccato">Noire</option>
-                                <option value="croche_staccato">Croche</option>
+                            <optgroup label="Rejoué, détaché (staccato)">
+                                <option value="ronde_staccato">Toutes les 4 temps</option>
+                                <option value="blanche_staccato">Toutes les 2 temps</option>
+                                <option value="noire_staccato">À chaque temps</option>
+                                <option value="croche_staccato">2 fois par temps</option>
                             </optgroup>
                             <option value="arpeggio">Manuel</option>
                         </select>
@@ -401,6 +401,6 @@
          script.js) — vendu en local plutôt qu'hébergé sur un CDN. Projet LAME (lame.sourceforge.net),
          licence LGPL. -->
     <script src="lame.min.js"></script>
-    <script src="script.js?v=202607232830"></script>
+    <script src="script.js?v=202607232900"></script>
 </body>
 </html>
