@@ -1171,6 +1171,7 @@ const AUTOPLAY_SELECT_KEY = 'harmoboxAutoplaySelect';
 const METRONOME_COUNTIN_KEY = 'harmoboxMetronomeCountIn';
 const METRONOME_SUBDIVISION_KEY = 'harmoboxMetronomeSubdivision';
 const SONG_CARD_COLLAPSED_KEY = 'harmoboxSongCardCollapsed';
+const SHOW_ROMAN_KEY = 'harmoboxShowRomanNumerals';
 
 // Curseurs de volume (0-100, plus intuitif qu'une valeur en décibels) : 0 = silence, 100 = 0 dB
 // (plein volume « normal »), avec un plancher à -40 dB pour que même « presque muet » reste audible
@@ -1366,6 +1367,11 @@ class HarmoHubApp {
         // défaut pour ne rien changer au comportement existant (bouton dédié, voir toggle-metronome-
         // subdivision), qu'on garde ou non le métronome pendant la lecture par ailleurs.
         this.metronomeSubdivision = localStorage.getItem(METRONOME_SUBDIVISION_KEY) === '1';
+
+        // Chiffrage romain (I, IV, V7...) affiché en petit dans chaque case de la grille : affiché par
+        // défaut, comme le comportement historique — désactivable dans Paramètres > Affichage pour qui
+        // n'en a pas l'usage (voir renderDisplayPanel/loadProgression).
+        this.showRomanNumerals = localStorage.getItem(SHOW_ROMAN_KEY) !== '0';
 
         // Chaque accord choisit sa propre banque de son (voir data.instrument) : plusieurs
         // instruments Tone.js peuvent donc jouer simultanément. Construits à la demande et mis en
@@ -2876,7 +2882,7 @@ class HarmoHubApp {
                     const zebra = `background-image: ${buildMeasureZebra(s, beatsPerBar, beatsPerRow, inLoop)};`;
                     const style = `grid-column: ${s.col + 1} / span ${s.span}; grid-row: ${s.row * 2 + 1}; ${zebra}`;
 
-                    const romanEl = s.isFirst ? `<span class="cell-roman">${roman}</span>` : '';
+                    const romanEl = (s.isFirst && this.showRomanNumerals) ? `<span class="cell-roman">${roman}</span>` : '';
                     const metaEl = s.isFirst ? `<span class="cell-meta">${styleLabel}</span>` : '';
                     const contFlag = (s.split && !s.isFirst) ? ' <span class="cell-cont">↩</span>' : '';
                     // Petits traits à chaque limite de mesure interne, positionnés en % de la largeur du
@@ -3267,6 +3273,7 @@ class HarmoHubApp {
         document.getElementById('settings-overlay').hidden = false;
         document.getElementById('open-settings').classList.add('active');
         this.renderAudioPanel();
+        this.renderDisplayPanel();
         this.renderFilesPanel();
         this.updateGlobalUndoRedoButtons(); // le bouton unique repointe vers l'historique Fichiers
     }
@@ -3340,6 +3347,28 @@ class HarmoHubApp {
         localStorage.setItem(METRONOME_COUNTIN_KEY, on ? '1' : '0');
         const btn = document.getElementById('toggle-metronome-countin');
         if (btn) btn.setAttribute('aria-checked', on);
+    }
+
+    // ---- Panneau Affichage : préférences purement visuelles de la grille d'accords ----
+    renderDisplayPanel() {
+        const host = document.getElementById('settings-panel-display');
+        if (!host) return;
+        host.innerHTML = `
+            <div class="settings-toggle-row">
+                <label for="toggle-show-roman">Chiffres romains (I, IV, V7...) dans la grille</label>
+                <button type="button" id="toggle-show-roman" class="switch" role="switch" aria-checked="${this.showRomanNumerals}" aria-label="Chiffres romains dans la grille">
+                    <span class="switch-thumb"></span>
+                </button>
+            </div>`;
+        document.getElementById('toggle-show-roman').onclick = () => this.setShowRomanNumerals(!this.showRomanNumerals);
+    }
+
+    setShowRomanNumerals(on) {
+        this.showRomanNumerals = on;
+        localStorage.setItem(SHOW_ROMAN_KEY, on ? '1' : '0');
+        const btn = document.getElementById('toggle-show-roman');
+        if (btn) btn.setAttribute('aria-checked', on);
+        this.loadProgression();
     }
 
     setGeneralVolume(percent) {
