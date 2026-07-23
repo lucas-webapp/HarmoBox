@@ -546,18 +546,22 @@ main {
     flex: none;
 }
 
-/* Titre du morceau (#song-select) DANS l'en-tête Morceau, entre "Morceau" et les actions — déplié,
-   il passe seul en pleine largeur sur sa propre ligne (flex-basis:100% + flex-wrap:wrap ci-dessus,
-   même rendu qu'avant) ; replié (#song-card.collapsed plus bas), il remonte à côté du titre "Morceau"
-   sur la même ligne, quitte à se faire tronquer — voir toggleSongCardCollapse. */
+/* Titre du morceau (#song-select) DANS l'en-tête Morceau — déplié, "Morceau" ET les boutons
+   (+/enregistrer/replier) restent ensemble sur la MÊME ligne (comme avant), le titre passant seul en
+   pleine largeur sur la ligne suivante (flex-basis:100% + flex-wrap:wrap ci-dessus, order APRÈS les
+   actions pour ne pas les pousser à la ligne avec lui) ; replié (#song-card.collapsed plus bas), le
+   titre revient ENTRE "Morceau" et les boutons sur cette même ligne unique, quitte à se faire
+   tronquer — voir toggleSongCardCollapse. */
 #song-card .card-head h2 { flex: none; order: 1; }
-#song-card .card-head-actions { order: 3; }
+#song-card .card-head-actions { order: 2; }
 #song-card #song-select {
-    order: 2;
+    order: 3;
     flex: 1 1 100%;
     min-width: 0;
     margin-top: 8px;
 }
+#song-card.collapsed #song-select { order: 2; }
+#song-card.collapsed .card-head-actions { order: 3; }
 
 .icon-btn {
     flex: none;
@@ -1618,9 +1622,9 @@ button:active { transform: translateY(1px); }
    dans buildBeatZebra (script.js) : cette classe pose maintenant TOUJOURS un background-image en
    ligne (zébrure des temps faibles), qui écraserait sinon toute règle CSS sur la même propriété. */
 
-/* Style de jeu (Tenu/Lié/Détaché...) sous le symbole : icône + libellé compact (voir styleMetaHtml,
-   même pictos que le sélecteur Style de jeu) plutôt qu'un simple texte ("1t stac.") livré seul —
-   l'œil distingue lié/détaché d'un coup d'œil sans avoir à lire le mot. Désactivable dans
+/* Style de jeu (Tenu/Lié/Détaché...) sous le symbole : UNIQUEMENT l'icône (voir styleMetaHtml, mêmes
+   pictos que le sélecteur Style de jeu), sans libellé texte — l'œil distingue lié/détaché d'un coup
+   d'œil au picto seul, nom repris en aria-label/title pour l'accessibilité. Désactivable dans
    Paramètres > Affichage (voir showStyleLabel). */
 .cell-meta {
     position: absolute;
@@ -1630,22 +1634,14 @@ button:active { transform: translateY(1px); }
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 3px;
     color: var(--text-muted);
     overflow: hidden;
     padding: 0 4px;
 }
 .cell-meta-icon {
     flex: none;
-    width: 15px;
-    height: 10px;
-}
-.cell-meta-label {
-    font-size: var(--fs-2xs);
-    letter-spacing: 0.02em;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    width: 22px;
+    height: 15px;
 }
 
 /* Police réduite pour les segments courts */

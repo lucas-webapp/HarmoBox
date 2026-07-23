@@ -346,13 +346,14 @@ const PLAYSTYLE_BY_VALUE = {};
 PLAYSTYLE_OPTIONS.forEach(o => { PLAYSTYLE_BY_VALUE[o.value] = o; });
 PLAYSTYLE_BY_VALUE.pulsed = PLAYSTYLE_BY_VALUE.noire_staccato; // alias historique (voir seqPreset)
 
-// Icône + libellé compact affiché sous chaque accord de la grille (option Affichage > Style de jeu,
-// voir showStyleLabel/loadProgression) : mêmes pictos que le sélecteur Style de jeu (PLAYSTYLE_OPTIONS)
-// pour rester cohérent — et, comme lui, sans suffixe "stac." (l'icône le montre déjà : points isolés
-// sans liaison = détaché). Un accord dont le style enregistré n'existe plus retombe sur « Tenu ».
+// Icône SEULE (pas de libellé texte) affichée sous chaque accord de la grille (option Affichage >
+// Style de jeu, voir showStyleLabel/loadProgression) : mêmes pictos que le sélecteur Style de jeu
+// (PLAYSTYLE_OPTIONS), pour rester cohérent et lisible d'un coup d'œil sans alourdir la case d'un
+// mot. Le nom reste accessible (lecteur d'écran, infobulle) via aria-label/title. Un accord dont le
+// style enregistré n'existe plus retombe sur « Tenu ».
 function styleMetaHtml(playStyle) {
     const opt = PLAYSTYLE_BY_VALUE[playStyle] || PLAYSTYLE_BY_VALUE.held;
-    return `<svg class="cell-meta-icon" viewBox="0 0 24 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${opt.svg}</svg><span class="cell-meta-label">${opt.label}</span>`;
+    return `<svg class="cell-meta-icon" viewBox="0 0 24 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="${opt.name}"><title>${opt.name}</title>${opt.svg}</svg>`;
 }
 
 // Récupère la durée en temps d'un accord sauvegardé (compatibilité : anciens formats en "measures").
@@ -3336,8 +3337,7 @@ class HarmoHubApp {
                 <button type="button" id="toggle-metronome-countin" class="switch" role="switch" aria-checked="${this.metronomeCountIn}" aria-label="Clics du décompte avant la lecture de la grille">
                     <span class="switch-thumb"></span>
                 </button>
-            </div>
-            <div class="settings-slider-hint">Le volume général s'applique en plus du réglage spécifique ci-dessus, sans changer son équilibre par rapport aux accords. Le tempo se règle dans la carte « Morceau » (cliquer sur sa valeur permet de la saisir directement au clavier).</div>`;
+            </div>`;
 
         document.getElementById('general-volume').oninput = (e) => this.setGeneralVolume(+e.target.value);
         document.getElementById('metronome-volume').oninput = (e) => this.setMetronomeVolume(+e.target.value);
@@ -3369,8 +3369,8 @@ class HarmoHubApp {
         if (!host) return;
         host.innerHTML = `
             <div class="settings-toggle-row">
-                <label for="toggle-show-roman" title="Chiffres romains (I, IV, V7...) dans la grille et le PDF">Chiffres romains</label>
-                <button type="button" id="toggle-show-roman" class="switch" role="switch" aria-checked="${this.showRomanNumerals}" aria-label="Chiffres romains dans la grille et le PDF">
+                <label for="toggle-show-roman" title="Degrés (I, IV, V7...) dans la grille et le PDF">Degrés</label>
+                <button type="button" id="toggle-show-roman" class="switch" role="switch" aria-checked="${this.showRomanNumerals}" aria-label="Degrés dans la grille et le PDF">
                     <span class="switch-thumb"></span>
                 </button>
             </div>
