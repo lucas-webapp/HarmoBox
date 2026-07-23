@@ -1421,9 +1421,16 @@ button:active { transform: translateY(1px); }
 .loop-range-handle {
     align-self: stretch;
     z-index: 3;
+    position: relative;
     cursor: ew-resize;
     touch-action: none;
 }
+/* Élargit la zone de préhension bien au-delà d'une seule colonne de grille (souvent trop étroite au
+   doigt) — surtout vers l'INTÉRIEUR de la plage (toujours sûr, jamais rogné) et un peu vers
+   l'extérieur (utile sauf quand le bord de la plage est aussi le tout premier/dernier accord de la
+   grille : là, .chord-grid { overflow: hidden } rognerait cette partie-là de la zone). */
+.loop-range-handle-left { margin: 0 -18px 0 -6px; width: calc(100% + 24px); }
+.loop-range-handle-right { margin: 0 -6px 0 -18px; width: calc(100% + 24px); }
 
 /* Le lavis doré des cases couvertes par la plage (.in-loop-range) est désormais composé directement
    dans buildBeatZebra (script.js) : cette classe pose maintenant TOUJOURS un background-image en
