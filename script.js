@@ -1599,6 +1599,12 @@ class HarmoBoxApp {
             const menu = document.getElementById('context-menu');
             if (!menu.hidden && !menu.contains(e.target)) this.closeContextMenu();
         });
+        // Clic en dehors du popup « où insérer ? » (voir openSectionPicker) : referme sans rien
+        // ajouter, comme le menu contextuel ci-dessus.
+        document.addEventListener('pointerdown', (e) => {
+            const picker = document.getElementById('section-picker-menu');
+            if (!picker.hidden && !picker.contains(e.target)) this.closeSectionPicker();
+        });
 
         // Désélectionne l'accord de la grille dès qu'on clique en dehors de la grille et du menu
         // contextuel — évite l'ambiguïté entre l'accord SÉLECTIONNÉ (voir bouton « Accord » ci-
@@ -2361,46 +2367,119 @@ class HarmoBoxApp {
         return true;
     }
 
-    // Ajoute PLUSIEURS accords d'un coup, séparés par "/" (ex. "CM7/Am7/F6/Bbm7" pour 4 mesures) — un
-    // accord PAR MESURE (beatsPerBar), toujours en fondamentale, sans renversement/drop/basse, comme
-    // addChordFromSymbol. Tout ou rien : si un seul symbole ne se reconnaît pas, rien n'est ajouté
-    // (un ajout partiel serait déroutant — mieux vaut corriger et retaper la liste entière).
-    addChordsFromSymbolList(section, listStr) {
+    // Parse une liste "/" (ex. "CM7/Am7/F6/Bbm7") en tableau d'accords reconnus, ou renvoie null (en
+    // affichant lequel a échoué) si un seul symbole n'est pas valide — tout ou rien, un ajout partiel
+    // serait déroutant, mieux vaut corriger et retaper la liste entière.
+    parseChordSymbolList(listStr) {
         const parts = listStr.split('/').map(p => p.trim()).filter(p => p.length > 0);
-        if (parts.length === 0) return false;
+        if (parts.length === 0) return null;
         const parsedList = parts.map(p => parseChordSymbol(p));
         const badIndex = parsedList.findIndex(p => !p);
         if (badIndex !== -1) {
             this.flashHint(`Accord non reconnu : « ${parts[badIndex]} »`);
-            return false;
+            return null;
+        }
+        return parsedList;
+    }
+
+    // Insère une liste déjà validée (voir parseChordSymbolList) dans une partie, un accord PAR
+    // MESURE (beatsPerBar), toujours en fondamentale, sans renversement/drop/basse — `section` peut
+    // valoir 'new' pour en créer une à la volée en même temps, dans le MÊME geste d'annulation (une
+    // seule action pour l'utilisateur, voir openSectionPicker).
+    commitChordList(section, parsedList) {
+        const sections = loadProgressionSections();
+        this.pushUndo(sections);
+        if (section === 'new') {
+            sections.push({ title: '', chords: [] });
+            section = sections.length - 1;
         }
         const beats = this.beatsPerBar();
         const playStyle = document.getElementById('playStyle').value;
         const instrument = document.getElementById('instrument').value;
-        const sections = loadProgressionSections();
-        this.pushUndo(sections);
         parsedList.forEach(parsed => sections[section].chords.push(this.buildChordData(parsed, beats, playStyle, instrument)));
         saveProgressionSections(sections);
+        this.activeSection = section;
         this.loadProgression();
         this.flashHint(`${parsedList.length} accords ajoutés (1 par mesure)`);
+    }
+
+    // Ajoute PLUSIEURS accords d'un coup, séparés par "/" — utilisé par la case "+" (voir
+    // buildAddCellHtml), qui vise déjà sans équivoque la partie où elle apparaît : jamais besoin d'y
+    // demander la destination, contrairement à l'ajout rapide (voir addQuickChord/openSectionPicker).
+    addChordsFromSymbolList(section, listStr) {
+        const parsedList = this.parseChordSymbolList(listStr);
+        if (!parsedList) return false;
+        this.commitChordList(section, parsedList);
         return true;
     }
 
-    // Point d'entrée commun à l'ajout rapide et à la case "+" (voir buildAddCellHtml) : un symbole
-    // seul ajoute UN accord à la durée réglée dans le panneau ; plusieurs séparés par "/" ajoutent un
-    // accord par mesure d'un coup (voir addChordsFromSymbolList).
+    // Point d'entrée commun à la case "+" (voir buildAddCellHtml) : un symbole seul ajoute UN accord
+    // à la durée réglée dans le panneau ; plusieurs séparés par "/" ajoutent un accord par mesure
+    // d'un coup (voir addChordsFromSymbolList).
     addChordInputToSection(section, value) {
         return value.includes('/')
             ? this.addChordsFromSymbolList(section, value)
             : this.addChordFromSymbol(section, value);
     }
 
+    // Ajout rapide (barre au-dessus de la grille) : un symbole seul ajoute directement à la partie
+    // ACTIVE, comme avant. Plusieurs séparés par "/" : s'il y a plusieurs parties, demande d'abord où
+    // les insérer (openSectionPicker) — ambigu sinon, contrairement à la case "+" qui vise déjà sans
+    // équivoque la partie où elle apparaît.
     addQuickChord() {
         const input = document.getElementById('quick-add-input');
-        if (this.addChordInputToSection(this.activeSection, input.value)) {
+        const value = input.value;
+        if (!value.includes('/')) {
+            if (this.addChordFromSymbol(this.activeSection, value)) { input.value = ''; input.focus(); }
+            return;
+        }
+        const parsedList = this.parseChordSymbolList(value);
+        if (!parsedList) return;
+
+        const sections = loadProgressionSections();
+        if (sections.length <= 1) {
+            this.commitChordList(0, parsedList);
             input.value = '';
             input.focus();
+            return;
         }
+        this.openSectionPicker(input, (section) => {
+            this.commitChordList(section, parsedList);
+            input.value = '';
+            input.focus();
+        });
+    }
+
+    // Popup léger (même style que le menu contextuel) demandant dans quelle partie insérer un ajout
+    // en lot ("/", voir addQuickChord) quand il y en a plusieurs. `onPick(section)` est appelé avec
+    // l'index choisi, ou 'new' pour en créer une à la volée (voir commitChordList).
+    openSectionPicker(anchorEl, onPick) {
+        const menu = document.getElementById('section-picker-menu');
+        const sections = loadProgressionSections();
+        menu.innerHTML = sections.map((sec, i) => {
+            const label = (sec.title && sec.title.trim()) ? sec.title : `Partie ${i + 1}`;
+            return `<button type="button" data-section-pick="${i}">${escapeHtml(label)}</button>`;
+        }).join('') + `<button type="button" data-section-pick="new" class="section-pick-new">${svgIcon('plus')} Nouvelle partie</button>`;
+        menu.querySelectorAll('button').forEach(btn => {
+            btn.onclick = () => {
+                this.closeSectionPicker();
+                const val = btn.dataset.sectionPick;
+                onPick(val === 'new' ? 'new' : parseInt(val));
+            };
+        });
+
+        const rect = anchorEl.getBoundingClientRect();
+        menu.hidden = false;
+        const pad = 8;
+        const left = Math.min(rect.left, window.innerWidth - menu.offsetWidth - pad);
+        const top = Math.min(rect.bottom + 4, window.innerHeight - menu.offsetHeight - pad);
+        menu.style.left = `${Math.max(pad, left)}px`;
+        menu.style.top = `${Math.max(pad, top)}px`;
+    }
+
+    closeSectionPicker() {
+        const menu = document.getElementById('section-picker-menu');
+        if (menu) menu.hidden = true;
     }
 
     // Passe les contrôles en mode « modification » d'un accord existant
@@ -5398,6 +5477,7 @@ class HarmoBoxApp {
             const mod = e.ctrlKey || e.metaKey;
 
             if (e.key === 'Escape' && !document.getElementById('context-menu').hidden) { this.closeContextMenu(); return; }
+            if (e.key === 'Escape' && !document.getElementById('section-picker-menu').hidden) { this.closeSectionPicker(); return; }
             if (e.key === 'Escape' && this.settingsOpen) { this.closeSettings(); return; }
 
             // Barre d'espace : joue/stoppe l'accord courant si le séquenceur est ouvert (pour

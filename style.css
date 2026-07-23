@@ -159,6 +159,11 @@ button, .icon-btn, .prog-section-del, .seq-presets button, .seq-delete-btn {
 .context-menu button[data-ctx-action="delete"] { color: #ff6b6b; }
 .context-menu button[data-ctx-action="delete"]:hover { background: rgba(255, 90, 80, 0.12); }
 
+/* Popup "où insérer ?" (voir openSectionPicker) : options = parties existantes + créer une nouvelle,
+   cette dernière mise en valeur (accent) pour la distinguer des parties déjà là. */
+#section-picker-menu button.section-pick-new { color: var(--accent); border-top: 1px solid var(--border); margin-top: 4px; padding-top: 11px; }
+#section-picker-menu button.section-pick-new:hover { background: rgba(0, 230, 118, 0.1); }
+
 /* Édition en ligne des titres (morceaux, dossiers) : remplace l'ancien prompt() natif — un simple
    champ texte à la place du nom, dans son contexte d'origine. */
 .inline-rename-input {

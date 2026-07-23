@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>HarmoBox</title>
-    <link rel="stylesheet" href="style.css?v=202607230410">
+    <link rel="stylesheet" href="style.css?v=202607230445">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
 </head>
@@ -44,6 +44,10 @@
             <span class="ctx-label">Supprimer</span>
         </button>
     </div>
+
+    <!-- Rempli dynamiquement (voir openSectionPicker) : demande dans quelle partie insérer un ajout
+         en lot ("/", ajout rapide) quand il y en a plusieurs — même style que #context-menu. -->
+    <div id="section-picker-menu" class="context-menu" hidden></div>
 
     <div id="settings-overlay" class="settings-overlay" hidden>
         <div class="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
@@ -368,6 +372,6 @@
          script.js) — vendu en local plutôt qu'hébergé sur un CDN. Projet LAME (lame.sourceforge.net),
          licence LGPL. -->
     <script src="lame.min.js"></script>
-    <script src="script.js?v=202607230410"></script>
+    <script src="script.js?v=202607230445"></script>
 </body>
 </html>
