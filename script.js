@@ -1391,8 +1391,8 @@ class HarmoHubApp {
         this.refreshPreview();       // affiche l'accord courant + cadre le clavier dès l'ouverture
         this.renderSequencer();      // prépare le motif (masqué tant que le panneau n'est pas ouvert)
         this.refreshSongList();      // remplit le sélecteur de morceaux enregistrés
-        this.updateUndoRedoButtons();
-        this.updateSeqUndoRedoButtons();
+        this.updateGlobalUndoRedoButtons();
+        this.updateGlobalUndoRedoButtons();
     }
 
     setupEventListeners() {
@@ -1417,8 +1417,8 @@ class HarmoHubApp {
         document.getElementById('play-prog').onclick = () => this.playProgression();
         document.getElementById('stop').onclick = () => this.stopAll();
 
-        document.getElementById('undo-btn').onclick = () => this.undo();
-        document.getElementById('redo-btn').onclick = () => this.redo();
+        document.getElementById('global-undo-btn').onclick = () => this.globalUndo();
+        document.getElementById('global-redo-btn').onclick = () => this.globalRedo();
 
         // La banque de son est un réglage PAR ACCORD (comme le style de lecture), pas un instrument
         // global unique : on ne fait ici que présélectionner le dernier choix pour un nouvel accord,
@@ -1565,8 +1565,6 @@ class HarmoHubApp {
         };
 
         document.getElementById('toggle-sequencer').onclick = () => this.toggleSequencer();
-        document.getElementById('seq-undo-btn').onclick = () => this.seqUndo();
-        document.getElementById('seq-redo-btn').onclick = () => this.seqRedo();
 
         document.getElementById('cancel-edit').onclick = () => this.cancelEdit();
 
@@ -1577,8 +1575,23 @@ class HarmoHubApp {
         document.getElementById('song-select').onchange = (e) => this.onSongSelectChange(e.target.value);
         document.getElementById('song-new').onclick = () => this.newSong();
         document.getElementById('song-save').onclick = () => this.saveCurrentSong();
-        const saveAsBtn = document.getElementById('song-save-as');
-        if (saveAsBtn) saveAsBtn.onclick = () => this.saveCurrentAsSong();
+
+        // Renommer le morceau ouvert : double-clic (souris) / double-tap (doigt) directement sur son
+        // titre, plutôt qu'un bouton dédié séparé. Détection manuelle par minuterie sur `pointerdown`
+        // (comme le double-tap d'édition de la grille, voir onGridPointerUp) plutôt que l'événement
+        // natif `dblclick` : sur un <select>, le SECOND appui ouvrirait sinon son menu déroulant natif
+        // avant qu'un dblclick ne puisse être détecté — preventDefault() dès CE pointerdown l'empêche.
+        let lastSongTitleTap = 0;
+        document.getElementById('song-select').addEventListener('pointerdown', (e) => {
+            const now = Date.now();
+            if (now - lastSongTitleTap < 450) {
+                e.preventDefault();
+                lastSongTitleTap = 0;
+                this.startInlineRenameSongMain();
+            } else {
+                lastSongTitleTap = now;
+            }
+        });
 
         // Fenêtre Paramètres : toutes les sections (Son, Fichiers) se rendent ensemble à l'ouverture,
         // en une seule vue qui défile, sans onglet.
@@ -2845,7 +2858,7 @@ class HarmoHubApp {
         });
 
         this.updateSaveButtons();
-        this.updateUndoRedoButtons();
+        this.updateGlobalUndoRedoButtons();
         // La grille vient d'être entièrement reconstruite (nouveau HTML) : la barre de lecture, elle,
         // n'est jamais réinsérée dans le gabarit lui-même (voir updateGridPlayhead) — la replacer ici
         // sinon un ré-rendu la ferait simplement disparaître.
@@ -2979,8 +2992,6 @@ class HarmoHubApp {
             songs.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
         select.value = currentId || '';
         document.getElementById('song-save').title = 'Enregistrer (Ctrl+S)';
-        const saveAsBtn = document.getElementById('song-save-as');
-        if (saveAsBtn) saveAsBtn.hidden = !currentId; // rien à « dupliquer sous un autre nom » si jamais enregistré
     }
 
     onSongSelectChange(id) {
@@ -3061,13 +3072,11 @@ class HarmoHubApp {
         this.flashHint('Morceau enregistré');
     }
 
-    // Enregistre l'état actuel sous un nom : nouveau morceau, ou copie séparée si un morceau est
-    // déjà ouvert (celui-ci n'est pas modifié — voir saveCurrentSong pour l'écraser à la place).
-    // Le select se cache et un champ de saisie apparaît à sa place, plutôt qu'un prompt() natif
-    // pour choisir le nom du morceau à enregistrer.
+    // Enregistre l'état actuel comme un NOUVEAU morceau (appelé uniquement quand aucun morceau n'est
+    // encore ouvert — voir saveCurrentSong et les export PDF/MIDI/MP3, qui en ont besoin pour nommer
+    // le fichier). Le select se cache et un champ de saisie apparaît à sa place, plutôt qu'un prompt()
+    // natif pour choisir le nom du morceau à enregistrer.
     saveCurrentAsSong() {
-        const currentId = getCurrentSongId();
-        const existing = currentId ? loadSongs().find(s => s.id === currentId) : null;
         const select = document.getElementById('song-select');
         if (!select || select.hidden) return; // déjà en cours de saisie
 
@@ -3075,11 +3084,9 @@ class HarmoHubApp {
         const input = document.createElement('input');
         input.type = 'text';
         input.className = 'compact song-select-full inline-rename-input';
-        input.placeholder = existing ? 'Enregistrer une copie sous quel nom ?' : 'Nom du morceau…';
-        input.value = existing ? existing.name : '';
+        input.placeholder = 'Nom du morceau…';
         select.insertAdjacentElement('afterend', input);
         input.focus();
-        input.select();
 
         const finish = () => { input.remove(); select.hidden = false; };
         const commit = () => {
@@ -3112,6 +3119,50 @@ class HarmoHubApp {
         });
     }
 
+    // Renomme EN PLACE (même id) le morceau actuellement ouvert — double-clic/double-tap sur son
+    // titre (voir wiring dans setupEventListeners), à la place de l'ancien bouton dédié « Enregistrer
+    // sous... ». Ne fait rien si rien n'est encore enregistré : pas de nom à changer, il faut d'abord
+    // « Enregistrer » une première fois (voir saveCurrentAsSong).
+    startInlineRenameSongMain() {
+        const id = getCurrentSongId();
+        if (!id) { this.flashHint('Enregistre d\'abord ce morceau pour pouvoir le renommer'); return; }
+        const songs = loadSongs();
+        const song = songs.find(s => s.id === id);
+        if (!song) return;
+        const select = document.getElementById('song-select');
+        if (!select || select.hidden) return; // déjà en cours de saisie (ex. Enregistrer)
+
+        select.hidden = true;
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'compact song-select-full inline-rename-input';
+        input.value = song.name;
+        select.insertAdjacentElement('afterend', input);
+        input.focus();
+        input.select();
+
+        let done = false;
+        const finish = () => { input.remove(); select.hidden = false; };
+        const commit = () => {
+            if (done) return;
+            done = true;
+            const val = input.value.trim();
+            if (val && val !== song.name) {
+                this.pushFilesUndo();
+                song.name = val;
+                saveSongs(songs);
+            }
+            finish();
+            this.refreshSongList();
+        };
+        input.addEventListener('blur', commit);
+        input.addEventListener('keydown', (e) => {
+            e.stopPropagation();
+            if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+            else if (e.key === 'Escape') { e.preventDefault(); done = true; input.removeEventListener('blur', commit); finish(); }
+        });
+    }
+
     // ---------- Fenêtre Paramètres ----------
     // Toujours affichée en une seule vue qui défile, sans onglet : Son en premier (le réglage le
     // plus utilisé), puis Fichiers en dessous. Ajouter une future section = un nouveau <section> +
@@ -3122,12 +3173,14 @@ class HarmoHubApp {
         document.getElementById('open-settings').classList.add('active');
         this.renderAudioPanel();
         this.renderFilesPanel();
+        this.updateGlobalUndoRedoButtons(); // le bouton unique repointe vers l'historique Fichiers
     }
 
     closeSettings() {
         this.settingsOpen = false;
         document.getElementById('settings-overlay').hidden = true;
         document.getElementById('open-settings').classList.remove('active');
+        this.updateGlobalUndoRedoButtons();
     }
 
     // ---- Panneau Son : volume général (maître), puis volume du métronome ----
@@ -3296,12 +3349,6 @@ class HarmoHubApp {
                     <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21V9"/><path d="m7 13 5-5 5 5"/><path d="M5 3h14"/></svg>
                 </button>
                 <input type="file" id="library-import-input" accept="application/json" hidden>
-                <button type="button" id="files-undo-btn" class="icon-btn" title="Annuler (Ctrl+Z)" aria-label="Annuler" ${this.filesUndoStack.length ? '' : 'disabled'}>
-                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
-                </button>
-                <button type="button" id="files-redo-btn" class="icon-btn" title="Rétablir (Ctrl+Y)" aria-label="Rétablir" ${this.filesRedoStack.length ? '' : 'disabled'}>
-                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>
-                </button>
             </div>`;
 
         if (songs.length === 0 && folders.length === 0) {
@@ -3392,10 +3439,6 @@ class HarmoHubApp {
     wireFilesToolbar() {
         const newBtn = document.getElementById('new-folder-btn');
         if (newBtn) newBtn.onclick = () => this.startInlineCreateFolder();
-        const u = document.getElementById('files-undo-btn');
-        if (u) u.onclick = () => this.filesUndo();
-        const r = document.getElementById('files-redo-btn');
-        if (r) r.onclick = () => this.filesRedo();
         const exportBtn = document.getElementById('library-export-btn');
         if (exportBtn) exportBtn.onclick = () => this.exportLibrary();
         const importBtn = document.getElementById('library-import-btn');
@@ -3721,7 +3764,7 @@ class HarmoHubApp {
         this.filesUndoStack.push(JSON.stringify({ folders: loadFolders(), songs: loadSongs() }));
         if (this.filesUndoStack.length > this.undoLimit) this.filesUndoStack.shift();
         this.filesRedoStack = [];
-        this.updateFilesUndoRedoButtons();
+        this.updateGlobalUndoRedoButtons();
     }
 
     filesUndo() {
@@ -3732,7 +3775,7 @@ class HarmoHubApp {
         saveSongs(prev.songs);
         this.refreshSongList();
         if (this.settingsOpen) this.renderFilesPanel();
-        this.updateFilesUndoRedoButtons();
+        this.updateGlobalUndoRedoButtons();
         this.flashHint('Annulé');
     }
 
@@ -3744,16 +3787,10 @@ class HarmoHubApp {
         saveSongs(next.songs);
         this.refreshSongList();
         if (this.settingsOpen) this.renderFilesPanel();
-        this.updateFilesUndoRedoButtons();
+        this.updateGlobalUndoRedoButtons();
         this.flashHint('Rétabli');
     }
 
-    updateFilesUndoRedoButtons() {
-        const u = document.getElementById('files-undo-btn');
-        const r = document.getElementById('files-redo-btn');
-        if (u) u.disabled = this.filesUndoStack.length === 0;
-        if (r) r.disabled = this.filesRedoStack.length === 0;
-    }
 
     getCurrentSongName() {
         const id = getCurrentSongId();
@@ -5290,6 +5327,7 @@ class HarmoHubApp {
         if (!this.seqOpen) this.seqSelections = [];
         document.getElementById('toggle-sequencer').classList.toggle('active', this.seqOpen);
         this.renderSequencer();
+        this.updateGlobalUndoRedoButtons(); // le bouton unique repointe vers l'historique du séquenceur
     }
 
     // Menu contextuel d'un accord de la grille (« Séquenceur ») : le charge dans le panneau Accord
@@ -5300,6 +5338,7 @@ class HarmoHubApp {
         this.seqOpen = true;
         document.getElementById('toggle-sequencer').classList.add('active');
         this.renderSequencer();
+        this.updateGlobalUndoRedoButtons();
         document.getElementById('arp-sequencer').scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
@@ -5617,7 +5656,7 @@ class HarmoHubApp {
         this.undoStack.push(JSON.stringify({ sections, root }));
         if (this.undoStack.length > this.undoLimit) this.undoStack.shift();
         this.redoStack = [];
-        this.updateUndoRedoButtons();
+        this.updateGlobalUndoRedoButtons();
     }
 
     // Restaure la tonalité globale mémorisée dans une entrée d'historique si elle diffère de
@@ -5659,14 +5698,39 @@ class HarmoHubApp {
         if (this.activeSection >= sections.length) this.activeSection = Math.max(0, sections.length - 1);
         this.selectedIndex = null;
         this.loadProgression();
-        this.updateUndoRedoButtons();
+        this.updateGlobalUndoRedoButtons();
     }
 
-    updateUndoRedoButtons() {
-        const undoBtn = document.getElementById('undo-btn');
-        const redoBtn = document.getElementById('redo-btn');
-        if (undoBtn) undoBtn.disabled = this.undoStack.length === 0;
-        if (redoBtn) redoBtn.disabled = this.redoStack.length === 0;
+    // Un seul bouton annuler/rétablir tout en haut pour les 3 historiques (grille, séquenceur,
+    // fichiers) plutôt qu'une paire dupliquée dans chaque carte — bascule sur le bon exactement comme
+    // Ctrl+Z/Ctrl+Y (voir setupKeyboardShortcuts) : fenêtre Fichiers ouverte > séquenceur ouvert >
+    // grille par défaut.
+    globalUndo() {
+        if (this.settingsOpen) this.filesUndo();
+        else if (this.seqOpen) this.seqUndo();
+        else this.undo();
+    }
+
+    globalRedo() {
+        if (this.settingsOpen) this.filesRedo();
+        else if (this.seqOpen) this.seqRedo();
+        else this.redo();
+    }
+
+    // Reflète l'historique du contexte actuellement actif (voir globalUndo ci-dessus) sur le bouton
+    // unique — à appeler à chaque push/undo/redo des 3 historiques ET à chaque changement de contexte
+    // (ouverture/fermeture Fichiers ou séquenceur), puisque le bouton doit re-pointer vers un autre
+    // historique sans qu'aucune pile n'ait elle-même changé.
+    updateGlobalUndoRedoButtons() {
+        const undoBtn = document.getElementById('global-undo-btn');
+        const redoBtn = document.getElementById('global-redo-btn');
+        if (!undoBtn || !redoBtn) return;
+        let undoStack, redoStack;
+        if (this.settingsOpen) { undoStack = this.filesUndoStack; redoStack = this.filesRedoStack; }
+        else if (this.seqOpen) { undoStack = this.seqUndoStack; redoStack = this.seqRedoStack; }
+        else { undoStack = this.undoStack; redoStack = this.redoStack; }
+        undoBtn.disabled = undoStack.length === 0;
+        redoBtn.disabled = redoStack.length === 0;
     }
 
     // Vide l'historique annuler/rétablir (appelé lors d'un changement de morceau : undo/redo
@@ -5674,7 +5738,7 @@ class HarmoHubApp {
     clearHistory() {
         this.undoStack = [];
         this.redoStack = [];
-        this.updateUndoRedoButtons();
+        this.updateGlobalUndoRedoButtons();
     }
 
     // ---------- Annuler / Rétablir dans le séquenceur ----------
@@ -5685,7 +5749,7 @@ class HarmoHubApp {
         this.seqUndoStack.push(document.getElementById('arpPattern').value);
         if (this.seqUndoStack.length > this.undoLimit) this.seqUndoStack.shift();
         this.seqRedoStack = [];
-        this.updateSeqUndoRedoButtons();
+        this.updateGlobalUndoRedoButtons();
     }
 
     seqUndo() {
@@ -5695,7 +5759,7 @@ class HarmoHubApp {
         this.seqTouched = true;
         this.seqSelections = [];
         this.renderSequencer();
-        this.updateSeqUndoRedoButtons();
+        this.updateGlobalUndoRedoButtons();
         this.flashHint('Annulé');
     }
 
@@ -5706,23 +5770,17 @@ class HarmoHubApp {
         this.seqTouched = true;
         this.seqSelections = [];
         this.renderSequencer();
-        this.updateSeqUndoRedoButtons();
+        this.updateGlobalUndoRedoButtons();
         this.flashHint('Rétabli');
     }
 
-    updateSeqUndoRedoButtons() {
-        const u = document.getElementById('seq-undo-btn');
-        const r = document.getElementById('seq-redo-btn');
-        if (u) u.disabled = this.seqUndoStack.length === 0;
-        if (r) r.disabled = this.seqRedoStack.length === 0;
-    }
 
     // Vide l'historique du séquenceur (nouvel accord chargé, réglages changés, ou motif enregistré
     // dans la grille : l'historique d'un accord n'a plus de sens pour un autre)
     clearSeqHistory() {
         this.seqUndoStack = [];
         this.seqRedoStack = [];
-        this.updateSeqUndoRedoButtons();
+        this.updateGlobalUndoRedoButtons();
     }
 
     // ---------- Raccourcis clavier ----------

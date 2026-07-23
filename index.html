@@ -4,12 +4,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>HarmoHub</title>
-    <link rel="stylesheet" href="style.css?v=202607232900">
+    <link rel="stylesheet" href="style.css?v=202607232930">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
 </head>
 <body>
     <div class="top-bar">
+        <!-- Historique unique pour toute l'appli (grille, séquenceur, fichiers) : bascule sur le bon
+             selon le contexte ouvert, comme Ctrl+Z/Ctrl+Y (voir globalUndo/updateGlobalUndoRedoButtons
+             dans script.js) — remplace les 3 paires qui se répétaient dans chaque carte. -->
+        <button type="button" id="global-undo-btn" class="icon-btn" title="Annuler (Ctrl+Z)" aria-label="Annuler" disabled>
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
+        </button>
+        <button type="button" id="global-redo-btn" class="icon-btn" title="Rétablir (Ctrl+Y)" aria-label="Rétablir" disabled>
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>
+        </button>
         <button type="button" id="open-settings" class="icon-btn settings-btn" title="Paramètres" aria-label="Paramètres">
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <circle cx="12" cy="12" r="3"/>
@@ -166,12 +175,6 @@
                             <option value="bell">Synthé chaud</option>
                         </select>
                         <div class="card-head-actions">
-                            <button type="button" id="seq-undo-btn" class="icon-btn" title="Annuler dans le séquenceur (Ctrl+Z)" aria-label="Annuler dans le séquenceur" disabled>
-                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
-                            </button>
-                            <button type="button" id="seq-redo-btn" class="icon-btn" title="Rétablir dans le séquenceur (Ctrl+Y)" aria-label="Rétablir dans le séquenceur" disabled>
-                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>
-                            </button>
                             <button type="button" id="toggle-sequencer" class="icon-btn" title="Séquenceur" aria-label="Séquenceur">
                                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v9M12 4v9M17 4v9"/></svg>
                             </button>
@@ -223,24 +226,17 @@
                     <div class="card-head">
                         <h2>Morceau</h2>
                         <div class="card-head-actions">
-                            <button type="button" id="undo-btn" class="icon-btn" title="Annuler (Ctrl+Z)" aria-label="Annuler" disabled>
-                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
-                            </button>
-                            <button type="button" id="redo-btn" class="icon-btn" title="Rétablir (Ctrl+Y)" aria-label="Rétablir" disabled>
-                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>
-                            </button>
                             <button type="button" id="song-new" class="icon-btn" title="Nouveau morceau" aria-label="Nouveau morceau">
                                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
                             </button>
                             <button type="button" id="song-save" class="icon-btn icon-btn-accent" title="Enregistrer (Ctrl+S)" aria-label="Enregistrer">
                                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg>
                             </button>
-                            <button type="button" id="song-save-as" class="icon-btn" title="Enregistrer sous..." aria-label="Enregistrer sous..." hidden>
-                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
-                            </button>
                         </div>
                     </div>
-                    <select id="song-select" class="compact song-select-full"></select>
+                    <!-- Double-clic/double-tap : renomme le morceau ouvert en place, voir
+                         startInlineRenameSongMain (script.js) — remplace l'ancien bouton dédié. -->
+                    <select id="song-select" class="compact song-select-full" title="Double-cliquer pour renommer"></select>
                     <div class="song-row">
                         <select id="global-root" class="compact song-select-narrow" title="Tonalité">
                             <option value="C">C</option><option value="C#">C#</option><option value="D">D</option><option value="D#">D#</option>
@@ -401,6 +397,6 @@
          script.js) — vendu en local plutôt qu'hébergé sur un CDN. Projet LAME (lame.sourceforge.net),
          licence LGPL. -->
     <script src="lame.min.js"></script>
-    <script src="script.js?v=202607232900"></script>
+    <script src="script.js?v=202607232930"></script>
 </body>
 </html>
