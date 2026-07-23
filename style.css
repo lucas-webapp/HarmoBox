@@ -1858,6 +1858,18 @@ button:active { transform: translateY(1px); }
     margin-bottom: 8px;
 }
 
+/* Repliement de la carte Morceau (voir toggleSongCardCollapse) : masque tonalité/tempo/groove une
+   fois le morceau réglé, garde le titre (#song-select, toujours renommable) et Enregistrer visibles
+   — seul le CONTENU disparaît, jamais l'en-tête ni le titre. */
+#song-card.collapsed .song-row,
+#song-card.collapsed .bpm-group,
+#song-card.collapsed .groove-group {
+    display: none;
+}
+#song-card.collapsed .song-select-full { margin-bottom: 0; }
+#toggle-song-collapse .icon { transition: transform 0.15s ease; }
+#toggle-song-collapse.collapsed .icon { transform: rotate(-90deg); }
+
 /* Tonalité + mode + signature, sur une même ligne compacte dans la carte Morceau */
 .song-row {
     display: flex;
@@ -1886,15 +1898,17 @@ select.song-select-narrow {
 }
 
 /* Mode + bouton « ⋯ » (modes moins courants) groupés comme un seul élément dans .song-row : select
-   et bouton se partagent la largeur d'une même colonne compacte (5:1). */
+   et bouton se partagent la largeur d'une même colonne compacte. flex:2 (au lieu de 1, comme
+   .song-select-narrow ci-dessus) : "Mixolydien" a besoin de bien plus de place que "C" ou "4/4",
+   qui n'utilisaient qu'une fraction de leur propre colonne. */
 .mode-field {
     display: flex;
-    flex: 1 1 0;
+    flex: 2 1 0;
     min-width: 0;
     gap: 4px;
 }
 .mode-field select { flex: 4; min-width: 0; }
-.mode-field .icon-btn { flex: 1; min-width: 24px; width: auto; height: auto; padding: 0; }
+.mode-field .icon-btn { flex: 1; min-width: 30px; width: auto; height: auto; padding: 0; }
 
 
 /* Libellé de bouton en deux versions (ex. "sélection" / "Sélect.") : la version courte ne s'affiche

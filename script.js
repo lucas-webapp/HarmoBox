@@ -330,10 +330,13 @@ const PLAYSTYLE_OPTIONS = [
     { value: 'blanche_maintenu', label: '2t', name: '2t', group: 'Lié (son continu)', svg: TIE_SVG },
     { value: 'noire_maintenu', label: '1t', name: '1t', group: 'Lié (son continu)', svg: TIE_SVG },
     { value: 'croche_maintenu', label: '½t', name: '½t', group: 'Lié (son continu)', svg: TIE_SVG },
-    { value: 'ronde_staccato', label: '4t stac.', name: '4t staccato', group: 'Détaché (staccato)', svg: STACCATO_SVG },
-    { value: 'blanche_staccato', label: '2t stac.', name: '2t staccato', group: 'Détaché (staccato)', svg: STACCATO_SVG },
-    { value: 'noire_staccato', label: '1t stac.', name: '1t staccato', group: 'Détaché (staccato)', svg: STACCATO_SVG },
-    { value: 'croche_staccato', label: '½t stac.', name: '½t staccato', group: 'Détaché (staccato)', svg: STACCATO_SVG },
+    // Pas de suffixe "stac." ici (contrairement au libellé compact de la grille, voir styleMap) :
+    // l'icône (points isolés, sans liaison) et l'en-tête de groupe "Détaché" le montrent déjà, sur le
+    // bouton fermé comme dans le menu — répéter "staccato" à chaque ligne n'apportait rien de plus.
+    { value: 'ronde_staccato', label: '4t', name: '4t', group: 'Détaché (staccato)', svg: STACCATO_SVG },
+    { value: 'blanche_staccato', label: '2t', name: '2t', group: 'Détaché (staccato)', svg: STACCATO_SVG },
+    { value: 'noire_staccato', label: '1t', name: '1t', group: 'Détaché (staccato)', svg: STACCATO_SVG },
+    { value: 'croche_staccato', label: '½t', name: '½t', group: 'Détaché (staccato)', svg: STACCATO_SVG },
     // Crayon (même glyphe que « Renommer » ailleurs dans l'app, juste redimensionné pour tenir dans
     // le même viewBox 0 0 24 16 que les autres icônes de ce menu) : « à toi de le dessiner toi-même ».
     { value: 'arpeggio', label: 'Manuel', name: 'Manuel',
@@ -1133,6 +1136,7 @@ const GENERAL_VOLUME_KEY = 'harmoboxGeneralVolume';
 const AUTOPLAY_SELECT_KEY = 'harmoboxAutoplaySelect';
 const METRONOME_COUNTIN_KEY = 'harmoboxMetronomeCountIn';
 const METRONOME_SUBDIVISION_KEY = 'harmoboxMetronomeSubdivision';
+const SONG_CARD_COLLAPSED_KEY = 'harmoboxSongCardCollapsed';
 
 // Curseurs de volume (0-100, plus intuitif qu'une valeur en décibels) : 0 = silence, 100 = 0 dB
 // (plein volume « normal »), avec un plancher à -40 dB pour que même « presque muet » reste audible
@@ -1472,6 +1476,20 @@ class HarmoHubApp {
             this.metronomeSubdivision = !this.metronomeSubdivision;
             e.currentTarget.classList.toggle('active', this.metronomeSubdivision);
             localStorage.setItem(METRONOME_SUBDIVISION_KEY, this.metronomeSubdivision ? '1' : '0');
+        };
+
+        // Replier/déplier la carte Morceau (tonalité, tempo, groove) une fois le morceau réglé — le
+        // titre (#song-select) et Enregistrer restent visibles quoi qu'il arrive (voir CSS #song-card).
+        const songCard = document.getElementById('song-card');
+        const collapseBtn = document.getElementById('toggle-song-collapse');
+        const songCardCollapsed = localStorage.getItem(SONG_CARD_COLLAPSED_KEY) === '1';
+        songCard.classList.toggle('collapsed', songCardCollapsed);
+        collapseBtn.classList.toggle('collapsed', songCardCollapsed);
+        collapseBtn.onclick = () => {
+            const collapsed = !songCard.classList.contains('collapsed');
+            songCard.classList.toggle('collapsed', collapsed);
+            collapseBtn.classList.toggle('collapsed', collapsed);
+            localStorage.setItem(SONG_CARD_COLLAPSED_KEY, collapsed ? '1' : '0');
         };
 
         // Boucle la partie active (bouton Grille) au lieu de jouer toute la grille — pratique
