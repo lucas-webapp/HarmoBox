@@ -73,7 +73,7 @@ button, .icon-btn, .prog-section-del, .seq-presets button, .seq-delete-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    gap: 4px; /* icône/texte plus rapprochés (voir aussi le padding gauche/droite asymétrique plus bas) */
 }
 
 /* Barre haute fixe : bouton Paramètres + mini-logo, groupés en haut à droite (sans bandeau) */
@@ -426,7 +426,7 @@ main {
 .edit-actions button {
     min-width: 0;
     flex: 1 1 0;
-    padding: 13px 10px;
+    padding: 13px 12px 13px 8px; /* contenu recentré, voir le commentaire sur le button de base */
     font-size: var(--fs-base);
 }
 
@@ -460,7 +460,7 @@ main {
 .transport button {
     min-width: 0;
     flex: 1 1 0;
-    padding: 13px 10px;
+    padding: 13px 12px 13px 8px; /* contenu recentré, voir le commentaire sur le button de base */
     font-size: var(--fs-base);
 }
 /* Bouton « boucler la partie » : reste compact au milieu des boutons de lecture qui, eux, s'étirent */
@@ -747,7 +747,10 @@ input[type=range] {
 button {
     flex: 1;
     min-width: 120px;
-    padding: 16px;
+    /* Padding gauche/droite légèrement asymétrique : le contenu (icône + texte), centré par
+       justify-content, paraissait décalé vers la droite (le texte finissait trop près du bord) —
+       un poil moins de marge à gauche, un poil plus à droite recentre visuellement l'ensemble. */
+    padding: 16px 18px 16px 14px;
     border: none;
     border-radius: 8px;
     font-family: inherit;
@@ -1614,7 +1617,7 @@ button:active { transform: translateY(1px); }
 .seq-presets button {
     flex: 1;
     min-width: 0;
-    padding: 9px 8px;
+    padding: 9px 10px 9px 6px; /* contenu recentré, voir le commentaire sur le button de base */
     font-size: var(--fs-sm);
 }
 
@@ -1751,7 +1754,7 @@ select.song-select-narrow {
     .accord-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
     .advanced-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     select { padding: 9px 10px; font-size: var(--fs-select); min-width: 0; }
-    button { padding: 10px; font-size: var(--fs-base); }
+    button { padding: 10px 12px 10px 8px; font-size: var(--fs-base); }
     .bpm-group { margin-top: 10px; gap: 6px; }
     .add-section-btn { margin-top: 8px; }
 
@@ -1784,8 +1787,8 @@ select.song-select-narrow {
         border-top: none;
         gap: 10px;
     }
-    .transport button { padding: 11px 10px; font-size: var(--fs-base); }
-    .edit-actions button { padding: 11px 10px; font-size: var(--fs-base); }
+    .transport button { padding: 11px 12px 11px 8px; font-size: var(--fs-base); }
+    .edit-actions button { padding: 11px 12px 11px 8px; font-size: var(--fs-base); }
 }
 
 /* Grand écran : on laisse respirer et on limite la largeur du piano */
