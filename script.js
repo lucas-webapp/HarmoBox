@@ -2523,6 +2523,7 @@ class HarmoBoxApp {
         this.editingIndex = index;
         document.getElementById('save').innerHTML = svgIcon('check') + ' Modifier';
         document.getElementById('cancel-edit').hidden = false;
+        this.updateEditActionsDocking();
 
         this.refreshPreview();
         this.renderSequencer();
@@ -2540,6 +2541,25 @@ class HarmoBoxApp {
         this.editingIndex = null;
         document.getElementById('save').innerHTML = svgIcon('plus') + ' Ajouter';
         document.getElementById('cancel-edit').hidden = true;
+        this.updateEditActionsDocking();
+    }
+
+    // Déplace le bloc Ajouter/À la suite/Annuler entre sa place normale (juste au-dessus de la carte
+    // Morceau) et le pied de colonne ancré (.dock, au-dessus de la barre de lecture), selon qu'on est
+    // en train de modifier un accord existant ou non — pour que ces boutons restent toujours visibles
+    // pendant l'édition, sans avoir à remonter le panneau de réglages qui peut défiler. Le nœud DOM lui-
+    // même est déplacé (pas dupliqué) : un seul jeu de boutons, mêmes ids, mêmes écouteurs.
+    updateEditActionsDocking() {
+        const editActions = document.getElementById('edit-actions');
+        const dock = document.getElementById('footer-dock');
+        const transport = dock && dock.querySelector('.transport');
+        if (!editActions || !dock || !transport) return;
+        if (this.editingIndex != null) {
+            dock.insertBefore(editActions, transport);
+        } else {
+            const panelControls = document.querySelector('.panel-controls');
+            panelControls.insertBefore(editActions, panelControls.lastElementChild);
+        }
     }
 
     getRomanNumeral(globalRoot, globalMode, chordRoot, chordQuality) {

@@ -403,8 +403,11 @@ main {
 }
 .panel-controls .control-card { margin-bottom: 0; }
 
-/* Ajouter / À la suite / Annuler : actions d'édition de la grille, groupées juste au-dessus de la
-   carte Morceau (pas dans la barre de lecture collante en bas, réservée à Accord/Progression/Stop) */
+/* Ajouter / À la suite / Annuler : actions d'édition de la grille. En temps normal, groupées juste
+   au-dessus de la carte Morceau. Dès qu'on entre en mode "éditer" un accord existant, le JS
+   (updateEditActionsDocking) déplace ce même bloc dans .dock, au-dessus de la barre de lecture, pour
+   qu'il reste toujours visible sans avoir à remonter le panneau (voir demande : "je veux toujours
+   voir les boutons Modifier/Annuler à l'écran") — et le replace ici dès la sortie du mode édition. */
 .edit-actions {
     display: flex;
     gap: 8px;
@@ -417,25 +420,32 @@ main {
     font-size: var(--fs-base);
 }
 
-/* Ordre : réglages → grille → indicateur (accord/notes) → piano → (barre de lecture collante) */
+/* Ordre : réglages → grille → indicateur (accord/notes) → piano → (pied ancré : édition + lecture) */
 .panel-controls { order: 1; }
 .history-section { order: 2; }
 #current-chord-display { order: 3; }
 .viz-wrap { order: 4; }
-.transport { order: 5; }
+.dock { order: 5; }
 
-.transport {
+/* Pied de colonne collant : contient la barre de lecture, et .edit-actions quand on édite un accord
+   (voir commentaire ci-dessus). Colonne verticale pour empiler les deux rangées de boutons. */
+.dock {
     position: sticky;
     bottom: 0;
     z-index: 20;
     display: flex;
+    flex-direction: column;
     gap: 8px;
-    flex-wrap: wrap;
     padding: 10px 20px;
     margin: 5px -20px -20px;
     background: rgba(10, 10, 10, 0.95);
     backdrop-filter: blur(6px);
     border-top: 1px solid var(--border);
+}
+.transport {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
 }
 .transport button {
     min-width: 0;
@@ -1754,10 +1764,10 @@ select.song-select-narrow {
         overflow-y: auto;       /* la grille défile de son côté */
     }
 
-    /* Barre de lecture ancrée en bas de la colonne de gauche (plus besoin de "collant"). Même
+    /* Pied de colonne ancré en bas de la colonne de gauche (plus besoin de "collant"). Même
        padding-right que .panel-controls (réservé à sa scrollbar) pour que ses boutons s'alignent
-       pile avec ceux de .edit-actions au-dessus, largeur identique de bout en bout. */
-    .transport {
+       pile avec ceux du panneau au-dessus, largeur identique de bout en bout. */
+    .dock {
         position: static;
         flex: none;
         margin: 15px 0 0;
@@ -1765,6 +1775,7 @@ select.song-select-narrow {
         background: none;
         backdrop-filter: none;
         border-top: none;
+        gap: 10px;
     }
     .transport button { padding: 11px 10px; font-size: var(--fs-base); }
     .edit-actions button { padding: 11px 10px; font-size: var(--fs-base); }

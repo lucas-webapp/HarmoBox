@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>HarmoBox</title>
-    <link rel="stylesheet" href="style.css?v=202607231030">
+    <link rel="stylesheet" href="style.css?v=202607231115">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
 </head>
@@ -199,7 +199,7 @@
                     <div id="arp-sequencer" class="arp-seq" hidden></div>
                 </section>
 
-                <div class="edit-actions">
+                <div class="edit-actions" id="edit-actions">
                     <button id="save" class="btn-blue"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg> Ajouter</button>
                     <button id="save-insert" class="btn-blue" hidden><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg> À la suite</button>
                     <button id="cancel-edit" class="btn-stop" hidden><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg> Annuler</button>
@@ -290,13 +290,15 @@
                 </section>
             </div>
 
-            <div class="transport">
-                <button id="play" class="btn-prog"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg> Accord</button>
-                <button id="play-prog" class="btn-prog"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg> Grille</button>
-                <button type="button" id="toggle-loop-section" class="icon-btn" title="Boucler la partie active (bouton Grille)" aria-label="Boucler la partie active">
-                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
-                </button>
-                <button id="stop" class="btn-stop"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg> Stop</button>
+            <div class="dock" id="footer-dock">
+                <div class="transport">
+                    <button id="play" class="btn-prog"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg> Accord</button>
+                    <button id="play-prog" class="btn-prog"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg> Grille</button>
+                    <button type="button" id="toggle-loop-section" class="icon-btn" title="Boucler la partie active (bouton Grille)" aria-label="Boucler la partie active">
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+                    </button>
+                    <button id="stop" class="btn-stop"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg> Stop</button>
+                </div>
             </div>
         </div>
 
@@ -372,6 +374,6 @@
          script.js) — vendu en local plutôt qu'hébergé sur un CDN. Projet LAME (lame.sourceforge.net),
          licence LGPL. -->
     <script src="lame.min.js"></script>
-    <script src="script.js?v=202607231030"></script>
+    <script src="script.js?v=202607231115"></script>
 </body>
 </html>
