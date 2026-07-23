@@ -752,6 +752,19 @@ class Chord {
 // accès aux styles calculés pour construire du SVG à l'export).
 const ROLE_COLOR = { root: '#00c853', third: '#2f81f7', fifth: '#e53922', seventh: '#ff9800', ext: '#8bd6a8' };
 
+// Dégradés « perlés » (clair -> teinte -> foncé) des points de doigté guitare EN DIRECT (voir
+// buildGuitarDiagramSVG) — même principe que les touches actives du piano (.key.active.role-* dans
+// style.css), pour un rendu plus joli qu'un simple disque plat. Pas utilisés à l'export PDF
+// (forPrint) : l'encre sur papier reste en aplat ROLE_COLOR, plus fiable à l'impression qu'un dégradé.
+const ROLE_GRADIENT_STOPS = {
+    root:    ['#7dffc2', '#00e676', '#00a855'],
+    third:   ['#7fb2ff', '#2f81f7', '#1f5fc0'],
+    fifth:   ['#ff8f87', '#ff3b30', '#d42a20'],
+    seventh: ['#ffd166', '#ffb300', '#cc8f00'],
+    ext:     ['#f0d4ff', '#e0b0ff', '#c48ce6'],
+};
+let guitarSvgIdSeq = 0; // suffixe unique par diagramme, pour ne jamais dupliquer un id de <radialGradient> quand plusieurs schémas cohabitent dans la page (ex. export PDF, plusieurs doigtés)
+
 // Détecte un barré POUR L'AFFICHAGE (un doigt à plat sur plusieurs cordes à la case la plus basse
 // de la forme). Un barré n'est réellement la façon la plus commune de jouer une forme QUE lorsqu'il
 // est nécessaire, c'est-à-dire quand il y a plus de cases différentes à tenir que de doigts
@@ -3757,6 +3770,23 @@ class HarmoBoxApp {
 
         let svg = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">`;
 
+        // Dégradés des points de doigté (voir ROLE_GRADIENT_STOPS) : uniquement en direct, jamais à
+        // l'impression (encre en aplat, plus fiable sur papier). uid distingue les <radialGradient>
+        // de ce schéma de ceux d'un autre schéma affiché en même temps ailleurs dans la page (ids
+        // HTML censés être uniques document-wide).
+        const uid = forPrint ? null : ++guitarSvgIdSeq;
+        if (!forPrint) {
+            svg += '<defs>';
+            Object.entries(ROLE_GRADIENT_STOPS).forEach(([role, [light, mid, dark]]) => {
+                svg += `<radialGradient id="gdot-${role}-${uid}" cx="32%" cy="28%" r="75%">` +
+                    `<stop offset="0%" stop-color="${light}"/>` +
+                    `<stop offset="55%" stop-color="${mid}"/>` +
+                    `<stop offset="100%" stop-color="${dark}"/>` +
+                    `</radialGradient>`;
+            });
+            svg += '</defs>';
+        }
+
         if (showNut) {
             svg += `<rect x="${MARGIN_LEFT - 2}" y="${MARGIN_TOP}" width="3" height="${stringsSpan}" fill="${nutColor}"/>`;
         } else {
@@ -3814,7 +3844,8 @@ class HarmoBoxApp {
             const col = e.fret - baseFret;
             const x = MARGIN_LEFT + (col - 0.5) * FRET_GAP;
             const y = stringY(s);
-            const fill = ROLE_COLOR[e.role] || ROLE_COLOR.ext;
+            const role = ROLE_GRADIENT_STOPS[e.role] ? e.role : 'ext';
+            const fill = forPrint ? (ROLE_COLOR[role] || ROLE_COLOR.ext) : `url(#gdot-${role}-${uid})`;
             svg += `<circle cx="${x}" cy="${y}" r="6" fill="${fill}" stroke="#000" stroke-width="0.5"/>`;
         });
         svg += `</svg>`;
