@@ -1077,7 +1077,6 @@ function waitForAudioReady(timeoutMs = 4000) {
 
 const INSTRUMENT_KEY = 'harmoboxInstrument';
 const METRONOME_KEY = 'harmoboxMetronomeDuringPlayback';
-const CHORD_VOLUME_KEY = 'harmoboxChordVolume';
 const METRONOME_VOLUME_KEY = 'harmoboxMetronomeVolume';
 const METRONOME_SOUND_KEY = 'harmoboxMetronomeSound';
 const GENERAL_VOLUME_KEY = 'harmoboxGeneralVolume';
@@ -1284,13 +1283,6 @@ class HarmoBoxApp {
         // instruments Tone.js peuvent donc jouer simultanément. Construits à la demande et mis en
         // cache (voir getInstrument) plutôt qu'un seul « activeInstrument » partagé comme avant.
         this.instrumentCache = new Map();
-
-        // Volume des accords : un seul nœud partagé, entre CHAQUE instrument et la sortie, pour un
-        // réglage global unique quelle que soit la banque de son choisie (voir getInstrument).
-        // 100 par défaut = 0 dB de correction, exactement le volume d'avant l'ajout de ce réglage.
-        const storedChordVol = localStorage.getItem(CHORD_VOLUME_KEY);
-        this.chordVolumePercent = storedChordVol !== null ? parseInt(storedChordVol) : 100;
-        this.chordVolumeNode = new Tone.Volume(percentToDb(this.chordVolumePercent)).toDestination();
 
         // Métronome : son au choix (voir METRONOME_SOUNDS et le panneau Son des Paramètres). 80 par
         // défaut = -8 dB, le volume fixe d'avant l'ajout de ce réglage.
@@ -1965,7 +1957,7 @@ class HarmoBoxApp {
         if (!INSTRUMENT_BANKS[key]) key = 'piano';
         let inst = this.instrumentCache.get(key);
         if (!inst) {
-            inst = INSTRUMENT_BANKS[key].build().connect(this.chordVolumeNode);
+            inst = INSTRUMENT_BANKS[key].build().toDestination();
             this.instrumentCache.set(key, inst);
         }
         return inst;
@@ -3101,7 +3093,7 @@ class HarmoBoxApp {
         document.getElementById('open-settings').classList.remove('active');
     }
 
-    // ---- Panneau Son : volume général (maître), puis volume des accords et du métronome ----
+    // ---- Panneau Son : volume général (maître), puis volume du métronome ----
     renderAudioPanel() {
         const host = document.getElementById('settings-panel-audio');
         if (!host) return;
@@ -3114,13 +3106,6 @@ class HarmoBoxApp {
                 <input type="range" id="general-volume" min="0" max="100" value="${this.generalVolumePercent}">
             </div>
             <div class="settings-slider-sep"></div>
-            <div class="settings-slider-row">
-                <div class="settings-slider-head">
-                    <label for="chord-volume">Volume des accords</label>
-                    <span class="val" id="chord-volume-val">${this.chordVolumePercent}</span>
-                </div>
-                <input type="range" id="chord-volume" min="0" max="100" value="${this.chordVolumePercent}">
-            </div>
             <div class="settings-slider-row">
                 <div class="settings-slider-head">
                     <label for="metronome-volume">Volume du métronome</label>
@@ -3149,10 +3134,9 @@ class HarmoBoxApp {
                     <span class="switch-thumb"></span>
                 </button>
             </div>
-            <div class="settings-slider-hint">Le volume général s'applique en plus des deux réglages spécifiques ci-dessus, sans changer leur équilibre l'un par rapport à l'autre. Le tempo se règle dans la carte « Morceau » (cliquer sur sa valeur permet de la saisir directement au clavier).</div>`;
+            <div class="settings-slider-hint">Le volume général s'applique en plus du réglage spécifique ci-dessus, sans changer son équilibre par rapport aux accords. Le tempo se règle dans la carte « Morceau » (cliquer sur sa valeur permet de la saisir directement au clavier).</div>`;
 
         document.getElementById('general-volume').oninput = (e) => this.setGeneralVolume(+e.target.value);
-        document.getElementById('chord-volume').oninput = (e) => this.setChordVolume(+e.target.value);
         document.getElementById('metronome-volume').oninput = (e) => this.setMetronomeVolume(+e.target.value);
         document.getElementById('metronome-sound').onchange = (e) => this.setMetronomeSound(e.target.value);
         document.getElementById('toggle-autoplay-select').onclick = () => this.setAutoplaySelect(!this.autoplaySelect);
@@ -3179,14 +3163,6 @@ class HarmoBoxApp {
         const val = document.getElementById('general-volume-val');
         if (val) val.textContent = percent;
         localStorage.setItem(GENERAL_VOLUME_KEY, String(percent));
-    }
-
-    setChordVolume(percent) {
-        this.chordVolumePercent = percent;
-        this.chordVolumeNode.volume.value = percentToDb(percent);
-        const val = document.getElementById('chord-volume-val');
-        if (val) val.textContent = percent;
-        localStorage.setItem(CHORD_VOLUME_KEY, String(percent));
     }
 
     setMetronomeVolume(percent) {
@@ -4131,15 +4107,13 @@ class HarmoBoxApp {
         const secPerBeat = 60 / bpm;
         const duration = lead + totalBeats * secPerBeat + tail;
         const generalVolumePercent = this.generalVolumePercent;
-        const chordVolumePercent = this.chordVolumePercent;
 
         return Tone.Offline(async () => {
             Tone.Destination.volume.value = percentToDb(generalVolumePercent);
-            const volumeNode = new Tone.Volume(percentToDb(chordVolumePercent)).toDestination();
             const instruments = new Map(); // clé instrument -> instance dédiée à ce rendu
             const instrumentFor = (key) => {
                 if (!INSTRUMENT_BANKS[key]) key = 'piano';
-                if (!instruments.has(key)) instruments.set(key, INSTRUMENT_BANKS[key].build().connect(volumeNode));
+                if (!instruments.has(key)) instruments.set(key, INSTRUMENT_BANKS[key].build().toDestination());
                 return instruments.get(key);
             };
 
