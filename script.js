@@ -314,37 +314,34 @@ function sectionMeasureCount(sec, beatsPerBar) {
     return Number.isInteger(count) ? String(count) : count.toFixed(1);
 }
 
-// Fond zébré sur les temps FAIBLES (2, 4, 6... au sein de chaque mesure), pour repérer la pulsation
-// d'un coup d'œil — y compris pour un accord COURT (moins d'une mesure), contrairement à l'ancienne
-// version (une mesure sur deux) qui ne s'affichait que pour un accord étalé sur plusieurs mesures :
-// un accord d'un seul temps ne montrait jamais rien. La phase se base sur la position ABSOLUE de
-// chaque case dans la grille (pas sur la position du segment lui-même), pour rester cohérente d'un
-// accord à l'autre, y compris scindé sur plusieurs lignes.
-// Chaque temps marqué est une douce lueur centrée (transparent -> pic -> transparent) plutôt qu'un
-// aplat plein-cadre : un bloc uni à peine visible (0.055) se fondait complètement dans le fond sombre
-// — cette forme reste discrète (s'estompe vers les bords) tout en étant nettement plus repérable au
-// centre (pic à 0.12), un rendu plus délicat qu'un simple rectangle.
+// Fond zébré sur UNE MESURE SUR DEUX (pas un temps sur deux : ça se répétait trop vite et perdait
+// tout son sens, on ne distinguait plus la mesure elle-même) — la mise en valeur couvre TOUTE la
+// largeur de la mesure, pas un simple repère centré sur un temps. S'applique quand même à CHAQUE
+// case, y compris un accord plus court qu'une mesure (contrairement à l'ancienne version qui ne
+// s'affichait que pour un accord étalé sur plusieurs mesures) : la phase se base sur la position
+// ABSOLUE de chaque case dans la grille (pas sur la position du segment lui-même), pour rester
+// cohérente d'un accord à l'autre, y compris scindé sur plusieurs lignes.
+// Fines hachures obliques (repeating-linear-gradient) par-dessus TOUTE la case, très discrètes : un
+// peu de matière/texture plutôt qu'un aplat plat, y compris sur les mesures non mises en valeur.
 // `inLoop` : ajoute le lavis doré de la plage à boucler (voir .in-loop-range en CSS) — désormais
 // composé ICI plutôt que dans la feuille de style, puisque cette fonction pose maintenant TOUJOURS
 // un background-image en ligne sur la case (avant : seulement pour les accords longs), qui
 // écraserait sinon complètement celui de la classe CSS (une déclaration en ligne l'emporte toujours).
-function buildBeatZebra(s, beatsPerBar, beatsPerRow, inLoop) {
+function buildMeasureZebra(s, beatsPerBar, beatsPerRow, inLoop) {
     const startAbs = s.row * beatsPerRow + s.col;
     const stops = [];
     for (let i = 0; i < s.span; i++) {
-        const beatInBar = (startAbs + i) % beatsPerBar;
-        const on = beatInBar % 2 === 1; // temps 2, 4, 6... (index 0 = temps 1)
-        const from = (i / s.span * 100).toFixed(3);
-        const mid = ((i + 0.5) / s.span * 100).toFixed(3);
-        const to = ((i + 1) / s.span * 100).toFixed(3);
-        if (on) {
-            stops.push(`rgba(255,255,255,0) ${from}%`, `rgba(255,255,255,0.12) ${mid}%`, `rgba(255,255,255,0) ${to}%`);
-        } else {
-            stops.push(`rgba(255,255,255,0) ${from}%`, `rgba(255,255,255,0) ${to}%`);
-        }
+        const measureIdx = Math.floor((startAbs + i) / beatsPerBar);
+        const on = measureIdx % 2 === 1; // une mesure sur deux
+        const color = on ? 'rgba(255,255,255,0.07)' : 'rgba(255,255,255,0)';
+        const from = (i / s.span * 100).toFixed(3), to = ((i + 1) / s.span * 100).toFixed(3);
+        stops.push(`${color} ${from}%`, `${color} ${to}%`);
     }
+    const measureBlocks = `linear-gradient(90deg, ${stops.join(', ')})`;
+    const hachures = `repeating-linear-gradient(45deg, rgba(255,255,255,0.03) 0px, rgba(255,255,255,0.03) 1px, transparent 1px, transparent 5px)`;
+    const sheen = `linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0) 55%)`;
     const loopTint = inLoop ? ', linear-gradient(0deg, rgba(255, 213, 79, 0.1), rgba(255, 213, 79, 0.1))' : '';
-    return `linear-gradient(90deg, ${stops.join(', ')}), linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0) 55%)${loopTint}`;
+    return `${measureBlocks}, ${hachures}, ${sheen}${loopTint}`;
 }
 
 // Octave de base d'un accord (défaut 3 = C3, compatibilité avec les sauvegardes sans octave)
@@ -2569,11 +2566,11 @@ class HarmoBoxApp {
                     if (s.barStart) cls += ' bar-start';
                     // police réduite pour les segments courts (peu de temps)
                     if (s.span === 1) cls += ' sz1'; else if (s.span === 2) cls += ' sz2';
-                    // Zébrure des temps faibles (2, 4...) : voir buildBeatZebra, toujours affichée (y
+                    // Zébrure d'une mesure sur deux (voir buildMeasureZebra), toujours affichée (y
                     // compris pour un accord court, contrairement à l'ancienne version limitée aux
                     // accords étalés sur plusieurs mesures).
                     const hasInnerBars = s.innerBars.length > 0;
-                    const zebra = `background-image: ${buildBeatZebra(s, beatsPerBar, beatsPerRow, inLoop)};`;
+                    const zebra = `background-image: ${buildMeasureZebra(s, beatsPerBar, beatsPerRow, inLoop)};`;
                     const style = `grid-column: ${s.col + 1} / span ${s.span}; grid-row: ${s.row * 2 + 1}; ${zebra}`;
 
                     const romanEl = s.isFirst ? `<span class="cell-roman">${roman}</span>` : '';
