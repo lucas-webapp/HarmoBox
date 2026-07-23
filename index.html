@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>HarmoBox</title>
-    <link rel="stylesheet" href="style.css?v=202607231830">
+    <link rel="stylesheet" href="style.css?v=202607231945">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
 </head>
@@ -259,22 +259,24 @@
                     <div class="bpm-group">
                         <div class="bpm-head">
                             <label for="bpm">Tempo : <input type="number" id="bpm-val" class="bpm-val-input" min="60" max="240" value="120" title="Cliquer pour saisir une valeur précise"> BPM</label>
-                            <button type="button" id="tap-tempo" class="btn-sec tap-tempo-btn" title="Tap tempo : cliquer plusieurs fois au rythme voulu pour régler le BPM">TAP</button>
-                            <button type="button" id="toggle-metronome-subdivision" class="icon-btn" title="Ajouter un clic faible sur le contretemps (croches)" aria-label="Ajouter un clic faible sur le contretemps">
-                                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
-                                    <circle cx="3" cy="12" r="2.4" fill="currentColor"/>
-                                    <circle cx="9" cy="12" r="1.3" fill="currentColor" opacity="0.55"/>
-                                    <circle cx="15" cy="12" r="2.4" fill="currentColor"/>
-                                    <circle cx="21" cy="12" r="1.3" fill="currentColor" opacity="0.55"/>
-                                </svg>
-                            </button>
-                            <button type="button" id="toggle-metronome" class="icon-btn" title="Garder le métronome pendant la lecture de la grille" aria-label="Garder le métronome pendant la lecture de la grille">
-                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                    <path d="M7 20h10L14 5h-4L7 20Z"/>
-                                    <path d="M12 15V8"/>
-                                    <circle cx="12" cy="6" r="1" fill="currentColor" stroke="none"/>
-                                </svg>
-                            </button>
+                            <div class="bpm-actions">
+                                <button type="button" id="tap-tempo" class="btn-sec tap-tempo-btn" title="Tap tempo : cliquer plusieurs fois au rythme voulu pour régler le BPM">TAP</button>
+                                <button type="button" id="toggle-metronome-subdivision" class="icon-btn" title="Ajouter un clic faible sur le contretemps (croches)" aria-label="Ajouter un clic faible sur le contretemps">
+                                    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                                        <circle cx="3" cy="12" r="2.4" fill="currentColor"/>
+                                        <circle cx="9" cy="12" r="1.3" fill="currentColor" opacity="0.55"/>
+                                        <circle cx="15" cy="12" r="2.4" fill="currentColor"/>
+                                        <circle cx="21" cy="12" r="1.3" fill="currentColor" opacity="0.55"/>
+                                    </svg>
+                                </button>
+                                <button type="button" id="toggle-metronome" class="icon-btn" title="Garder le métronome pendant la lecture de la grille" aria-label="Garder le métronome pendant la lecture de la grille">
+                                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <path d="M7 20h10L14 5h-4L7 20Z"/>
+                                        <path d="M12 15V8"/>
+                                        <circle cx="12" cy="6" r="1" fill="currentColor" stroke="none"/>
+                                    </svg>
+                                </button>
+                            </div>
                         </div>
                         <input type="range" id="bpm" min="60" max="240" value="120">
                     </div>
@@ -320,7 +322,7 @@
                     <h2>Grille d'accords</h2>
                 </div>
                 <div class="quick-add-row">
-                    <input type="text" id="quick-add-input" class="quick-add-input" placeholder="Cm7, ou CM7/Am7/F6/Bbm7 (1 accord/mesure)" autocomplete="off" autocapitalize="off" spellcheck="false" title="Un accord seul (durée réglée ci-dessus), ou plusieurs séparés par « / » : un accord par mesure, sans renversement ni drop">
+                    <input type="text" id="quick-add-input" class="quick-add-input" placeholder="+ / + / + / +" autocomplete="off" autocapitalize="off" spellcheck="false" title="Un accord seul (durée réglée ci-dessus), ou plusieurs séparés par « / » : un accord par mesure, sans renversement ni drop">
                     <button type="button" id="quick-add-btn" class="icon-btn" title="Ajouter à la grille" aria-label="Ajouter à la grille">
                         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
                     </button>
@@ -384,6 +386,6 @@
          script.js) — vendu en local plutôt qu'hébergé sur un CDN. Projet LAME (lame.sourceforge.net),
          licence LGPL. -->
     <script src="lame.min.js"></script>
-    <script src="script.js?v=202607231830"></script>
+    <script src="script.js?v=202607231945"></script>
 </body>
 </html>

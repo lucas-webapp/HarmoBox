@@ -682,6 +682,16 @@ select:disabled {
    couper au milieu ("Tempo : 120" / "BPM" sur deux lignes séparées, illisible). */
 .bpm-head label { white-space: nowrap; }
 
+/* TAP + croche + garder le métronome, groupés serrés à droite du libellé Tempo — même formule que
+   .card-head-actions (gap réduit, flex:none) pour rester cohérent avec le reste de l'appli plutôt que
+   d'espacer ces 3 boutons comme s'ils étaient chacun un élément séparé de la ligne. */
+.bpm-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: none;
+}
+
 /* Bouton tap tempo : compact, à côté du libellé BPM ; un bref flash confirme chaque tap pris en compte */
 .tap-tempo-btn {
     flex: none;
@@ -730,7 +740,9 @@ select:disabled {
     flex: none;
 }
 .transpose-label {
-    font-size: var(--fs-xs);
+    /* Même police que le libellé "Groove" juste à côté (pas de font-size dédié : hérite de
+       .groove-group, exactement comme le <label for="groove">) — avant, une taille plus petite ici
+       donnait l'impression de deux polices différentes sur la même ligne. */
     white-space: nowrap;
 }
 .transpose-field .icon-btn { width: 26px; height: 26px; }
