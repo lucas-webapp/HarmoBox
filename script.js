@@ -3801,8 +3801,12 @@ class HarmoBoxApp {
         // HTML censés être uniques document-wide).
         const uid = forPrint ? null : ++guitarSvgIdSeq;
         if (!forPrint) {
+            // N'émettre que les dégradés des rôles réellement présents dans ce doigté (au plus 5,
+            // souvent 2-3) plutôt que les 5 systématiquement : évite du SVG mort dans chaque diagramme.
+            const usedRoles = new Set(fretted.map(e => ROLE_GRADIENT_STOPS[e.role] ? e.role : 'ext'));
             svg += '<defs>';
-            Object.entries(ROLE_GRADIENT_STOPS).forEach(([role, [light, mid, dark]]) => {
+            usedRoles.forEach(role => {
+                const [light, mid, dark] = ROLE_GRADIENT_STOPS[role];
                 svg += `<radialGradient id="gdot-${role}-${uid}" cx="32%" cy="28%" r="75%">` +
                     `<stop offset="0%" stop-color="${light}"/>` +
                     `<stop offset="55%" stop-color="${mid}"/>` +
@@ -4563,9 +4567,11 @@ class HarmoBoxApp {
         if (index == null) return;
 
         if (d.mode === 'edge-left') {
-            this.setLoopRange(d.section, index, d.fixed);
+            // Bloquée au bord fixe (pas au-delà) : sinon la poignée gauche glissée au-delà de la
+            // droite inverserait silencieusement leurs rôles (voir setLoopRange, qui réordonne start/end).
+            this.setLoopRange(d.section, Math.min(index, d.fixed), d.fixed);
         } else if (d.mode === 'edge-right') {
-            this.setLoopRange(d.section, d.fixed, index);
+            this.setLoopRange(d.section, d.fixed, Math.max(index, d.fixed));
         } else {
             const lo = Math.min(d.anchor, index), hi = Math.max(d.anchor, index);
             if (!this.loopRange || this.loopRange.start !== lo || this.loopRange.end !== hi) {
@@ -4580,6 +4586,7 @@ class HarmoBoxApp {
         window.removeEventListener('pointercancel', this._onLoopRangeUp);
         const d = this.loopRangeDrag;
         this.loopRangeDrag = null;
+        this.loopRangeDragStart = null;
         // Tap (sans glisser) pile sur une bande déjà là, pas sur une poignée : la supprime — sans ça,
         // aucun moyen tactile d'annuler une plage à boucler une fois posée.
         if (d && d.mode === 'bar-tap' && !d.moved && this.loopRange && this.loopRange.section === d.section) {
