@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>HarmoHub</title>
-    <link rel="stylesheet" href="style.css?v=202607238000">
+    <link rel="stylesheet" href="style.css?v=202607239000">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
 </head>
@@ -240,6 +240,12 @@
                 <section class="control-card" id="song-card">
                     <div class="card-head">
                         <h2>Morceau</h2>
+                        <!-- Double-clic/double-tap : renomme le morceau ouvert en place, voir
+                             startInlineRenameSongMain (script.js) — remplace l'ancien bouton dédié.
+                             Pleine largeur, sur sa propre ligne SOUS le titre "Morceau" une fois
+                             déplié (voir .song-select-full) ; repliée, elle remonte à côté du titre
+                             (voir #song-card.collapsed plus bas) — un même élément, jamais dupliqué. -->
+                        <select id="song-select" class="compact song-select-full" title="Double-cliquer pour renommer"></select>
                         <div class="card-head-actions">
                             <button type="button" id="song-new" class="icon-btn" title="Nouveau morceau" aria-label="Nouveau morceau">
                                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
@@ -255,9 +261,6 @@
                             </button>
                         </div>
                     </div>
-                    <!-- Double-clic/double-tap : renomme le morceau ouvert en place, voir
-                         startInlineRenameSongMain (script.js) — remplace l'ancien bouton dédié. -->
-                    <select id="song-select" class="compact song-select-full" title="Double-cliquer pour renommer"></select>
                     <div class="song-row">
                         <select id="global-root" class="compact song-select-narrow" title="Tonalité">
                             <option value="C">C</option><option value="C#">C#</option><option value="D">D</option><option value="D#">D#</option>
@@ -418,6 +421,6 @@
          script.js) — vendu en local plutôt qu'hébergé sur un CDN. Projet LAME (lame.sourceforge.net),
          licence LGPL. -->
     <script src="lame.min.js"></script>
-    <script src="script.js?v=202607238000"></script>
+    <script src="script.js?v=202607239000"></script>
 </body>
 </html>

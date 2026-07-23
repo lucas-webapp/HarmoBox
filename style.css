@@ -526,11 +526,15 @@ main {
     letter-spacing: 0.03em;
 }
 
-/* En-tête de carte avec actions compactes à droite du titre (séquenceur, morceau...) */
+/* En-tête de carte avec actions compactes à droite du titre (séquenceur, morceau...). flex-wrap:
+   wrap sert uniquement à la carte Morceau (voir #song-card ci-dessous, dont le titre du morceau vit
+   dans cet en-tête) : les deux items des autres cartes tiennent toujours sur une ligne, donc rien
+   n'y change. */
 .card-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: wrap;
     gap: 10px;
     margin-bottom: 10px;
 }
@@ -540,6 +544,19 @@ main {
     display: flex;
     gap: 6px;
     flex: none;
+}
+
+/* Titre du morceau (#song-select) DANS l'en-tête Morceau, entre "Morceau" et les actions — déplié,
+   il passe seul en pleine largeur sur sa propre ligne (flex-basis:100% + flex-wrap:wrap ci-dessus,
+   même rendu qu'avant) ; replié (#song-card.collapsed plus bas), il remonte à côté du titre "Morceau"
+   sur la même ligne, quitte à se faire tronquer — voir toggleSongCardCollapse. */
+#song-card .card-head h2 { flex: none; order: 1; }
+#song-card .card-head-actions { order: 3; }
+#song-card #song-select {
+    order: 2;
+    flex: 1 1 100%;
+    min-width: 0;
+    margin-top: 8px;
 }
 
 .icon-btn {
@@ -1168,6 +1185,23 @@ button:active { transform: translateY(1px); }
 .quick-add-input:focus { outline: none; border-color: var(--accent); }
 .quick-add-input::placeholder { color: var(--text-muted); }
 
+/* Bouton d'ajout rapide : même hauteur que le champ juste à côté (étirement flex, .quick-add-row
+   n'impose pas align-items donc s'étire par défaut) et bleu comme le bouton "Ajouter" classique
+   (voir .btn-blue) — pour qu'il se voie comme LE bouton d'action de cette rangée, pas une simple
+   icône secondaire parmi d'autres. */
+#quick-add-btn {
+    height: auto;
+    align-self: stretch;
+    width: 44px;
+    background-image: radial-gradient(120% 160% at 20% 0%, rgba(255,255,255,0.10), transparent 55%), linear-gradient(160deg, var(--btn-blue-1), var(--btn-blue-2) 70%);
+    color: var(--btn-text);
+    border-color: var(--btn-blue-border);
+}
+#quick-add-btn:hover {
+    background-image: radial-gradient(120% 160% at 20% 0%, rgba(255,255,255,0.16), transparent 55%), linear-gradient(160deg, #2d4570, #1e304e 70%);
+    border-color: var(--btn-blue-border-hover);
+}
+
 /* Une partie de la chanson (couplet, refrain, ...) : titre éditable + sa propre grille. */
 .prog-section {
     margin-bottom: 22px;
@@ -1584,18 +1618,34 @@ button:active { transform: translateY(1px); }
    dans buildBeatZebra (script.js) : cette classe pose maintenant TOUJOURS un background-image en
    ligne (zébrure des temps faibles), qui écraserait sinon toute règle CSS sur la même propriété. */
 
+/* Style de jeu (Tenu/Lié/Détaché...) sous le symbole : icône + libellé compact (voir styleMetaHtml,
+   même pictos que le sélecteur Style de jeu) plutôt qu'un simple texte ("1t stac.") livré seul —
+   l'œil distingue lié/détaché d'un coup d'œil sans avoir à lire le mot. Désactivable dans
+   Paramètres > Affichage (voir showStyleLabel). */
 .cell-meta {
     position: absolute;
     bottom: 3px;
     left: 0;
     right: 0;
-    text-align: center;
-    font-size: var(--fs-2xs);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
     color: var(--text-muted);
+    overflow: hidden;
+    padding: 0 4px;
+}
+.cell-meta-icon {
+    flex: none;
+    width: 15px;
+    height: 10px;
+}
+.cell-meta-label {
+    font-size: var(--fs-2xs);
     letter-spacing: 0.02em;
     white-space: nowrap;
     overflow: hidden;
-    padding: 0 4px;
+    text-overflow: ellipsis;
 }
 
 /* Police réduite pour les segments courts */
@@ -1846,21 +1896,33 @@ button:active { transform: translateY(1px); }
 }
 .seq-delete-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
-/* Sélecteur de morceau enregistré (actions nouveau/enregistrer/renommer/supprimer : voir .card-head) */
+/* Sélecteur de morceau enregistré (actions nouveau/enregistrer/renommer/supprimer : voir .card-head) —
+   troncature propre (ellipsis) si le texte dépasse : nom long, ou repli qui réduit sa largeur
+   disponible (voir #song-card.collapsed plus bas). Largeur/marges pilotées par #song-card #song-select
+   plus haut (pleine largeur dépliée, partage la ligne de l'en-tête repliée), pas ici. */
 .song-select-full {
-    width: 100%;
-    margin-bottom: 8px;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* Repliement de la carte Morceau (voir toggleSongCardCollapse) : masque tonalité/tempo/groove une
    fois le morceau réglé, garde le titre (#song-select, toujours renommable) et Enregistrer visibles
-   — seul le CONTENU disparaît, jamais l'en-tête ni le titre. */
+   — seul le CONTENU disparaît, jamais l'en-tête ni le titre. Le titre remonte en plus à côté de
+   "Morceau" sur la même ligne (quitte à se tronquer, voir .song-select-full) au lieu de rester seul
+   sur sa ligne pleine largeur juste en dessous. */
 #song-card.collapsed .song-row,
 #song-card.collapsed .bpm-group,
 #song-card.collapsed .groove-group {
     display: none;
 }
-#song-card.collapsed .song-select-full { margin-bottom: 0; }
+#song-card.collapsed .card-head { flex-wrap: nowrap; }
+#song-card.collapsed #song-select {
+    flex: 1 1 auto;
+    min-width: 40px;
+    margin-top: 0;
+}
 #toggle-song-collapse .icon { transition: transform 0.15s ease; }
 #toggle-song-collapse.collapsed .icon { transform: rotate(-90deg); }
 
@@ -2092,6 +2154,26 @@ select.song-select-narrow {
     font-size: var(--fs-md);
     font-weight: 700;
 }
+/* Renversement/drop (voir Chord.getVoicingSuffix, réglage Affichage > Renversements/drops PDF) :
+   sous le symbole plutôt qu'accolé à lui, pour rester lisible même sur un accord déjà chargé
+   (basse différente, qualité enrichie...). */
+.print-chord-voicing {
+    display: block;
+    font-size: var(--fs-2xs);
+    color: #777;
+    margin-top: 2px;
+}
+/* Sens mélodique (▲ plus aigu / ▼ plus grave que l'accord précédent, réglage Affichage > Sens
+   mélodique PDF) : coin haut-gauche, symétrique du numéro de mesure en haut-droite. */
+.print-chord-direction {
+    position: absolute;
+    top: 2px;
+    left: 5px;
+    font-size: var(--fs-2xs);
+    font-weight: 700;
+}
+.print-chord-direction.up { color: #1a7a3c; }
+.print-chord-direction.down { color: #b23b2e; }
 
 .print-piano-grid {
     display: grid;

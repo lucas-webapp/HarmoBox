@@ -342,6 +342,18 @@ const PLAYSTYLE_OPTIONS = [
     { value: 'arpeggio', label: 'Manuel', name: 'Manuel',
         svg: '<g transform="scale(1,0.667)"><path d="M9 20h9" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/><path d="M13.5 3.5a2.12 2.12 0 0 1 3 3L6 17l-4 1 1-4Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></g>' },
 ];
+const PLAYSTYLE_BY_VALUE = {};
+PLAYSTYLE_OPTIONS.forEach(o => { PLAYSTYLE_BY_VALUE[o.value] = o; });
+PLAYSTYLE_BY_VALUE.pulsed = PLAYSTYLE_BY_VALUE.noire_staccato; // alias historique (voir seqPreset)
+
+// Icône + libellé compact affiché sous chaque accord de la grille (option Affichage > Style de jeu,
+// voir showStyleLabel/loadProgression) : mêmes pictos que le sélecteur Style de jeu (PLAYSTYLE_OPTIONS)
+// pour rester cohérent — et, comme lui, sans suffixe "stac." (l'icône le montre déjà : points isolés
+// sans liaison = détaché). Un accord dont le style enregistré n'existe plus retombe sur « Tenu ».
+function styleMetaHtml(playStyle) {
+    const opt = PLAYSTYLE_BY_VALUE[playStyle] || PLAYSTYLE_BY_VALUE.held;
+    return `<svg class="cell-meta-icon" viewBox="0 0 24 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${opt.svg}</svg><span class="cell-meta-label">${opt.label}</span>`;
+}
 
 // Récupère la durée en temps d'un accord sauvegardé (compatibilité : anciens formats en "measures").
 // Blindé contre une valeur corrompue (ex. chaîne vide, texte, 0 ou négatif) : sans ce garde-fou, un
@@ -818,11 +830,11 @@ class Chord {
         return map;
     }
 
-    // Symbole complet, ex : "Cmaj7/Ré · 2e renv. · Drop 2"
-    getLabel(useFlats = false) {
-        let sym = noteNameForPc(NOTES.indexOf(this.root), useFlats) + (QUALITY_LABEL[this.quality] ?? '');
-        if (this.bass) sym += '/' + noteNameForPc(NOTES.indexOf(this.bass), useFlats);
-        const parts = [sym];
+    // Suffixe renversement/drop seul (ex. "1er renv. · Drop 2", '' si voicing de base) : séparé de
+    // getLabel() pour que le PDF exporté puisse l'afficher à part, au-dessus du symbole plutôt que
+    // collé à lui (voir buildPrintExportHtml et le réglage Affichage > Renversements/drops PDF).
+    getVoicingSuffix() {
+        const parts = [];
         const inv = this.getEffectiveInversion();
         if (inv === 1) parts.push('1er renv.');
         if (inv === 2) parts.push('2e renv.');
@@ -830,6 +842,20 @@ class Chord {
         if (this.drop === 'drop2') parts.push('Drop 2');
         if (this.drop === 'drop3') parts.push('Drop 3');
         return parts.join(' · ');
+    }
+
+    // Symbole SANS renversement/drop, ex : "Cmaj7/Ré" — voir getVoicingSuffix pour cette partie à
+    // part, et getLabel() qui recombine les deux pour l'affichage habituel (aperçu, séquenceur...).
+    getBareLabel(useFlats = false) {
+        let sym = noteNameForPc(NOTES.indexOf(this.root), useFlats) + (QUALITY_LABEL[this.quality] ?? '');
+        if (this.bass) sym += '/' + noteNameForPc(NOTES.indexOf(this.bass), useFlats);
+        return sym;
+    }
+
+    // Symbole complet, ex : "Cmaj7/Ré · 2e renv. · Drop 2"
+    getLabel(useFlats = false) {
+        const suffix = this.getVoicingSuffix();
+        return suffix ? `${this.getBareLabel(useFlats)} · ${suffix}` : this.getBareLabel(useFlats);
     }
 }
 
@@ -1172,7 +1198,9 @@ const METRONOME_COUNTIN_KEY = 'harmoboxMetronomeCountIn';
 const METRONOME_SUBDIVISION_KEY = 'harmoboxMetronomeSubdivision';
 const SONG_CARD_COLLAPSED_KEY = 'harmoboxSongCardCollapsed';
 const SHOW_ROMAN_KEY = 'harmoboxShowRomanNumerals';
-const SHOW_ROMAN_PDF_KEY = 'harmoboxShowRomanNumeralsPdf';
+const SHOW_STYLE_LABEL_KEY = 'harmoboxShowStyleLabel';
+const SHOW_VOICING_PDF_KEY = 'harmoboxShowVoicingPdf';
+const SHOW_DIRECTION_PDF_KEY = 'harmoboxShowDirectionPdf';
 
 // Curseurs de volume (0-100, plus intuitif qu'une valeur en décibels) : 0 = silence, 100 = 0 dB
 // (plein volume « normal »), avec un plancher à -40 dB pour que même « presque muet » reste audible
@@ -1369,12 +1397,21 @@ class HarmoHubApp {
         // subdivision), qu'on garde ou non le métronome pendant la lecture par ailleurs.
         this.metronomeSubdivision = localStorage.getItem(METRONOME_SUBDIVISION_KEY) === '1';
 
-        // Chiffrage romain (I, IV, V7...) : une fine ligne dédiée au-dessus de chaque ligne d'accords
-        // dans la grille, ET dans le PDF exporté — deux réglages INDÉPENDANTS (Paramètres > Affichage),
-        // chacun activé par défaut comme le comportement historique (voir renderDisplayPanel,
-        // loadProgression pour la grille, buildPrintExportHtml pour le PDF).
+        // Chiffrage romain (I, IV, V7...) : une fine ligne dédiée au-dessus de chaque ligne d'accords —
+        // un SEUL réglage (Paramètres > Affichage) qui vaut pour la grille ET le PDF exporté, ce
+        // dernier reprenant toujours ce qui est affiché à l'écran plutôt qu'un réglage à part (voir
+        // loadProgression et buildPrintExportHtml).
         this.showRomanNumerals = localStorage.getItem(SHOW_ROMAN_KEY) !== '0';
-        this.showRomanNumeralsPdf = localStorage.getItem(SHOW_ROMAN_PDF_KEY) !== '0';
+
+        // Style de jeu (Tenu/Staccato...) sous chaque accord de la grille (voir .cell-meta) —
+        // activé par défaut comme le comportement historique.
+        this.showStyleLabel = localStorage.getItem(SHOW_STYLE_LABEL_KEY) !== '0';
+
+        // PDF exporté uniquement (rien d'équivalent à l'écran) : renversement/drop en petit au-dessus
+        // de chaque accord (au lieu d'alourdir son symbole, voir Chord.getLabel), et sens mélodique
+        // (▲/▼) par rapport à l'accord précédent — deux réglages indépendants, activés par défaut.
+        this.showVoicingPdf = localStorage.getItem(SHOW_VOICING_PDF_KEY) !== '0';
+        this.showDirectionPdf = localStorage.getItem(SHOW_DIRECTION_PDF_KEY) !== '0';
 
         // Chaque accord choisit sa propre banque de son (voir data.instrument) : plusieurs
         // instruments Tone.js peuvent donc jouer simultanément. Construits à la demande et mis en
@@ -2785,17 +2822,6 @@ class HarmoHubApp {
         const gMode = document.getElementById('global-mode').value;
         const useFlats = useFlatsForKey(NOTES.indexOf(gRoot), gMode);
         const beatsPerBar = this.beatsPerBar();
-        // Notation "Nt" = rejoué toutes les N temps (Nt stac. : en détaché) — délibérément distincte
-        // du vocabulaire de la durée (Noire/Blanche/1 mesure...) affiché par ailleurs pour cet accord :
-        // les deux se confondaient sinon (même mots, deux notions différentes — nombre d'appuis
-        // PENDANT la durée, pas la durée elle-même). Voir aussi #playStyle dans index.html.
-        const styleMap = {
-            held: 'Tenu', pulsed: '1t stac.', arpeggio: 'Manuel',
-            ronde_maintenu: '4t', ronde_staccato: '4t stac.',
-            blanche_maintenu: '2t', blanche_staccato: '2t stac.',
-            noire_maintenu: '1t', noire_staccato: '1t stac.',
-            croche_maintenu: '½t', croche_staccato: '½t stac.'
-        };
         const dragging = !!(this.drag && this.drag.moved);
 
         host.innerHTML = sections.map((sec, si) => {
@@ -2835,7 +2861,6 @@ class HarmoHubApp {
                 const loopRange = (this.loopRange && this.loopRange.section === si) ? this.loopRange : null;
                 gridInner = cells.map(s => {
                     const h = history[s.index];
-                    const styleLabel = styleMap[h.playStyle] || 'Tenu';
                     const chordUseFlats = useFlatsForChordRoot(NOTES.indexOf(h.root), NOTES.indexOf(gRoot), gMode, useFlats);
                     let sym = noteNameForPc(NOTES.indexOf(h.root), chordUseFlats) + (QUALITY_LABEL[h.quality] ?? '');
                     if (h.bass) sym += '/' + noteNameForPc(NOTES.indexOf(h.bass), chordUseFlats);
@@ -2865,7 +2890,7 @@ class HarmoHubApp {
                     const zebra = `background-image: ${buildMeasureZebra(s, beatsPerBar, beatsPerRow, inLoop)};`;
                     const style = `grid-column: ${s.col + 1} / span ${s.span}; grid-row: ${s.row * rowsPerGroup + chordRowOffset}; ${zebra}`;
 
-                    const metaEl = s.isFirst ? `<span class="cell-meta">${styleLabel}</span>` : '';
+                    const metaEl = (s.isFirst && this.showStyleLabel) ? `<span class="cell-meta">${styleMetaHtml(h.playStyle)}</span>` : '';
                     const contFlag = (s.split && !s.isFirst) ? ' <span class="cell-cont">↩</span>' : '';
                     // Petits traits à chaque limite de mesure interne, positionnés en % de la largeur du
                     // segment (colonnes de largeur égale au sein d'une même grille) — le dégradé qui les
@@ -3301,13 +3326,13 @@ class HarmoHubApp {
             </div>
             <div class="settings-slider-sep"></div>
             <div class="settings-toggle-row">
-                <label for="toggle-autoplay-select">Jouer l'accord en le sélectionnant dans la grille</label>
+                <label for="toggle-autoplay-select" title="Jouer l'accord en le sélectionnant dans la grille">Jouer à la sélection</label>
                 <button type="button" id="toggle-autoplay-select" class="switch" role="switch" aria-checked="${this.autoplaySelect}" aria-label="Jouer l'accord en le sélectionnant dans la grille">
                     <span class="switch-thumb"></span>
                 </button>
             </div>
             <div class="settings-toggle-row">
-                <label for="toggle-metronome-countin">Clics du décompte avant la lecture de la grille</label>
+                <label for="toggle-metronome-countin" title="Clics du décompte avant la lecture de la grille">Décompte avant lecture</label>
                 <button type="button" id="toggle-metronome-countin" class="switch" role="switch" aria-checked="${this.metronomeCountIn}" aria-label="Clics du décompte avant la lecture de la grille">
                     <span class="switch-thumb"></span>
                 </button>
@@ -3335,25 +3360,43 @@ class HarmoHubApp {
         if (btn) btn.setAttribute('aria-checked', on);
     }
 
-    // ---- Panneau Affichage : préférences purement visuelles de la grille d'accords ----
+    // ---- Panneau Affichage : préférences visuelles de la grille et du PDF exporté. Libellés courts
+    // à dessein (le détail va dans title/aria-label, pas dans le texte visible) — l'un des deux
+    // réglages PDF (renversement/drop, sens mélodique) n'a pas d'équivalent à l'écran, contrairement
+    // au chiffrage romain qui, lui, vaut pour les deux (voir buildPrintExportHtml/loadProgression). ----
     renderDisplayPanel() {
         const host = document.getElementById('settings-panel-display');
         if (!host) return;
         host.innerHTML = `
             <div class="settings-toggle-row">
-                <label for="toggle-show-roman">Chiffres romains (I, IV, V7...) dans la grille</label>
-                <button type="button" id="toggle-show-roman" class="switch" role="switch" aria-checked="${this.showRomanNumerals}" aria-label="Chiffres romains dans la grille">
+                <label for="toggle-show-roman" title="Chiffres romains (I, IV, V7...) dans la grille et le PDF">Chiffres romains</label>
+                <button type="button" id="toggle-show-roman" class="switch" role="switch" aria-checked="${this.showRomanNumerals}" aria-label="Chiffres romains dans la grille et le PDF">
                     <span class="switch-thumb"></span>
                 </button>
             </div>
             <div class="settings-toggle-row">
-                <label for="toggle-show-roman-pdf">Chiffres romains dans le PDF exporté</label>
-                <button type="button" id="toggle-show-roman-pdf" class="switch" role="switch" aria-checked="${this.showRomanNumeralsPdf}" aria-label="Chiffres romains dans le PDF exporté">
+                <label for="toggle-show-style-label" title="Style de jeu (Tenu, Staccato...) sous chaque accord de la grille">Style de jeu</label>
+                <button type="button" id="toggle-show-style-label" class="switch" role="switch" aria-checked="${this.showStyleLabel}" aria-label="Style de jeu sous chaque accord de la grille">
+                    <span class="switch-thumb"></span>
+                </button>
+            </div>
+            <div class="settings-slider-sep"></div>
+            <div class="settings-toggle-row">
+                <label for="toggle-show-voicing-pdf" title="Renversement/drop au-dessus de chaque accord, dans le PDF exporté">Renversements/drops (PDF)</label>
+                <button type="button" id="toggle-show-voicing-pdf" class="switch" role="switch" aria-checked="${this.showVoicingPdf}" aria-label="Renversement et drop dans le PDF exporté">
+                    <span class="switch-thumb"></span>
+                </button>
+            </div>
+            <div class="settings-toggle-row">
+                <label for="toggle-show-direction-pdf" title="Flèche indiquant si l'accord est plus aigu ou plus grave que le précédent, dans le PDF exporté">Sens mélodique (PDF)</label>
+                <button type="button" id="toggle-show-direction-pdf" class="switch" role="switch" aria-checked="${this.showDirectionPdf}" aria-label="Sens mélodique dans le PDF exporté">
                     <span class="switch-thumb"></span>
                 </button>
             </div>`;
         document.getElementById('toggle-show-roman').onclick = () => this.setShowRomanNumerals(!this.showRomanNumerals);
-        document.getElementById('toggle-show-roman-pdf').onclick = () => this.setShowRomanNumeralsPdf(!this.showRomanNumeralsPdf);
+        document.getElementById('toggle-show-style-label').onclick = () => this.setShowStyleLabel(!this.showStyleLabel);
+        document.getElementById('toggle-show-voicing-pdf').onclick = () => this.setShowVoicingPdf(!this.showVoicingPdf);
+        document.getElementById('toggle-show-direction-pdf').onclick = () => this.setShowDirectionPdf(!this.showDirectionPdf);
     }
 
     setShowRomanNumerals(on) {
@@ -3364,10 +3407,25 @@ class HarmoHubApp {
         this.loadProgression();
     }
 
-    setShowRomanNumeralsPdf(on) {
-        this.showRomanNumeralsPdf = on;
-        localStorage.setItem(SHOW_ROMAN_PDF_KEY, on ? '1' : '0');
-        const btn = document.getElementById('toggle-show-roman-pdf');
+    setShowStyleLabel(on) {
+        this.showStyleLabel = on;
+        localStorage.setItem(SHOW_STYLE_LABEL_KEY, on ? '1' : '0');
+        const btn = document.getElementById('toggle-show-style-label');
+        if (btn) btn.setAttribute('aria-checked', on);
+        this.loadProgression();
+    }
+
+    setShowVoicingPdf(on) {
+        this.showVoicingPdf = on;
+        localStorage.setItem(SHOW_VOICING_PDF_KEY, on ? '1' : '0');
+        const btn = document.getElementById('toggle-show-voicing-pdf');
+        if (btn) btn.setAttribute('aria-checked', on);
+    }
+
+    setShowDirectionPdf(on) {
+        this.showDirectionPdf = on;
+        localStorage.setItem(SHOW_DIRECTION_PDF_KEY, on ? '1' : '0');
+        const btn = document.getElementById('toggle-show-direction-pdf');
         if (btn) btn.setAttribute('aria-checked', on);
     }
 
@@ -4105,6 +4163,10 @@ class HarmoHubApp {
         // simple retour à la ligne au gré de la largeur (comme c'était le cas avant).
         const beatsPerBar = this.beatsPerBar();
         const allChords = []; // à plat, dans l'ordre de lecture, pour la page 2
+        // Sens mélodique (▲/▼, voir showDirectionPdf) : compare chaque accord à celui qui le précède
+        // RÉELLEMENT à la lecture, tous morceaux/parties confondus — jamais réinitialisé par section,
+        // sinon le tout premier accord d'une partie perdrait sa comparaison avec la fin de la précédente.
+        let prevChord = null;
         sections.forEach((sec, si) => {
             const title = (sec.title && sec.title.trim()) ? sec.title : `Partie ${si + 1}`;
             const measuresSuffix = sec.chords.length > 0 ? ` <span class="print-section-measures">— ${sectionMeasureCount(sec, beatsPerBar)} mesures</span>` : '';
@@ -4120,13 +4182,25 @@ class HarmoHubApp {
                     const data = sec.chords[s.index];
                     const chord = new Chord(data.root, data.quality, beatsFromData(data), data.inversion, data.drop, octaveFromData(data), data.bass);
                     const chordUseFlats = useFlatsForChordRoot(NOTES.indexOf(data.root), NOTES.indexOf(gRoot), gMode, useFlats);
-                    const sym = chord.getLabel(chordUseFlats) + ((s.split && !s.isFirst) ? ' ↩' : '');
-                    const roman = (s.isFirst && this.showRomanNumeralsPdf) ? this.getRomanNumeral(gRoot, gMode, data.root, data.quality) : '';
+                    const sym = chord.getBareLabel(chordUseFlats) + ((s.split && !s.isFirst) ? ' ↩' : '');
+                    const roman = (s.isFirst && this.showRomanNumerals) ? this.getRomanNumeral(gRoot, gMode, data.root, data.quality) : '';
+                    const voicing = (s.isFirst && this.showVoicingPdf) ? chord.getVoicingSuffix() : '';
+                    const voicingEl = voicing ? `<span class="print-chord-voicing">${voicing}</span>` : '';
+                    let directionEl = '';
+                    if (s.isFirst && this.showDirectionPdf && prevChord) {
+                        const curLow = Math.min(...chord.getMidiNotes());
+                        const prevLow = Math.min(...prevChord.getMidiNotes());
+                        if (curLow > prevLow) directionEl = '<span class="print-chord-direction up">▲</span>';
+                        else if (curLow < prevLow) directionEl = '<span class="print-chord-direction down">▼</span>';
+                    }
+                    if (s.isFirst) prevChord = chord;
                     const measureEl = s.barStart ? `<span class="print-chord-measure">${s.barNumber}</span>` : '';
                     page1 += `<div class="print-chord-cell" style="flex-grow:${s.span};">
                         ${measureEl}
+                        ${directionEl}
                         <span class="print-chord-roman">${roman}</span>
                         <span class="print-chord-sym">${escapeHtml(sym)}</span>
+                        ${voicingEl}
                     </div>`;
                     if (s.isFirst) allChords.push({ chord, sym });
                 });
