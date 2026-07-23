@@ -1168,11 +1168,11 @@ button:active { transform: translateY(1px); }
     -webkit-touch-callout: none;
 }
 
-/* Barre de mesure : bord gauche nettement plus marqué qu'un simple bord de case — les deux étaient
-   trop proches en épaisseur/opacité (1px #202020 vs 3px à 0.4 de blanc), on les confondait au premier
-   coup d'œil. Écart volontairement large maintenant : bord de case presque invisible (juste assez
-   pour distinguer les cases au survol/sélection), repère de mesure quasi plein et plus épais. */
-.grid-cell.bar-start { border-left: 4px solid rgba(255, 255, 255, 0.8); }
+/* Barre de mesure : bord gauche nettement plus marqué qu'un simple bord de case (presque invisible,
+   voir .grid-cell) — mais pas trop épais non plus, pour rester cohérent avec .cell-tick ci-dessous
+   (même repère de mesure, seulement posé différemment selon qu'on est entre deux cases ou à
+   l'intérieur d'un accord étalé sur plusieurs mesures) : même largeur, même opacité les deux. */
+.grid-cell.bar-start { border-left: 3px solid rgba(255, 255, 255, 0.65); }
 
 /* Segments d'un accord scindé : bord de coupe en pointillé, et arrondi UNIQUEMENT sur le vrai bord
    de l'accord (début pour seg-first, fin pour seg-last) — seg-mid n'a aucun vrai bord, donc pas
@@ -1314,21 +1314,24 @@ button:active { transform: translateY(1px); }
 .cell-resize-right { right: 0; }
 .cell-resize-left { left: 0; }
 
-/* Repère de mesure À L'INTÉRIEUR d'un accord qui dure plusieurs mesures (zébrure de fond posée en
-   background-image inline, voir buildInnerZebra) : un trait vertical très fin à chaque limite de
-   mesure, jamais au centre — le dégradé l'estompe complètement au milieu de la case pour ne jamais
-   couper le symbole de l'accord, et le rend un peu plus visible près des bords haut/bas. */
+/* Repère de mesure À L'INTÉRIEUR d'un accord qui dure plusieurs mesures — même largeur/opacité que
+   .grid-cell.bar-start (voir ci-dessus), pour qu'on reconnaisse le même repère de mesure dans les
+   deux cas, seulement estompé au centre pour ne jamais couper le symbole de l'accord (contrainte
+   propre à celui-ci : contrairement à bar-start, posé entre deux cases jamais traversées par du
+   texte, celui-ci se pose PAR-DESSUS le symbole affiché au milieu de la case). Centré sur la limite
+   de mesure (translateX) plutôt qu'aligné par son bord gauche, vu sa largeur désormais non négligeable. */
 .cell-tick {
     position: absolute;
     top: 0;
     bottom: 0;
-    width: 1px;
+    width: 3px;
+    transform: translateX(-50%);
     pointer-events: none;
     background: linear-gradient(to bottom,
-        rgba(255, 255, 255, 0.4) 0%,
+        rgba(255, 255, 255, 0.65) 0%,
         rgba(255, 255, 255, 0) 42%,
         rgba(255, 255, 255, 0) 58%,
-        rgba(255, 255, 255, 0.4) 100%);
+        rgba(255, 255, 255, 0.65) 100%);
 }
 
 .cell-roman {
