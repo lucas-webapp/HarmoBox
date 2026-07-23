@@ -1586,6 +1586,16 @@ class HarmoBoxApp {
             this.closeContextMenu();
             if (t && t.type === 'chord') this.duplicateChord(t.section, t.index);
         };
+        document.querySelector('[data-ctx-action="octave-up"]').onclick = () => {
+            const t = this.contextMenuTarget;
+            this.closeContextMenu();
+            if (t && t.type === 'chord') this.changeChordOctave(t.section, t.index, 1);
+        };
+        document.querySelector('[data-ctx-action="octave-down"]').onclick = () => {
+            const t = this.contextMenuTarget;
+            this.closeContextMenu();
+            if (t && t.type === 'chord') this.changeChordOctave(t.section, t.index, -1);
+        };
         document.querySelector('[data-ctx-action="sequencer"]').onclick = () => {
             const t = this.contextMenuTarget;
             this.closeContextMenu();
@@ -3667,6 +3677,8 @@ class HarmoBoxApp {
         const isChord = target && target.type === 'chord';
         menu.querySelector('[data-ctx-action="rename"] .ctx-label').textContent = isChord ? 'Modifier' : 'Renommer';
         menu.querySelector('[data-ctx-action="duplicate"]').hidden = !isChord;
+        menu.querySelector('[data-ctx-action="octave-up"]').hidden = !isChord;
+        menu.querySelector('[data-ctx-action="octave-down"]').hidden = !isChord;
         menu.querySelector('[data-ctx-action="sequencer"]').hidden = !isChord;
         menu.hidden = false;
         const pad = 8;
@@ -5685,6 +5697,29 @@ class HarmoBoxApp {
         if (this.editingIndex != null && this.editingIndex > index) this.editingIndex++;
         this.selectedIndex = index + 1; // sélectionne la copie
         this.loadProgression();
+    }
+
+    // Monte/descend l'octave d'un accord d'un cran (menu contextuel, voir data-ctx-action="octave-*")
+    // sans ouvrir le mode édition complet — plafonné aux mêmes bornes que le sélecteur Octave du
+    // panneau Accord (2 à 5). Si c'est l'accord actuellement en édition, resynchronise le panneau
+    // (et le séquenceur) avec la nouvelle octave plutôt que de le laisser périmé.
+    changeChordOctave(section, index, delta) {
+        const sections = loadProgressionSections();
+        const data = sections[section] && sections[section].chords[index];
+        if (!data) return;
+        const current = octaveFromData(data);
+        const next = Math.max(2, Math.min(5, current + delta));
+        if (next === current) {
+            this.flashHint(delta > 0 ? 'Déjà à l’octave la plus haute (5)' : 'Déjà à l’octave la plus basse (2)');
+            return;
+        }
+        this.pushUndo(sections);
+        data.octave = next;
+        saveProgressionSections(sections);
+        hasUnsavedChanges = true;
+        if (this.editingIndex === index && this.activeSection === section) this.editChord(section, index);
+        else this.loadProgression();
+        this.flashHint(`Octave ${next}`);
     }
 
     // Petit message éphémère (toast)
