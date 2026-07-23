@@ -1172,7 +1172,7 @@ button:active { transform: translateY(1px); }
    voir .grid-cell) — mais pas trop épais non plus, pour rester cohérent avec .cell-tick ci-dessous
    (même repère de mesure, seulement posé différemment selon qu'on est entre deux cases ou à
    l'intérieur d'un accord étalé sur plusieurs mesures) : même largeur, même opacité les deux. */
-.grid-cell.bar-start { border-left: 3px solid rgba(255, 255, 255, 0.65); }
+.grid-cell.bar-start { border-left: 2px solid rgba(255, 255, 255, 0.55); }
 
 /* Segments d'un accord scindé : bord de coupe en pointillé, et arrondi UNIQUEMENT sur le vrai bord
    de l'accord (début pour seg-first, fin pour seg-last) — seg-mid n'a aucun vrai bord, donc pas
@@ -1324,14 +1324,14 @@ button:active { transform: translateY(1px); }
     position: absolute;
     top: 0;
     bottom: 0;
-    width: 3px;
+    width: 2px;
     transform: translateX(-50%);
     pointer-events: none;
     background: linear-gradient(to bottom,
-        rgba(255, 255, 255, 0.65) 0%,
+        rgba(255, 255, 255, 0.55) 0%,
         rgba(255, 255, 255, 0) 42%,
         rgba(255, 255, 255, 0) 58%,
-        rgba(255, 255, 255, 0.65) 100%);
+        rgba(255, 255, 255, 0.55) 100%);
 }
 
 .cell-roman {
