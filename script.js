@@ -1172,6 +1172,7 @@ const METRONOME_COUNTIN_KEY = 'harmoboxMetronomeCountIn';
 const METRONOME_SUBDIVISION_KEY = 'harmoboxMetronomeSubdivision';
 const SONG_CARD_COLLAPSED_KEY = 'harmoboxSongCardCollapsed';
 const SHOW_ROMAN_KEY = 'harmoboxShowRomanNumerals';
+const SHOW_ROMAN_PDF_KEY = 'harmoboxShowRomanNumeralsPdf';
 
 // Curseurs de volume (0-100, plus intuitif qu'une valeur en décibels) : 0 = silence, 100 = 0 dB
 // (plein volume « normal »), avec un plancher à -40 dB pour que même « presque muet » reste audible
@@ -1368,10 +1369,12 @@ class HarmoHubApp {
         // subdivision), qu'on garde ou non le métronome pendant la lecture par ailleurs.
         this.metronomeSubdivision = localStorage.getItem(METRONOME_SUBDIVISION_KEY) === '1';
 
-        // Chiffrage romain (I, IV, V7...) affiché en petit dans chaque case de la grille : affiché par
-        // défaut, comme le comportement historique — désactivable dans Paramètres > Affichage pour qui
-        // n'en a pas l'usage (voir renderDisplayPanel/loadProgression).
+        // Chiffrage romain (I, IV, V7...) : une fine ligne dédiée au-dessus de chaque ligne d'accords
+        // dans la grille, ET dans le PDF exporté — deux réglages INDÉPENDANTS (Paramètres > Affichage),
+        // chacun activé par défaut comme le comportement historique (voir renderDisplayPanel,
+        // loadProgression pour la grille, buildPrintExportHtml pour le PDF).
         this.showRomanNumerals = localStorage.getItem(SHOW_ROMAN_KEY) !== '0';
+        this.showRomanNumeralsPdf = localStorage.getItem(SHOW_ROMAN_PDF_KEY) !== '0';
 
         // Chaque accord choisit sa propre banque de son (voir data.instrument) : plusieurs
         // instruments Tone.js peuvent donc jouer simultanément. Construits à la demande et mis en
@@ -2832,7 +2835,7 @@ class HarmoHubApp {
                 const beatsPerRow = beatsPerRowFor(beatsPerBar);
                 const plusSpan = Math.min(2, beatsPerRow);
                 gridStyle = `grid-template-rows: repeat(1, var(--row-h) var(--measure-row-h)); grid-template-columns: repeat(${beatsPerRow}, 1fr);`;
-                gridInner = this.buildAddCellHtml(si, 0, 0, plusSpan);
+                gridInner = this.buildAddCellHtml(si, 1, 0, plusSpan);
             } else {
                 const { cells, rows: chordRows, beatsPerRow, cursor } = this.layoutProgression(history, beatsPerBar);
                 // Case "+" (voir buildAddCellHtml) juste après le dernier accord : même ligne s'il
@@ -2841,17 +2844,25 @@ class HarmoHubApp {
                 const plusRow = Math.floor(cursor / beatsPerRow);
                 const plusSpan = Math.min(2, beatsPerRow - plusCol);
                 const rows = Math.max(chordRows, plusRow + 1);
-                // Une ligne de grille sur deux (impaire) porte les accords, l'autre (paire, fine et de
-                // hauteur EXPLICITE --measure-row-h, jamais "auto" — plus robuste d'un navigateur à
-                // l'autre qu'un dimensionnement intrinsèque basé sur le contenu) les numéros de mesure
-                // juste en dessous. this.row se réfère toujours à une ligne d'ACCORDS (0, 1, 2...) :
-                // ×2+1 pour sa ligne CSS, ×2+2 pour la ligne des numéros juste après elle (voir plus
-                // bas, en fin de gridInner).
-                gridStyle = `grid-template-rows: repeat(${rows}, var(--row-h) var(--measure-row-h)); grid-template-columns: repeat(${beatsPerRow}, 1fr);`;
+                // Trois lignes de grille par ligne d'ACCORDS (this.row, 0/1/2...) quand le chiffrage
+                // romain est activé (Paramètres > Affichage, voir showRomanNumerals) : une fine ligne
+                // AU-DESSUS (--roman-row-h, voir .row-roman), la ligne d'accords elle-même
+                // (--row-h), puis celle des numéros de mesure juste en dessous (--measure-row-h) —
+                // seulement deux sans le chiffrage romain (accords + numéros, comme avant). Hauteurs
+                // toujours EXPLICITES, jamais "auto" — plus robuste d'un navigateur à l'autre qu'un
+                // dimensionnement intrinsèque basé sur le contenu. rowsPerGroup/chordRowOffset
+                // traduisent this.row en ligne CSS partout plus bas dans ce bloc (cellules d'accord,
+                // chiffrage romain, numéros de mesure, plage de boucle, case "+").
+                const showRoman = this.showRomanNumerals;
+                const rowsPerGroup = showRoman ? 3 : 2;
+                const chordRowOffset = showRoman ? 2 : 1;
+                const rowTemplate = showRoman
+                    ? 'var(--roman-row-h) var(--row-h) var(--measure-row-h)'
+                    : 'var(--row-h) var(--measure-row-h)';
+                gridStyle = `grid-template-rows: repeat(${rows}, ${rowTemplate}); grid-template-columns: repeat(${beatsPerRow}, 1fr);`;
                 const loopRange = (this.loopRange && this.loopRange.section === si) ? this.loopRange : null;
                 gridInner = cells.map(s => {
                     const h = history[s.index];
-                    const roman = this.getRomanNumeral(gRoot, gMode, h.root, h.quality);
                     const styleLabel = styleMap[h.playStyle] || 'Tenu';
                     const chordUseFlats = useFlatsForChordRoot(NOTES.indexOf(h.root), NOTES.indexOf(gRoot), gMode, useFlats);
                     let sym = noteNameForPc(NOTES.indexOf(h.root), chordUseFlats) + (QUALITY_LABEL[h.quality] ?? '');
@@ -2880,9 +2891,8 @@ class HarmoHubApp {
                     // accords étalés sur plusieurs mesures).
                     const hasInnerBars = s.innerBars.length > 0;
                     const zebra = `background-image: ${buildMeasureZebra(s, beatsPerBar, beatsPerRow, inLoop)};`;
-                    const style = `grid-column: ${s.col + 1} / span ${s.span}; grid-row: ${s.row * 2 + 1}; ${zebra}`;
+                    const style = `grid-column: ${s.col + 1} / span ${s.span}; grid-row: ${s.row * rowsPerGroup + chordRowOffset}; ${zebra}`;
 
-                    const romanEl = (s.isFirst && this.showRomanNumerals) ? `<span class="cell-roman">${roman}</span>` : '';
                     const metaEl = s.isFirst ? `<span class="cell-meta">${styleLabel}</span>` : '';
                     const contFlag = (s.split && !s.isFirst) ? ' <span class="cell-cont">↩</span>' : '';
                     // Petits traits à chaque limite de mesure interne, positionnés en % de la largeur du
@@ -2903,19 +2913,23 @@ class HarmoHubApp {
 
                     return `
                     <div class="${cls}" data-section="${si}" data-index="${s.index}" style="${style}" title="Toucher pour écouter · cliquer le nom pour le modifier · double-clic/double-tap pour l'édition complète · clic droit/appui long pour plus d'options">
-                        ${romanEl}
                         <span class="cell-sym">${sym}${contFlag}</span>
                         ${metaEl}
                         ${ticksEl}
                         ${resizeLeftEl}
                         ${resizeRightEl}
                     </div>`;
-                }).join('') + cells.filter(s => s.barStart).map(s => `
-                    <div class="row-measure" style="grid-column: ${s.col + 1} / span 1; grid-row: ${s.row * 2 + 2};">${s.barNumber}</div>`
+                }).join('') + (showRoman ? cells.filter(s => s.isFirst).map(s => {
+                    const h = history[s.index];
+                    const roman = this.getRomanNumeral(gRoot, gMode, h.root, h.quality);
+                    return `
+                    <div class="row-roman" style="grid-column: ${s.col + 1} / span ${s.span}; grid-row: ${s.row * rowsPerGroup + 1};">${roman}</div>`;
+                }).join('') : '') + cells.filter(s => s.barStart).map(s => `
+                    <div class="row-measure" style="grid-column: ${s.col + 1} / span 1; grid-row: ${s.row * rowsPerGroup + rowsPerGroup};">${s.barNumber}</div>`
                 ).join('') + cells.flatMap(s => s.innerBars.map(ib => `
-                    <div class="row-measure" style="grid-column: ${s.col + ib.offset + 1} / span 1; grid-row: ${s.row * 2 + 2};">${ib.barNumber}</div>`)
-                ).join('') + this.buildLoopRangeBars(cells, loopRange)
-                + this.buildAddCellHtml(si, plusRow, plusCol, plusSpan);
+                    <div class="row-measure" style="grid-column: ${s.col + ib.offset + 1} / span 1; grid-row: ${s.row * rowsPerGroup + rowsPerGroup};">${ib.barNumber}</div>`)
+                ).join('') + this.buildLoopRangeBars(cells, loopRange, rowsPerGroup)
+                + this.buildAddCellHtml(si, plusRow * rowsPerGroup + chordRowOffset, plusCol, plusSpan);
             }
 
             const titleVal = (sec.title || '').replace(/"/g, '&quot;');
@@ -3359,8 +3373,15 @@ class HarmoHubApp {
                 <button type="button" id="toggle-show-roman" class="switch" role="switch" aria-checked="${this.showRomanNumerals}" aria-label="Chiffres romains dans la grille">
                     <span class="switch-thumb"></span>
                 </button>
+            </div>
+            <div class="settings-toggle-row">
+                <label for="toggle-show-roman-pdf">Chiffres romains dans le PDF exporté</label>
+                <button type="button" id="toggle-show-roman-pdf" class="switch" role="switch" aria-checked="${this.showRomanNumeralsPdf}" aria-label="Chiffres romains dans le PDF exporté">
+                    <span class="switch-thumb"></span>
+                </button>
             </div>`;
         document.getElementById('toggle-show-roman').onclick = () => this.setShowRomanNumerals(!this.showRomanNumerals);
+        document.getElementById('toggle-show-roman-pdf').onclick = () => this.setShowRomanNumeralsPdf(!this.showRomanNumeralsPdf);
     }
 
     setShowRomanNumerals(on) {
@@ -3369,6 +3390,13 @@ class HarmoHubApp {
         const btn = document.getElementById('toggle-show-roman');
         if (btn) btn.setAttribute('aria-checked', on);
         this.loadProgression();
+    }
+
+    setShowRomanNumeralsPdf(on) {
+        this.showRomanNumeralsPdf = on;
+        localStorage.setItem(SHOW_ROMAN_PDF_KEY, on ? '1' : '0');
+        const btn = document.getElementById('toggle-show-roman-pdf');
+        if (btn) btn.setAttribute('aria-checked', on);
     }
 
     setGeneralVolume(percent) {
@@ -4121,7 +4149,7 @@ class HarmoHubApp {
                     const chord = new Chord(data.root, data.quality, beatsFromData(data), data.inversion, data.drop, octaveFromData(data), data.bass);
                     const chordUseFlats = useFlatsForChordRoot(NOTES.indexOf(data.root), NOTES.indexOf(gRoot), gMode, useFlats);
                     const sym = chord.getLabel(chordUseFlats) + ((s.split && !s.isFirst) ? ' ↩' : '');
-                    const roman = s.isFirst ? this.getRomanNumeral(gRoot, gMode, data.root, data.quality) : '';
+                    const roman = (s.isFirst && this.showRomanNumeralsPdf) ? this.getRomanNumeral(gRoot, gMode, data.root, data.quality) : '';
                     const measureEl = s.barStart ? `<span class="print-chord-measure">${s.barNumber}</span>` : '';
                     page1 += `<div class="print-chord-cell" style="flex-grow:${s.span};">
                         ${measureEl}
@@ -4950,7 +4978,10 @@ class HarmoHubApp {
     // d'empilement isolé de la bande (position+z-index), sans jamais pouvoir passer devant .row-measure
     // — qui occupe pourtant la case juste là la plupart du temps (un bord de plage tombe presque
     // toujours sur un début de mesure).
-    buildLoopRangeBars(cells, loopRange) {
+    // `rowsPerGroup` (2 ou 3 lignes CSS par ligne d'ACCORDS, selon que le chiffrage romain est affiché
+    // au-dessus — voir loadProgression) traduit this.row en ligne CSS : la plage/ses poignées occupent
+    // toujours la DERNIÈRE sous-ligne du groupe (celle des numéros de mesure), quel que soit ce nombre.
+    buildLoopRangeBars(cells, loopRange, rowsPerGroup) {
         if (!loopRange) return '';
         const byRow = new Map();
         cells.forEach(s => {
@@ -4963,22 +4994,23 @@ class HarmoHubApp {
         const startCell = cells.find(s => s.index === loopRange.start && s.isFirst);
         const endCell = cells.find(s => s.index === loopRange.end && s.isLast);
         const bars = Array.from(byRow.entries()).map(([row, r]) => `
-                    <div class="loop-range-bar" style="grid-column: ${r.minCol + 1} / ${r.maxCol + 1}; grid-row: ${row * 2 + 2};"></div>`
+                    <div class="loop-range-bar" style="grid-column: ${r.minCol + 1} / ${r.maxCol + 1}; grid-row: ${row * rowsPerGroup + rowsPerGroup};"></div>`
         ).join('');
         const leftHandle = startCell ? `
-                    <div class="loop-range-handle loop-range-handle-left" data-edge="left" style="grid-column: ${startCell.col + 1} / span 1; grid-row: ${startCell.row * 2 + 2};"></div>` : '';
+                    <div class="loop-range-handle loop-range-handle-left" data-edge="left" style="grid-column: ${startCell.col + 1} / span 1; grid-row: ${startCell.row * rowsPerGroup + rowsPerGroup};"></div>` : '';
         const rightHandle = endCell ? `
-                    <div class="loop-range-handle loop-range-handle-right" data-edge="right" style="grid-column: ${endCell.col + endCell.span} / span 1; grid-row: ${endCell.row * 2 + 2};"></div>` : '';
+                    <div class="loop-range-handle loop-range-handle-right" data-edge="right" style="grid-column: ${endCell.col + endCell.span} / span 1; grid-row: ${endCell.row * rowsPerGroup + rowsPerGroup};"></div>` : '';
         return bars + leftHandle + rightHandle;
     }
 
     // Case "+" en bout de grille (une par partie) : un simple champ texte (placeholder "+"), pour
     // taper un accord directement dedans (voir addChordFromSymbol/onAddCellKeydown) sans repasser par
     // le champ d'ajout rapide séparé — pratique maintenant que les accords se réordonnent par glisser
-    // (voir onGridPointerDown), plus besoin d'ajouter au bon endroit du premier coup.
-    buildAddCellHtml(section, row, col, span) {
+    // (voir onGridPointerDown), plus besoin d'ajouter au bon endroit du premier coup. `gridRow` est
+    // déjà la ligne CSS finale (traduite par l'appelant, voir loadProgression), pas un index logique.
+    buildAddCellHtml(section, gridRow, col, span) {
         return `
-                    <div class="grid-cell grid-cell-add" style="grid-column: ${col + 1} / span ${span}; grid-row: ${row * 2 + 1};">
+                    <div class="grid-cell grid-cell-add" style="grid-column: ${col + 1} / span ${span}; grid-row: ${gridRow};">
                         <input type="text" class="cell-add-input" data-section="${section}" placeholder="+" autocomplete="off" autocapitalize="off" spellcheck="false">
                     </div>`;
     }

@@ -1255,6 +1255,7 @@ button:active { transform: translateY(1px); }
 .chord-grid {
     --row-h: 64px;
     --measure-row-h: 20px;
+    --roman-row-h: 18px;
     display: grid;
     grid-template-columns: repeat(16, 1fr); /* par défaut (grille vide) ; posé dynamiquement en JS sinon,
                                                 selon la signature rythmique du morceau */
@@ -1295,12 +1296,12 @@ button:active { transform: translateY(1px); }
     -webkit-user-select: none;
     /* Empêche la loupe/le menu (Copier, Rechercher...) que Safari iOS affiche sur un appui long sur
        du texte, qui parasitait le double-tap (modifier) et l'appui long (menu contextuel) — voir
-       aussi .cell-sym/.cell-roman/.cell-meta/.cell-cont ci-dessous, le texte lui-même en hérite mal
-       sur certaines versions. */
+       aussi .cell-sym/.cell-meta/.cell-cont ci-dessous, le texte lui-même en hérite mal sur
+       certaines versions. */
     -webkit-touch-callout: none;
     transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
-.grid-cell .cell-sym, .grid-cell .cell-roman, .grid-cell .cell-meta, .grid-cell .cell-cont {
+.grid-cell .cell-sym, .grid-cell .cell-meta, .grid-cell .cell-cont {
     touch-action: none;
     user-select: none;
     -webkit-user-select: none;
@@ -1473,17 +1474,6 @@ button:active { transform: translateY(1px); }
         rgba(255, 255, 255, 0.55) 100%);
 }
 
-.cell-roman {
-    position: absolute;
-    top: 3px;
-    left: 6px;
-    font-size: var(--fs-2xs);
-    font-weight: 700;
-    color: var(--accent);
-    opacity: 0.85;
-    letter-spacing: 0.02em;
-}
-
 .cell-sym {
     font-size: var(--fs-lg);
     font-weight: 700;
@@ -1526,6 +1516,28 @@ button:active { transform: translateY(1px); }
     -webkit-touch-callout: default;
 }
 .cell-sym-input:focus { outline: none; }
+
+/* Chiffrage romain (I, IV, V7...) : fine ligne dédiée juste AU-DESSUS de chaque ligne d'accords
+   (activable/désactivable dans Paramètres > Affichage, voir showRomanNumerals/gridStyle/
+   loadProgression) — alignée sur le début de l'accord plutôt que superposée à son nom comme avant.
+   Purement décorative (pas de geste dessus, contrairement à .row-measure juste en dessous des
+   accords) : pointer-events:none pour ne jamais interférer avec le glisser-déposer/l'étirement de
+   la case d'accord voisine. */
+.row-roman {
+    position: relative;
+    height: var(--roman-row-h);
+    line-height: var(--roman-row-h);
+    padding: 0 0 0 2px;
+    font-size: var(--fs-2xs);
+    font-weight: 700;
+    color: var(--accent);
+    opacity: 0.85;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
+}
 
 /* Numéro de mesure : fine ligne dédiée juste sous chaque ligne d'accords (voir gridStyle/loadProgression,
    une ligne de grille sur deux), alignée sur le début de la mesure plutôt que posée sur l'accord lui-même. */
@@ -1606,7 +1618,6 @@ button:active { transform: translateY(1px); }
 /* Police réduite pour les segments courts */
 .grid-cell.sz2 .cell-sym { font-size: var(--fs-base); }
 .grid-cell.sz1 .cell-sym { font-size: var(--fs-xs); }
-.grid-cell.sz1 .cell-roman,
 .grid-cell.sz1 .cell-meta { display: none; } /* trop étroit : on masque les annexes */
 
 /* Toast (copier / coller) */
