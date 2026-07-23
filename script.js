@@ -319,8 +319,11 @@ function sectionMeasureCount(sec, beatsPerBar) {
 // version (une mesure sur deux) qui ne s'affichait que pour un accord étalé sur plusieurs mesures :
 // un accord d'un seul temps ne montrait jamais rien. La phase se base sur la position ABSOLUE de
 // chaque case dans la grille (pas sur la position du segment lui-même), pour rester cohérente d'un
-// accord à l'autre, y compris scindé sur plusieurs lignes. Dégradé de haut en bas (au lieu d'un
-// aplat) sur chaque temps marqué : plus délicat qu'un simple bloc plein, un léger effet de reflet.
+// accord à l'autre, y compris scindé sur plusieurs lignes.
+// Chaque temps marqué est une douce lueur centrée (transparent -> pic -> transparent) plutôt qu'un
+// aplat plein-cadre : un bloc uni à peine visible (0.055) se fondait complètement dans le fond sombre
+// — cette forme reste discrète (s'estompe vers les bords) tout en étant nettement plus repérable au
+// centre (pic à 0.12), un rendu plus délicat qu'un simple rectangle.
 // `inLoop` : ajoute le lavis doré de la plage à boucler (voir .in-loop-range en CSS) — désormais
 // composé ICI plutôt que dans la feuille de style, puisque cette fonction pose maintenant TOUJOURS
 // un background-image en ligne sur la case (avant : seulement pour les accords longs), qui
@@ -331,9 +334,14 @@ function buildBeatZebra(s, beatsPerBar, beatsPerRow, inLoop) {
     for (let i = 0; i < s.span; i++) {
         const beatInBar = (startAbs + i) % beatsPerBar;
         const on = beatInBar % 2 === 1; // temps 2, 4, 6... (index 0 = temps 1)
-        const color = on ? 'rgba(255,255,255,0.055)' : 'rgba(255,255,255,0)';
-        const from = (i / s.span * 100).toFixed(3), to = ((i + 1) / s.span * 100).toFixed(3);
-        stops.push(`${color} ${from}%`, `${color} ${to}%`);
+        const from = (i / s.span * 100).toFixed(3);
+        const mid = ((i + 0.5) / s.span * 100).toFixed(3);
+        const to = ((i + 1) / s.span * 100).toFixed(3);
+        if (on) {
+            stops.push(`rgba(255,255,255,0) ${from}%`, `rgba(255,255,255,0.12) ${mid}%`, `rgba(255,255,255,0) ${to}%`);
+        } else {
+            stops.push(`rgba(255,255,255,0) ${from}%`, `rgba(255,255,255,0) ${to}%`);
+        }
     }
     const loopTint = inLoop ? ', linear-gradient(0deg, rgba(255, 213, 79, 0.1), rgba(255, 213, 79, 0.1))' : '';
     return `linear-gradient(90deg, ${stops.join(', ')}), linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0) 55%)${loopTint}`;
@@ -3649,12 +3657,13 @@ class HarmoBoxApp {
         const barre = detectBarre(byString);
         if (barre && barre.fret - baseFret >= 1 && barre.fret - baseFret <= FRET_WINDOW) {
             const col = barre.fret - baseFret;
-            const bx = MARGIN_LEFT + (col - 1) * FRET_GAP;
+            const barreInset = 4; // légèrement moins large que la case de la frette, pour ne pas la toucher
+            const bx = MARGIN_LEFT + (col - 1) * FRET_GAP + barreInset;
             const byTop = stringY(barre.hiString) - STRING_GAP * 0.42;
             const byBottom = stringY(barre.loString) + STRING_GAP * 0.42;
             const barreFill = forPrint ? 'rgba(0, 0, 0, 0.1)' : 'rgba(255, 255, 255, 0.14)';
             const barreStroke = forPrint ? 'rgba(0, 0, 0, 0.25)' : 'rgba(255, 255, 255, 0.3)';
-            svg += `<rect x="${bx}" y="${byTop}" width="${FRET_GAP}" height="${byBottom - byTop}" rx="6" fill="${barreFill}" stroke="${barreStroke}" stroke-width="1"/>`;
+            svg += `<rect x="${bx}" y="${byTop}" width="${FRET_GAP - barreInset * 2}" height="${byBottom - byTop}" rx="6" fill="${barreFill}" stroke="${barreStroke}" stroke-width="1"/>`;
         }
         // Points de repère du manche (incrustations réelles d'une guitare), centrés dans la hauteur du
         // diagramme — un seul point pour les cases usuelles, deux pour l'octave (case 12/24) — avec le
