@@ -751,32 +751,15 @@ main {
     font-size: var(--fs-xs);
 }
 
-/* Renversement/drop/octave : masqués par défaut, révélés par le même bouton « … » que les qualités
-   moins courantes (voir toggle-complex-quality/activateMoreOptions) — des réglages de voicing fins
-   que la plupart des accords n'utilisent jamais, inutile de les imposer à chaque saisie.
-   Réapparaissent aussi automatiquement en modifiant un accord qui s'en sert déjà
-   (revealAdvancedIfNeeded), comme la basse moins courante ci-dessus. */
-/* Renversement/drop/octave : toujours 3 colonnes, indépendamment du nombre de colonnes de
-   .accord-grid (2 depuis que la durée en est partie) — sinon la 3e case (octave) retomberait seule
-   sur sa propre ligne. */
+/* Renversement/drop/octave/basse : masqués par défaut, révélés par le même bouton « … » que les
+   qualités moins courantes (voir toggle-complex-quality/activateMoreOptions) — des réglages de
+   voicing fins que la plupart des accords n'utilisent jamais, inutile de les imposer à chaque
+   saisie. Réapparaissent aussi automatiquement en modifiant un accord qui s'en sert déjà
+   (revealAdvancedIfNeeded/activateMoreOptions). La basse (accord « sur » une note, ex. Cmaj7/D)
+   était auparavant un bouton/sélecteur séparé (toggle-bass) ; elle vit désormais ici, en 4e case,
+   son option par défaut « Basse : Fond. » suffisant à faire comprendre son rôle sans étiquette
+   dédiée — même esprit que « Fond. »/« Sans drop » pour les autres cases de cette grille. */
 .advanced-grid { margin-top: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-
-/* Sélecteur de basse différente (accord « sur » une note), masqué par défaut — voir toggle-bass.
-   Même principe que .groove-group : une étiquette + un select, sur une rangée dédiée sous la grille. */
-.bass-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    margin-top: 10px;
-    color: var(--text-muted);
-    font-weight: 600;
-}
-.bass-row select {
-    flex: none;
-    width: auto;
-    min-width: 150px;
-}
 
 select {
     flex: 1;
@@ -1982,7 +1965,6 @@ select.song-select-narrow {
     .select-group { gap: 8px; }
     .select-group + .select-group { margin-top: 8px; }
     .accord-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-    .advanced-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     select { padding: 9px 10px; font-size: var(--fs-select); min-width: 0; }
     button { padding: 10px 12px 10px 8px; font-size: var(--fs-base); }
     .bpm-group { margin-top: 10px; gap: 6px; }

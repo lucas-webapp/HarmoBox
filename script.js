@@ -1558,28 +1558,7 @@ class HarmoHubApp {
             const btn = e.currentTarget;
             const show = !btn.classList.contains('active');
             this.toggleSelectOptions(qualitySelect, this._complexQualityOptions, show);
-            document.getElementById('advanced-fields').hidden = !show;
-            // La basse différente n'a de sens qu'en mode accords complexes (voir toggle-bass
-            // ci-dessous) : son bouton se masque avec le reste, et son contrôle se range avec lui s'il
-            // était ouvert — sans jamais toucher à la valeur choisie (voir toggle-bass, même principe
-            // que les autres options avancées).
-            const bassBtn = document.getElementById('toggle-bass');
-            bassBtn.hidden = !show;
-            if (!show) {
-                document.getElementById('bass-row').hidden = true;
-                bassBtn.classList.remove('active');
-            }
-            btn.classList.toggle('active', show);
-        };
-
-        // Révèle/masque le sélecteur de basse différente (accord « sur » une note, ex. Cmaj7/D) : ne
-        // remet jamais la valeur choisie à « Aucune » en masquant — juste le contrôle qui se range,
-        // comme les options secondaires ci-dessus. Le bouton lui-même n'est accessible qu'en mode
-        // accords complexes (voir toggle-complex-quality et activateMoreOptions).
-        document.getElementById('toggle-bass').onclick = (e) => {
-            const btn = e.currentTarget;
-            const show = !btn.classList.contains('active');
-            document.getElementById('bass-row').hidden = !show;
+            document.getElementById('advanced-fields').hidden = !show; // inclut la basse différente, voir index.html
             btn.classList.toggle('active', show);
         };
 
@@ -1815,8 +1794,7 @@ class HarmoHubApp {
         const btn = document.getElementById('toggle-complex-quality');
         if (btn.classList.contains('active')) return;
         this.toggleSelectOptions(document.getElementById('quality'), this._complexQualityOptions, true);
-        document.getElementById('advanced-fields').hidden = false;
-        document.getElementById('toggle-bass').hidden = false; // la basse différente n'a de sens qu'ici
+        document.getElementById('advanced-fields').hidden = false; // inclut la basse différente, voir index.html
         btn.classList.add('active');
     }
 
@@ -1894,7 +1872,7 @@ class HarmoHubApp {
         });
         document.querySelectorAll('#bass option[value]:not([value=""])').forEach(opt => {
             const pc = NOTES.indexOf(opt.value);
-            opt.textContent = noteNameForPc(pc, songFlats);
+            opt.textContent = 'Basse : ' + noteNameForPc(pc, songFlats); // garde le préfixe (voir index.html)
         });
     }
 
@@ -2653,9 +2631,9 @@ class HarmoHubApp {
 
         document.getElementById('root').value = d.root;
         this.revealComplexQualityIfNeeded(d.quality);
-        // La basse différente n'est accessible qu'en mode accords complexes (voir toggle-bass) : un
-        // accord qui en a une doit donc révéler ce mode même si sa qualité, elle, reste courante
-        // (ex. Cmaj/D) — sinon le contrôle resterait affiché sans son bouton pour le rouvrir/masquer.
+        // La basse différente (voir #bass dans advanced-fields, index.html) n'est accessible qu'en
+        // mode accords complexes : un accord qui en a une doit donc révéler ce mode même si sa
+        // qualité, elle, reste courante (ex. Cmaj/D) — sinon le réglage resterait invisible.
         if (d.bass) this.activateMoreOptions();
         document.getElementById('quality').value = d.quality;
         document.getElementById('duration').value = String(beatsFromData(d));
@@ -2665,12 +2643,6 @@ class HarmoHubApp {
         document.getElementById('inversion').value = d.inversion;
         document.getElementById('drop').value = d.drop;
         document.getElementById('bass').value = d.bass || '';
-        // Révèle le sélecteur de basse s'il était utilisé sur cet accord, pour qu'il reste visible
-        // sans devoir cliquer sur le bouton dédié (voir toggle-bass) juste pour voir ce qu'on modifie.
-        if (d.bass) {
-            document.getElementById('bass-row').hidden = false;
-            document.getElementById('toggle-bass').classList.add('active');
-        }
         document.getElementById('playStyle').value = d.playStyle || 'held';
         this.syncPlayStylePicker(); // reflète la nouvelle valeur sur le bouton/menu d'icônes (voir setupPlayStylePicker)
         document.getElementById('instrument').value = d.instrument || 'piano';
