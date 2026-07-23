@@ -372,7 +372,7 @@ function loadProgressionSections() {
 // Modifications du tampon de travail pas encore reportées dans le morceau enregistré (voir
 // saveCurrentSong/Ctrl+S) — volontairement une variable de module (pas this.xxx) : les fonctions
 // autonomes ci-dessous (appelées depuis de très nombreux endroits) doivent pouvoir la modifier sans
-// dépendre de l'instance HarmoBoxApp (pas encore construite au tout premier appel).
+// dépendre de l'instance HarmoHubApp (pas encore construite au tout premier appel).
 let hasUnsavedChanges = false;
 
 // `markDirty=false` : chargement d'un morceau (neuf ou déjà enregistré), pas une modification —
@@ -1256,7 +1256,7 @@ function floatTo16BitPCM(f32) {
     return out;
 }
 
-class HarmoBoxApp {
+class HarmoHubApp {
     constructor() {
         // Volume général : agit APRÈS les deux réglages spécifiques ci-dessous (accords, métronome),
         // sur la sortie audio globale de Tone.js — un vrai « volume maître » qui les multiplie tous
@@ -3549,7 +3549,7 @@ class HarmoBoxApp {
     // destinée à être restaurée sur un autre navigateur ou ordinateur.
     exportLibrary() {
         const payload = {
-            app: 'HarmoBox',
+            app: 'HarmoHub',
             kind: 'library-backup',
             version: 1,
             exportedAt: Date.now(),
@@ -3560,7 +3560,7 @@ class HarmoBoxApp {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `harmobox-bibliotheque-${new Date().toISOString().slice(0, 10)}.json`;
+        a.download = `harmohub-bibliotheque-${new Date().toISOString().slice(0, 10)}.json`;
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -3581,7 +3581,7 @@ class HarmoBoxApp {
             data = null;
         }
         if (!data || !Array.isArray(data.songs)) {
-            this.flashHint('Fichier invalide — ce n\'est pas une sauvegarde HarmoBox');
+            this.flashHint('Fichier invalide — ce n\'est pas une sauvegarde HarmoHub');
             return;
         }
 
@@ -5783,4 +5783,4 @@ class HarmoBoxApp {
     }
 }
 
-window.app = new HarmoBoxApp();
+window.app = new HarmoHubApp();
