@@ -2239,8 +2239,14 @@ class HarmoBoxApp {
     highlightPlaying(section, index) {
         document.querySelectorAll('.grid-cell.playing').forEach(c => c.classList.remove('playing'));
         if (index == null) return;
-        document.querySelectorAll(`.chord-grid[data-section="${section}"] .grid-cell[data-index="${index}"]`).forEach(c => c.classList.add('playing'));
+        const cells = document.querySelectorAll(`.chord-grid[data-section="${section}"] .grid-cell[data-index="${index}"]`);
+        cells.forEach(c => c.classList.add('playing'));
         this.updateGridPlayhead(section, index); // suit l'accord qui démarre, comme au clic (voir selectChord)
+        // Suit la lecture dans la grille sur un morceau plus long que l'écran : ne scrolle QUE si la
+        // case en cours sort du cadre visible ('nearest', pas 'center') — sinon ça re-scrollerait à
+        // chaque accord même quand tout est déjà visible, gênant si l'utilisateur a délibérément
+        // scrollé ailleurs (ex. pour regarder la suite pendant que ça joue).
+        if (cells.length) cells[0].scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
     }
 
     // Barre de lecture de la grille : petit repère à gauche de l'accord sélectionné au repos, qui
