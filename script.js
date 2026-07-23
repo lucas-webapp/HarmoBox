@@ -1502,6 +1502,34 @@ class HarmoBoxApp {
             });
         });
 
+        // Champ texte au-dessus des sélecteurs (voir updateChordSymbolInput) : taper un symbole
+        // modifie racine ET qualité d'un coup — pour un accord tout juste chargé en édition
+        // (editChord) aussi bien qu'un nouvel accord en cours de réglage. Valide au blur (Entrée s'y
+        // ramène) plutôt qu'au fil de la frappe, comme les autres saisies de texte de l'appli.
+        const symbolInput = document.getElementById('chord-symbol-input');
+        const commitChordSymbol = () => {
+            const parsed = parseChordSymbol(symbolInput.value);
+            if (!parsed) {
+                if (symbolInput.value.trim()) this.flashHint('Accord non reconnu (ex. Cm7, F#dim, Bbadd9)');
+                this.refreshPreview(); // remet le texte correspondant aux réglages actuels
+                return;
+            }
+            this.revealComplexQualityIfNeeded(parsed.quality);
+            document.getElementById('root').value = parsed.root;
+            document.getElementById('quality').value = parsed.quality;
+            this.seqSelections = [];
+            this.clearSeqHistory();
+            hasUnsavedChanges = true;
+            this.refreshPreview();
+            this.renderSequencer();
+        };
+        symbolInput.addEventListener('blur', commitChordSymbol);
+        symbolInput.addEventListener('keydown', (e) => {
+            e.stopPropagation();
+            if (e.key === 'Enter') { e.preventDefault(); symbolInput.blur(); }
+            else if (e.key === 'Escape') { e.preventDefault(); this.refreshPreview(); symbolInput.blur(); }
+        });
+
         // Choisir un style de lecture réinitialise le motif sur le point de départ correspondant
         document.getElementById('playStyle').onchange = () => {
             const chord = this.readChord();
@@ -1750,6 +1778,17 @@ class HarmoBoxApp {
         this.ensurePianoWindow(midis);
         this.updateViz(midis, chord.getRoleMap());
         this.ensureGuitarDiagram(chord);
+        this.updateChordSymbolInput(chord.root, chord.quality, useFlats);
+    }
+
+    // Tient #chord-symbol-input à jour avec l'accord actuellement réglé (racine + qualité seulement :
+    // renversement/drop/basse ne se représentent pas dans un symbole court) — appelé depuis
+    // refreshPreview, donc à chaque changement de réglage ou chargement d'un accord (editChord). Ne
+    // touche jamais au champ pendant qu'on y tape (on n'écraserait pas une saisie en cours).
+    updateChordSymbolInput(root, quality, useFlats) {
+        const input = document.getElementById('chord-symbol-input');
+        if (!input || document.activeElement === input) return;
+        input.value = noteNameForPc(NOTES.indexOf(root), useFlats) + (QUALITY_LABEL[quality] ?? '');
     }
 
     // Calcule une fenêtre clavier (multiple de 12, alignée sur des Do) englobant l'accord,
@@ -4044,22 +4083,41 @@ class HarmoBoxApp {
     setupGridInteractions() {
         const host = document.getElementById('progression-sections');
         host.addEventListener('pointerdown', (e) => this.onGridPointerDown(e));
-        // Case "+" en bout de grille (voir buildAddCellHtml) : Entrée ajoute l'accord tapé, Échap vide
-        // le champ (utile surtout au clavier ; au doigt on peut aussi juste toucher ailleurs).
+        // Case "+" en bout de grille (voir buildAddCellHtml) : Entrée ajoute l'accord tapé. Échap vide
+        // le champ. Sur certains claviers virtuels (mobile), la touche « Entrée »/« Aller » ne déclenche
+        // pas toujours un vrai `keydown` détecté ici : on ajoute donc aussi un ajout au relâchement du
+        // focus (focusout, ci-dessous) comme filet de sécurité, pour qu'il ne se passe jamais « rien »
+        // une fois l'accord tapé, même si on touche simplement ailleurs pour refermer le clavier.
         host.addEventListener('keydown', (e) => {
             if (!e.target.matches('.cell-add-input')) return;
             if (e.key === 'Enter') {
                 e.preventDefault();
-                const section = +e.target.dataset.section;
-                if (this.addChordFromSymbol(section, e.target.value)) {
-                    // loadProgression() a déjà reconstruit un champ "+" vide à la même place : lui
-                    // redonner le focus pour enchaîner plusieurs accords sans re-cliquer à chaque fois.
-                    const fresh = document.querySelector(`.cell-add-input[data-section="${section}"]`);
-                    if (fresh) fresh.focus();
-                }
+                // Repris dans le gestionnaire focusout (commun aux deux chemins) : marque qu'on veut
+                // enchaîner (redonner le focus) une fois l'ajout fait, contrairement à un simple tap
+                // ailleurs pour refermer le clavier (voir plus bas).
+                e.target.dataset.refocus = '1';
+                e.target.blur();
             } else if (e.key === 'Escape') {
                 e.target.value = '';
                 e.target.blur();
+            }
+        });
+        // Filet de sécurité : sur certains claviers virtuels (mobile), la touche « Entrée »/« Aller »
+        // ne déclenche pas toujours un vrai `keydown` détecté ci-dessus — sans ça, taper un accord puis
+        // juste toucher ailleurs pour refermer le clavier ne faisait RIEN. Le relâchement du focus,
+        // lui, se produit toujours.
+        host.addEventListener('focusout', (e) => {
+            if (!e.target.matches('.cell-add-input')) return;
+            const value = e.target.value.trim();
+            const refocus = e.target.dataset.refocus === '1';
+            if (!value) return; // champ vidé (Échap) ou jamais rempli : rien à faire, pas d'erreur inutile
+            const section = +e.target.dataset.section;
+            if (this.addChordFromSymbol(section, value) && refocus) {
+                // loadProgression() a déjà reconstruit un champ "+" vide à la même place : lui redonner
+                // le focus pour enchaîner plusieurs accords sans re-cliquer à chaque fois — seulement
+                // après Entrée (le clavier reste ouvert), jamais après un tap ailleurs qui l'a fermé.
+                const fresh = document.querySelector(`.cell-add-input[data-section="${section}"]`);
+                if (fresh) fresh.focus();
             }
         });
     }

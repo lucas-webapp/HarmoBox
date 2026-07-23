@@ -577,6 +577,26 @@ main {
 }
 .accord-grid select { min-width: 0; }
 
+/* Champ texte au-dessus des sélecteurs racine/qualité (voir updateChordSymbolInput) : reflète toujours
+   l'accord actuellement réglé, qu'il soit tout juste sélectionné dans la grille (voir editChord) ou en
+   train d'être créé — taper un nouveau symbole (ex. "Dm7") modifie racine ET qualité d'un coup, sans
+   passer par les deux menus déroulants séparément. Même style que .quick-add-input, cohérent. */
+.chord-symbol-input {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    background: #1c1e24;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-main);
+    font: inherit;
+    font-size: var(--fs-sm);
+    padding: 10px 12px;
+    margin-bottom: 10px;
+}
+.chord-symbol-input:focus { outline: none; border-color: var(--accent); }
+.chord-symbol-input::placeholder { color: var(--text-muted); }
+
 /* Renversement/drop/octave : masqués par défaut, révélés par le même bouton « … » que les qualités
    moins courantes (voir toggle-complex-quality/activateMoreOptions) — des réglages de voicing fins
    que la plupart des accords n'utilisent jamais, inutile de les imposer à chaque saisie.
