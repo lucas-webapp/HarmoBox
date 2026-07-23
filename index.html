@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>HarmoHub</title>
-    <link rel="stylesheet" href="style.css?v=202607232930">
+    <link rel="stylesheet" href="style.css?v=202607233000">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
 </head>
@@ -181,22 +181,30 @@
                         </div>
                     </div>
                     <div class="select-group">
-                        <select id="playStyle" title="Style de jeu — combien de fois l'accord est rejoué PENDANT sa durée (réglée à côté), pas sa durée elle-même">
-                            <option value="held">Tenu (1 seul appui)</option>
-                            <optgroup label="Rejoué, son continu">
-                                <option value="ronde_maintenu">Toutes les 4 temps</option>
-                                <option value="blanche_maintenu">Toutes les 2 temps</option>
-                                <option value="noire_maintenu">À chaque temps</option>
-                                <option value="croche_maintenu">2 fois par temps</option>
+                        <select id="playStyle" hidden>
+                            <option value="held">Tenu</option>
+                            <optgroup label="Lié (son continu)">
+                                <option value="ronde_maintenu">4t</option>
+                                <option value="blanche_maintenu">2t</option>
+                                <option value="noire_maintenu">1t</option>
+                                <option value="croche_maintenu">½t</option>
                             </optgroup>
-                            <optgroup label="Rejoué, détaché (staccato)">
-                                <option value="ronde_staccato">Toutes les 4 temps</option>
-                                <option value="blanche_staccato">Toutes les 2 temps</option>
-                                <option value="noire_staccato">À chaque temps</option>
-                                <option value="croche_staccato">2 fois par temps</option>
+                            <optgroup label="Détaché (staccato)">
+                                <option value="ronde_staccato">4t stac.</option>
+                                <option value="blanche_staccato">2t stac.</option>
+                                <option value="noire_staccato">1t stac.</option>
+                                <option value="croche_staccato">½t stac.</option>
                             </optgroup>
                             <option value="arpeggio">Manuel</option>
                         </select>
+                        <div class="playstyle-dd" id="playstyle-dd">
+                            <button type="button" class="playstyle-dd-toggle" id="playstyle-dd-toggle" title="Style de jeu — combien de fois l'accord est rejoué PENDANT sa durée (réglée à côté), pas sa durée elle-même" aria-haspopup="true" aria-expanded="false">
+                                <span class="playstyle-dd-icon" data-icon-slot></span>
+                                <span class="playstyle-dd-label" data-label-slot></span>
+                                <svg class="playstyle-dd-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                            </button>
+                            <div class="playstyle-dd-menu" id="playstyle-dd-menu" hidden></div>
+                        </div>
                         <select id="duration" hidden>
                             <option value="1">Noire</option>
                             <option value="2">Blanche</option>
@@ -397,6 +405,6 @@
          script.js) — vendu en local plutôt qu'hébergé sur un CDN. Projet LAME (lame.sourceforge.net),
          licence LGPL. -->
     <script src="lame.min.js"></script>
-    <script src="script.js?v=202607232930"></script>
+    <script src="script.js?v=202607233000"></script>
 </body>
 </html>

@@ -315,6 +315,31 @@ const DURATION_OPTIONS = [
         svg: '<rect x="1" y="2.5" width="22" height="4" rx="1.5" fill="currentColor"/><rect x="1" y="8" width="22" height="4" rx="1.5" fill="currentColor"/><rect x="1" y="13.5" width="22" height="4" rx="1.5" fill="currentColor"/><rect x="1" y="19" width="22" height="4" rx="1.5" fill="currentColor"/>' },
 ];
 
+// Styles de jeu disponibles pour un accord (voir #playStyle, piloté par setupPlayStylePicker) :
+// notation musicale réelle — tête(s) de note reliée(s) par une liaison (lié, son continu entre les
+// reprises) ou marquées d'un point staccato (détaché) — plutôt qu'une seule icône par cadence : à 8
+// reprises/mesure (croche), 8 têtes de note distinctes serait illisible en petit. L'icône ne montre
+// donc TOUJOURS que 2 têtes (juste la nature lié/détaché), et c'est le libellé ("4t", "½t"...) qui
+// porte la cadence exacte — comme DURATION_OPTIONS, où l'icône porte la forme et le libellé le chiffre.
+const TIE_SVG = '<ellipse cx="6" cy="12" rx="3.2" ry="2.3" fill="currentColor"/><ellipse cx="18" cy="12" rx="3.2" ry="2.3" fill="currentColor"/><path d="M6 7 Q12 2 18 7" fill="none" stroke="currentColor" stroke-width="1.6"/>';
+const STACCATO_SVG = '<ellipse cx="6" cy="8" rx="3.2" ry="2.3" fill="currentColor"/><ellipse cx="18" cy="8" rx="3.2" ry="2.3" fill="currentColor"/><circle cx="6" cy="14.3" r="1.4" fill="currentColor"/><circle cx="18" cy="14.3" r="1.4" fill="currentColor"/>';
+const PLAYSTYLE_OPTIONS = [
+    { value: 'held', label: 'Tenu', name: 'Tenu',
+        svg: '<ellipse cx="5" cy="8" rx="3.4" ry="2.4" fill="currentColor"/><rect x="9" y="6.2" width="13" height="3.6" rx="1.6" fill="currentColor" opacity="0.55"/>' },
+    { value: 'ronde_maintenu', label: '4t', name: '4t', group: 'Lié (son continu)', svg: TIE_SVG },
+    { value: 'blanche_maintenu', label: '2t', name: '2t', group: 'Lié (son continu)', svg: TIE_SVG },
+    { value: 'noire_maintenu', label: '1t', name: '1t', group: 'Lié (son continu)', svg: TIE_SVG },
+    { value: 'croche_maintenu', label: '½t', name: '½t', group: 'Lié (son continu)', svg: TIE_SVG },
+    { value: 'ronde_staccato', label: '4t stac.', name: '4t staccato', group: 'Détaché (staccato)', svg: STACCATO_SVG },
+    { value: 'blanche_staccato', label: '2t stac.', name: '2t staccato', group: 'Détaché (staccato)', svg: STACCATO_SVG },
+    { value: 'noire_staccato', label: '1t stac.', name: '1t staccato', group: 'Détaché (staccato)', svg: STACCATO_SVG },
+    { value: 'croche_staccato', label: '½t stac.', name: '½t staccato', group: 'Détaché (staccato)', svg: STACCATO_SVG },
+    // Crayon (même glyphe que « Renommer » ailleurs dans l'app, juste redimensionné pour tenir dans
+    // le même viewBox 0 0 24 16 que les autres icônes de ce menu) : « à toi de le dessiner toi-même ».
+    { value: 'arpeggio', label: 'Manuel', name: 'Manuel',
+        svg: '<g transform="scale(1,0.667)"><path d="M9 20h9" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/><path d="M13.5 3.5a2.12 2.12 0 0 1 3 3L6 17l-4 1 1-4Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></g>' },
+];
+
 // Récupère la durée en temps d'un accord sauvegardé (compatibilité : anciens formats en "measures").
 // Blindé contre une valeur corrompue (ex. chaîne vide, texte, 0 ou négatif) : sans ce garde-fou, un
 // seul accord avec un `beats` invalide produisait un total NaN pour toute sa partie ("NaN mes." dans
@@ -1373,6 +1398,7 @@ class HarmoHubApp {
 
         this.setupEventListeners();
         this.setupDurationPicker();
+        this.setupPlayStylePicker();
         this.setupGridInteractions();
         this.setupLoopRangeInteractions();
         this.setupSequencerInteractions();
@@ -2569,6 +2595,7 @@ class HarmoHubApp {
             document.getElementById('toggle-bass').classList.add('active');
         }
         document.getElementById('playStyle').value = d.playStyle || 'held';
+        this.syncPlayStylePicker(); // reflète la nouvelle valeur sur le bouton/menu d'icônes (voir setupPlayStylePicker)
         document.getElementById('instrument').value = d.instrument || 'piano';
 
         const chord = new Chord(d.root, d.quality, beatsFromData(d), d.inversion, d.drop, octaveFromData(d), d.bass);
@@ -4363,6 +4390,74 @@ class HarmoHubApp {
         document.querySelectorAll('.duration-dd-item').forEach(b => b.classList.toggle('active', b.dataset.beats === d.beats));
     }
 
+    // ---------- Style de jeu : bouton fermé + menu déroulant d'icônes ----------
+    // Même principe que setupDurationPicker ci-dessus (voir son commentaire) : pilote le
+    // <select id="playStyle"> resté masqué dans le DOM, seule source de vérité lue ailleurs
+    // (onchange du style de jeu, readChord...). Le menu regroupe les options par `group` (Lié/Détaché),
+    // avec un intitulé non cliquable entre chaque groupe, comme les <optgroup> d'origine.
+    setupPlayStylePicker() {
+        const menu = document.getElementById('playstyle-dd-menu');
+        let lastGroup;
+        menu.innerHTML = PLAYSTYLE_OPTIONS.map(p => {
+            const groupHeader = (p.group && p.group !== lastGroup) ? `<div class="playstyle-dd-group">${p.group}</div>` : '';
+            lastGroup = p.group;
+            return `${groupHeader}
+            <button type="button" class="playstyle-dd-item" data-value="${p.value}">
+                <svg viewBox="0 0 24 16">${p.svg}</svg>
+                <span>${p.name}</span>
+            </button>`;
+        }).join('');
+
+        document.getElementById('playstyle-dd-toggle').addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (menu.hidden) this.openPlayStyleMenu(); else this.closePlayStyleMenu();
+        });
+        document.addEventListener('click', (e) => {
+            if (!document.getElementById('playstyle-dd').contains(e.target)) this.closePlayStyleMenu();
+        });
+
+        menu.addEventListener('click', (e) => {
+            const item = e.target.closest('.playstyle-dd-item');
+            if (!item) return;
+            const select = document.getElementById('playStyle');
+            select.value = item.dataset.value;
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+            this.syncPlayStylePicker();
+            this.closePlayStyleMenu();
+        });
+
+        this.syncPlayStylePicker();
+    }
+
+    openPlayStyleMenu() {
+        const toggle = document.getElementById('playstyle-dd-toggle');
+        const menu = document.getElementById('playstyle-dd-menu');
+        menu.hidden = false;
+        toggle.setAttribute('aria-expanded', 'true');
+        const rect = toggle.getBoundingClientRect();
+        const pad = 8;
+        const left = Math.min(rect.left, window.innerWidth - menu.offsetWidth - pad);
+        menu.style.left = `${Math.max(pad, left)}px`;
+        menu.style.top = `${Math.min(rect.bottom + 4, window.innerHeight - menu.offsetHeight - pad)}px`;
+    }
+
+    closePlayStyleMenu() {
+        const menu = document.getElementById('playstyle-dd-menu');
+        if (menu.hidden) return;
+        menu.hidden = true;
+        document.getElementById('playstyle-dd-toggle').setAttribute('aria-expanded', 'false');
+    }
+
+    // Reflète le style de jeu actuel du <select> caché sur le bouton/menu d'icônes — à appeler chaque
+    // fois que sa valeur change par un autre chemin que ce menu lui-même (voir editChord).
+    syncPlayStylePicker() {
+        const select = document.getElementById('playStyle');
+        const p = PLAYSTYLE_OPTIONS.find(x => x.value === select.value) || PLAYSTYLE_OPTIONS[0];
+        document.querySelector('#playstyle-dd-toggle [data-icon-slot]').innerHTML = `<svg viewBox="0 0 24 16">${p.svg}</svg>`;
+        document.querySelector('#playstyle-dd-toggle [data-label-slot]').textContent = p.label;
+        document.querySelectorAll('.playstyle-dd-item').forEach(b => b.classList.toggle('active', b.dataset.value === select.value));
+    }
+
     // ---------- Grille interactive : tap (écoute), glisser (déplacer) ----------
     // Un seul écouteur délégué sur le conteneur de TOUTES les parties (chaque grille est reconstruite
     // à chaque rendu, contrairement à ce conteneur qui reste stable).
@@ -5794,6 +5889,7 @@ class HarmoHubApp {
             if (e.key === 'Escape' && !document.getElementById('context-menu').hidden) { this.closeContextMenu(); return; }
             if (e.key === 'Escape' && !document.getElementById('section-picker-menu').hidden) { this.closeSectionPicker(); return; }
             if (e.key === 'Escape' && !document.getElementById('duration-dd-menu').hidden) { this.closeDurationMenu(); return; }
+            if (e.key === 'Escape' && !document.getElementById('playstyle-dd-menu').hidden) { this.closePlayStyleMenu(); return; }
             if (e.key === 'Escape' && this.settingsOpen) { this.closeSettings(); return; }
 
             // Barre d'espace : joue/stoppe l'accord courant si le séquenceur est ouvert (pour
