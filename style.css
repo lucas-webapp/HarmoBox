@@ -9,6 +9,16 @@
     --radius: 12px;
     --font: 'Plus Jakarta Sans', sans-serif;
 
+    /* Palette « pierre précieuse » foncée des boutons pleins (voir .btn-prog/.btn-blue/.btn-stop/
+       .btn-sec) : une teinte profonde et désaturée par famille plutôt que le vert/bleu/rouge vif de
+       --accent directement en texte/contour sur fond quasi noir — trop "flashy" à l'usage. La couleur
+       se lit dans la matière du bouton (dégradé + reflet), jamais dans un texte criard. */
+    --btn-green-1: #234534; --btn-green-2: #17301f; --btn-green-border: #2f5b40; --btn-green-border-hover: #3d7a54;
+    --btn-blue-1: #253a5c; --btn-blue-2: #182640; --btn-blue-border: #33507c; --btn-blue-border-hover: #4570b0;
+    --btn-red-1: #5c2f2a; --btn-red-2: #3a1e1b; --btn-red-border: #7c443c; --btn-red-border-hover: #a35c4e;
+    --btn-neutral-1: #262626; --btn-neutral-2: #1a1a1a; --btn-neutral-border: #3a3a3a; --btn-neutral-border-hover: #4a4a4a;
+    --btn-text: #e9f3ec;
+
     /* Échelle typographique unique : toute taille de texte de l'appli s'y réfère (voir plus bas),
        pour éviter la dérive de valeurs ad hoc (0.56rem, 0.58rem, 0.66rem, 0.78rem, 0.82rem...) qui
        s'était accumulée au fil des ajouts successifs. */
@@ -552,18 +562,18 @@ main {
 
 /* État "actif" (ex. panneau séquenceur ouvert) */
 .icon-btn.active {
-    background: linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0) 50%), rgba(0, 230, 118, 0.14);
-    color: var(--accent);
-    border-color: rgba(0, 230, 118, 0.45);
+    background-image: radial-gradient(120% 160% at 20% 0%, rgba(255,255,255,0.12), transparent 55%), linear-gradient(160deg, var(--btn-green-1), var(--btn-green-2) 70%);
+    color: var(--btn-text);
+    border-color: var(--btn-green-border);
 }
 
 /* Action mise en avant (Enregistrer) : reste verte même au repos */
 .icon-btn-accent {
-    background: linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0) 50%), rgba(0, 230, 118, 0.10);
-    color: var(--accent);
-    border-color: rgba(0, 230, 118, 0.35);
+    background-image: radial-gradient(120% 160% at 20% 0%, rgba(255,255,255,0.10), transparent 55%), linear-gradient(160deg, var(--btn-green-1), var(--btn-green-2) 70%);
+    color: var(--btn-text);
+    border-color: var(--btn-green-border);
 }
-.icon-btn-accent:hover { background: linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0) 50%), rgba(0, 230, 118, 0.18); }
+.icon-btn-accent:hover { background-image: radial-gradient(120% 160% at 20% 0%, rgba(255,255,255,0.16), transparent 55%), linear-gradient(160deg, #2b5540, #1c3a26 70%); border-color: var(--btn-green-border-hover); }
 
 .icon-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 .icon-btn:disabled:active { transform: none; box-shadow: 0 1px 2px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.03); }
@@ -748,55 +758,57 @@ button {
 }
 button:active { transform: translateY(1px); }
 
-/* Boutons : palette homogène et moderne (vert plein = lecture principale,
-   contour vert = progression, contours neutres = secondaires / stop). Chacun reçoit un léger dégradé
-   de surface (reflet du haut) + une ombre portée douce pour une texture plus tactile/« pro » qu'un
-   simple aplat, et perd son ombre au clic pour un vrai retour d'appui. */
+/* Boutons : palette « pierre précieuse » foncée (vert = lecture principale, bleu = édition/ajout,
+   rouge = stop/annuler, gris = secondaire) — fond plein en dégradé profond et désaturé + reflet
+   diagonal doux (radial en haut à gauche) + ombre portée, plutôt qu'un texte/contour dans la couleur
+   vive de --accent : la teinte se lit dans la matière du bouton, jamais dans un aplat criard sur fond
+   quasi noir. Perd son ombre au clic pour un vrai retour d'appui (voir button:active plus haut). */
 .btn-main {
-    background: linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0) 55%), var(--accent);
-    color: #04160c;
-    border: 1px solid var(--accent);
-    box-shadow: 0 2px 6px rgba(0, 230, 118, 0.25), inset 0 1px 0 rgba(255,255,255,0.25);
+    background-image: radial-gradient(120% 160% at 20% 0%, rgba(255,255,255,0.14), transparent 55%), linear-gradient(160deg, var(--btn-green-1), var(--btn-green-2) 70%);
+    color: var(--btn-text);
+    border: 1px solid var(--btn-green-border);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.08) inset, 0 3px 8px rgba(0,0,0,0.35);
 }
-.btn-main:hover { background: linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0) 55%), var(--accent-hover); border-color: var(--accent-hover); }
-.btn-main:active { box-shadow: inset 0 1px 4px rgba(0,0,0,0.2); }
+.btn-main:hover { background-image: radial-gradient(120% 160% at 20% 0%, rgba(255,255,255,0.2), transparent 55%), linear-gradient(160deg, #2b5540, #1c3a26 70%); border-color: var(--btn-green-border-hover); }
+.btn-main:active { box-shadow: inset 0 1px 4px rgba(0,0,0,0.35); }
 
 .btn-prog {
-    background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0) 50%), rgba(0, 230, 118, 0.10);
-    color: var(--accent);
-    border: 1px solid rgba(0, 230, 118, 0.45);
-    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    background-image: radial-gradient(120% 160% at 20% 0%, rgba(255,255,255,0.10), transparent 55%), linear-gradient(160deg, var(--btn-green-1), var(--btn-green-2) 70%);
+    color: var(--btn-text);
+    border: 1px solid var(--btn-green-border);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.07) inset, 0 3px 8px rgba(0,0,0,0.35);
 }
-.btn-prog:hover { background: linear-gradient(180deg, rgba(255,255,255,0.1), rgba(255,255,255,0) 50%), rgba(0, 230, 118, 0.18); border-color: var(--accent); }
-.btn-prog:active { box-shadow: inset 0 1px 3px rgba(0,0,0,0.3); }
+.btn-prog:hover { background-image: radial-gradient(120% 160% at 20% 0%, rgba(255,255,255,0.16), transparent 55%), linear-gradient(160deg, #2b5540, #1c3a26 70%); border-color: var(--btn-green-border-hover); }
+.btn-prog:active { box-shadow: inset 0 1px 3px rgba(0,0,0,0.4); }
 
-/* Actions d'édition de la grille (Ajouter/À la suite) : même traitement que .btn-prog, en bleu
-   plutôt qu'en vert, pour rester distinctes des actions de lecture */
+/* Actions d'édition de la grille (Ajouter/À la suite/Modifier) : même traitement que .btn-prog, en
+   bleu plutôt qu'en vert, pour rester distinctes des actions de lecture */
 .btn-blue {
-    background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0) 50%), rgba(47, 129, 247, 0.10);
-    color: #2f81f7;
-    border: 1px solid rgba(47, 129, 247, 0.45);
-    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    background-image: radial-gradient(120% 160% at 20% 0%, rgba(255,255,255,0.10), transparent 55%), linear-gradient(160deg, var(--btn-blue-1), var(--btn-blue-2) 70%);
+    color: var(--btn-text);
+    border: 1px solid var(--btn-blue-border);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.07) inset, 0 3px 8px rgba(0,0,0,0.35);
 }
-.btn-blue:hover { background: linear-gradient(180deg, rgba(255,255,255,0.1), rgba(255,255,255,0) 50%), rgba(47, 129, 247, 0.18); border-color: #2f81f7; }
-.btn-blue:active { box-shadow: inset 0 1px 3px rgba(0,0,0,0.3); }
+.btn-blue:hover { background-image: radial-gradient(120% 160% at 20% 0%, rgba(255,255,255,0.16), transparent 55%), linear-gradient(160deg, #2d4570, #1e304e 70%); border-color: var(--btn-blue-border-hover); }
+.btn-blue:active { box-shadow: inset 0 1px 3px rgba(0,0,0,0.4); }
 
 .btn-sec {
-    background: linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0) 50%), #1c2027;
-    color: var(--text-main);
-    border: 1px solid #333;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.03);
+    background-image: radial-gradient(120% 160% at 20% 0%, rgba(255,255,255,0.08), transparent 55%), linear-gradient(160deg, var(--btn-neutral-1), var(--btn-neutral-2) 70%);
+    color: #d2d2d2;
+    border: 1px solid var(--btn-neutral-border);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.05) inset, 0 3px 8px rgba(0,0,0,0.3);
 }
-.btn-sec:hover { background: linear-gradient(180deg, rgba(255,255,255,0.09), rgba(255,255,255,0) 50%), #262b33; border-color: #454b54; }
+.btn-sec:hover { background-image: radial-gradient(120% 160% at 20% 0%, rgba(255,255,255,0.12), transparent 55%), linear-gradient(160deg, #2d2d2d, #202020 70%); border-color: var(--btn-neutral-border-hover); }
 .btn-sec:active { box-shadow: inset 0 1px 3px rgba(0,0,0,0.35); }
 
 .btn-stop {
-    background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0) 50%), rgba(255, 90, 80, 0.06);
-    color: #ff7a6e;
-    border: 1px solid rgba(255, 90, 80, 0.40);
+    background-image: radial-gradient(120% 160% at 20% 0%, rgba(255,255,255,0.10), transparent 55%), linear-gradient(160deg, var(--btn-red-1), var(--btn-red-2) 70%);
+    color: var(--btn-text);
+    border: 1px solid var(--btn-red-border);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.07) inset, 0 3px 8px rgba(0,0,0,0.35);
 }
-.btn-stop:hover { background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0) 50%), rgba(255, 90, 80, 0.14); border-color: #ff5a50; }
-.btn-stop:active { box-shadow: inset 0 1px 3px rgba(0,0,0,0.3); }
+.btn-stop:hover { background-image: radial-gradient(120% 160% at 20% 0%, rgba(255,255,255,0.16), transparent 55%), linear-gradient(160deg, #6c3830, #452420 70%); border-color: var(--btn-red-border-hover); }
+.btn-stop:active { box-shadow: inset 0 1px 3px rgba(0,0,0,0.4); }
 
 /* ---------- Clavier ---------- */
 .piano-container {
@@ -1600,13 +1612,13 @@ button:active { transform: translateY(1px); }
 
 /* Bouton dédié : supprime uniquement les notes sélectionnées, sans toucher au reste du motif */
 .seq-delete-btn:not(:disabled) {
-    background: linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0) 50%), rgba(255, 90, 80, 0.16);
-    border: 1px solid rgba(255, 90, 80, 0.45);
-    color: #ff7a6e;
+    background-image: radial-gradient(120% 160% at 20% 0%, rgba(255,255,255,0.08), transparent 55%), linear-gradient(160deg, var(--btn-red-1), var(--btn-red-2) 70%);
+    border: 1px solid var(--btn-red-border);
+    color: var(--btn-text);
 }
 .seq-delete-btn:not(:disabled):hover {
-    background: linear-gradient(180deg, rgba(255,255,255,0.09), rgba(255,255,255,0) 50%), rgba(255, 90, 80, 0.26);
-    border-color: #ff5a50;
+    background-image: radial-gradient(120% 160% at 20% 0%, rgba(255,255,255,0.14), transparent 55%), linear-gradient(160deg, #6c3830, #452420 70%);
+    border-color: var(--btn-red-border-hover);
 }
 .seq-delete-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
