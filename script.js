@@ -2309,6 +2309,28 @@ class HarmoBoxApp {
         this.loadProgression();
     }
 
+    // Construit les données d'un accord (fondamentale, sans renversement/drop/basse) à partir d'un
+    // symbole déjà reconnu (voir parseChordSymbol) — partagé par addChordFromSymbol (un accord) et
+    // addChordsFromSymbolList (plusieurs, séparés par "/").
+    buildChordData(parsed, beats, playStyle, instrument) {
+        const chord = new Chord(parsed.root, parsed.quality, beats, 0, 'none', 3, null);
+        const voices = chord.getMidiNotes().length;
+        const { pattern, tie } = seqPreset(playStyle, voices, beats * SEQ_STEPS_PER_BEAT);
+        return {
+            root: parsed.root,
+            quality: parsed.quality,
+            beats,
+            octave: 3,
+            inversion: 0,
+            drop: 'none',
+            bass: null,
+            playStyle,
+            instrument,
+            arpPattern: serializeSeqPattern(pattern, tie),
+            seqEdited: false,
+        };
+    }
+
     // Saisie rapide (voir parseChordSymbol) : ajoute directement un accord à la fin de la partie
     // active, toujours en position fondamentale (sans renversement/drop/basse — modifiables ensuite
     // en double-cliquant la case comme n'importe quel accord), à la durée et au style de lecture/
@@ -2327,22 +2349,7 @@ class HarmoBoxApp {
         const beats = parseInt(document.getElementById('duration').value) || 4;
         const playStyle = document.getElementById('playStyle').value;
         const instrument = document.getElementById('instrument').value;
-        const chord = new Chord(parsed.root, parsed.quality, beats, 0, 'none', 3, null);
-        const voices = chord.getMidiNotes().length;
-        const { pattern, tie } = seqPreset(playStyle, voices, beats * SEQ_STEPS_PER_BEAT);
-        const data = {
-            root: parsed.root,
-            quality: parsed.quality,
-            beats,
-            octave: 3,
-            inversion: 0,
-            drop: 'none',
-            bass: null,
-            playStyle,
-            instrument,
-            arpPattern: serializeSeqPattern(pattern, tie),
-            seqEdited: false,
-        };
+        const data = this.buildChordData(parsed, beats, playStyle, instrument);
 
         const sections = loadProgressionSections();
         this.pushUndo(sections);
@@ -2354,9 +2361,43 @@ class HarmoBoxApp {
         return true;
     }
 
+    // Ajoute PLUSIEURS accords d'un coup, séparés par "/" (ex. "CM7/Am7/F6/Bbm7" pour 4 mesures) — un
+    // accord PAR MESURE (beatsPerBar), toujours en fondamentale, sans renversement/drop/basse, comme
+    // addChordFromSymbol. Tout ou rien : si un seul symbole ne se reconnaît pas, rien n'est ajouté
+    // (un ajout partiel serait déroutant — mieux vaut corriger et retaper la liste entière).
+    addChordsFromSymbolList(section, listStr) {
+        const parts = listStr.split('/').map(p => p.trim()).filter(p => p.length > 0);
+        if (parts.length === 0) return false;
+        const parsedList = parts.map(p => parseChordSymbol(p));
+        const badIndex = parsedList.findIndex(p => !p);
+        if (badIndex !== -1) {
+            this.flashHint(`Accord non reconnu : « ${parts[badIndex]} »`);
+            return false;
+        }
+        const beats = this.beatsPerBar();
+        const playStyle = document.getElementById('playStyle').value;
+        const instrument = document.getElementById('instrument').value;
+        const sections = loadProgressionSections();
+        this.pushUndo(sections);
+        parsedList.forEach(parsed => sections[section].chords.push(this.buildChordData(parsed, beats, playStyle, instrument)));
+        saveProgressionSections(sections);
+        this.loadProgression();
+        this.flashHint(`${parsedList.length} accords ajoutés (1 par mesure)`);
+        return true;
+    }
+
+    // Point d'entrée commun à l'ajout rapide et à la case "+" (voir buildAddCellHtml) : un symbole
+    // seul ajoute UN accord à la durée réglée dans le panneau ; plusieurs séparés par "/" ajoutent un
+    // accord par mesure d'un coup (voir addChordsFromSymbolList).
+    addChordInputToSection(section, value) {
+        return value.includes('/')
+            ? this.addChordsFromSymbolList(section, value)
+            : this.addChordFromSymbol(section, value);
+    }
+
     addQuickChord() {
         const input = document.getElementById('quick-add-input');
-        if (this.addChordFromSymbol(this.activeSection, input.value)) {
+        if (this.addChordInputToSection(this.activeSection, input.value)) {
             input.value = '';
             input.focus();
         }
@@ -4109,7 +4150,7 @@ class HarmoBoxApp {
             const refocus = e.target.dataset.refocus === '1';
             if (!value) return; // champ vidé (Échap) ou jamais rempli : rien à faire, pas d'erreur inutile
             const section = +e.target.dataset.section;
-            if (this.addChordFromSymbol(section, value) && refocus) {
+            if (this.addChordInputToSection(section, value) && refocus) {
                 // loadProgression() a déjà reconstruit un champ "+" vide à la même place : lui redonner
                 // le focus pour enchaîner plusieurs accords sans re-cliquer à chaque fois — seulement
                 // après Entrée (le clavier reste ouvert), jamais après un tap ailleurs qui l'a fermé.
