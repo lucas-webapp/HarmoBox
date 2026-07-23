@@ -589,6 +589,73 @@ main {
 }
 .select-group + .select-group { margin-top: 10px; }
 
+/* Durée de l'accord : bouton fermé (icône + libellé compact) qui ouvre un petit menu déroulant
+   d'icônes — remplace un <select> texte ("Noire", "1 mesure"...) jugé trop lourd visuellement une
+   fois qu'il fallait 5 boutons toujours affichés (essayé avant ce menu). Le <select> d'origine
+   reste dans le DOM (masqué, voir index.html) : c'est toujours lui la source de vérité, lu partout
+   ailleurs dans le code via document.getElementById('duration').value — ce menu ne fait que le
+   piloter (voir setupDurationPicker/syncDurationPicker dans script.js). */
+.duration-dd { position: relative; flex: none; align-self: stretch; }
+.duration-dd-toggle {
+    /* height: 100% (pas 28px comme .icon-btn) : égale la hauteur du <select> juste à côté
+       (.select-group est en flex, stretch par défaut) — ce réglage n'est pas moins important que
+       les autres, il mérite un bouton à la même échelle plutôt qu'une icône réduite. */
+    height: 100%;
+    width: auto;
+    min-width: 52px;
+    padding: 6px 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0) 50%), #1c2027;
+    color: var(--text-muted);
+    border: 1px solid #333;
+    border-radius: 8px;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.03);
+}
+.duration-dd-toggle:hover { background: linear-gradient(180deg, rgba(255,255,255,0.09), rgba(255,255,255,0) 50%), #262b33; border-color: #454b54; color: var(--text-main); }
+.duration-dd-icon { width: 26px; height: 20px; display: block; color: var(--text-main); }
+.duration-dd-icon svg { width: 100%; height: 100%; display: block; }
+.duration-dd-label { font-size: 10px; font-weight: 700; color: var(--text-muted); line-height: 1; white-space: nowrap; }
+.duration-dd-menu {
+    /* fixed (pas absolute) + coordonnées calculées en JS (voir openDurationMenu) : la carte
+       contenante (.panel-controls) défile sur elle-même (overflow-y) et rognerait un menu positionné
+       en absolu par rapport à elle — comme #context-menu, déjà fixed pour la même raison. */
+    position: fixed;
+    z-index: 200;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    padding: 6px;
+    min-width: 160px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.duration-dd-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 8px 10px;
+    background: none;
+    border: none;
+    border-radius: 7px;
+    color: var(--text-main);
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    cursor: pointer;
+    text-align: left;
+}
+.duration-dd-item svg { width: 26px; height: 20px; flex: none; color: var(--text-muted); }
+.duration-dd-item:hover { background: #1e2027; }
+.duration-dd-item.active { color: var(--accent); }
+.duration-dd-item.active svg { color: var(--accent); }
+
 /* Carte Accord : grille à 2 colonnes (note/qualité — la durée a rejoint .select-group dans la carte
    Lecture). minmax(0,1fr) laisse les colonnes se réduire ensemble plutôt que déborder si le contenu
    est plus large que prévu. Les boutons « ⋯ »/basse/avancé vivent dans .card-head-actions (en-tête de

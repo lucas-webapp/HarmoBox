@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>HarmoHub</title>
-    <link rel="stylesheet" href="style.css?v=202607232730">
+    <link rel="stylesheet" href="style.css?v=202607232800">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
 </head>
@@ -194,13 +194,20 @@
                             </optgroup>
                             <option value="arpeggio">Manuel</option>
                         </select>
-                        <select id="duration">
+                        <select id="duration" hidden>
                             <option value="1">Noire</option>
                             <option value="2">Blanche</option>
                             <option value="4" selected>1 mesure</option>
                             <option value="8">2 mesures</option>
                             <option value="16">4 mesures</option>
                         </select>
+                        <div class="duration-dd" id="duration-dd">
+                            <button type="button" class="duration-dd-toggle" id="duration-dd-toggle" title="Durée de l'accord" aria-haspopup="true" aria-expanded="false">
+                                <span class="duration-dd-icon" data-icon-slot></span>
+                                <span class="duration-dd-label" data-label-slot></span>
+                            </button>
+                            <div class="duration-dd-menu" id="duration-dd-menu" hidden></div>
+                        </div>
                     </div>
                     <input type="hidden" id="arpPattern" value="">
                     <div id="arp-sequencer" class="arp-seq" hidden></div>
@@ -394,6 +401,6 @@
          script.js) — vendu en local plutôt qu'hébergé sur un CDN. Projet LAME (lame.sourceforge.net),
          licence LGPL. -->
     <script src="lame.min.js"></script>
-    <script src="script.js?v=202607232730"></script>
+    <script src="script.js?v=202607232800"></script>
 </body>
 </html>

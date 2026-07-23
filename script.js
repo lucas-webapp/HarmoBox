@@ -297,6 +297,24 @@ function seqPageBars(beatsPerBar) {
 // Réglages d'accord : Entrée depuis l'un d'eux ajoute/modifie directement (moins de clics)
 const CHORD_PARAM_IDS = ['root', 'quality', 'duration', 'inversion', 'drop', 'octave', 'bass', 'playStyle', 'instrument'];
 
+// Durées disponibles pour un accord (voir #duration, piloté par setupDurationPicker) : icône en
+// barre remplie (proportion de la mesure occupée), même langage visuel pour les 5 — noire/blanche
+// juste partiellement remplies (1/4, 1/2 d'une mesure en 4/4), 1/2/4 mesures en barres pleines
+// répétées. `label` = libellé compact affiché sous l'icône du bouton fermé, `name` = libellé complet
+// dans le menu déroulant (juste le nom : pas besoin d'y répéter "1 temps"/"2 temps", déjà su).
+const DURATION_OPTIONS = [
+    { beats: '1', label: 'Noire', name: 'Noire',
+        svg: '<rect x="1" y="9" width="22" height="7" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="1" y="9" width="6" height="7" rx="2.2" fill="currentColor"/>' },
+    { beats: '2', label: 'Blanche', name: 'Blanche',
+        svg: '<rect x="1" y="9" width="22" height="7" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="1" y="9" width="11" height="7" rx="2.2" fill="currentColor"/>' },
+    { beats: '4', label: '1 mes.', name: '1 mesure',
+        svg: '<rect x="1" y="9" width="22" height="7" rx="2.2" fill="currentColor"/>' },
+    { beats: '8', label: '2 mes.', name: '2 mesures',
+        svg: '<rect x="1" y="6" width="22" height="5" rx="1.8" fill="currentColor"/><rect x="1" y="13" width="22" height="5" rx="1.8" fill="currentColor"/>' },
+    { beats: '16', label: '4 mes.', name: '4 mesures',
+        svg: '<rect x="1" y="2.5" width="22" height="4" rx="1.5" fill="currentColor"/><rect x="1" y="8" width="22" height="4" rx="1.5" fill="currentColor"/><rect x="1" y="13.5" width="22" height="4" rx="1.5" fill="currentColor"/><rect x="1" y="19" width="22" height="4" rx="1.5" fill="currentColor"/>' },
+];
+
 // Récupère la durée en temps d'un accord sauvegardé (compatibilité : anciens formats en "measures").
 // Blindé contre une valeur corrompue (ex. chaîne vide, texte, 0 ou négatif) : sans ce garde-fou, un
 // seul accord avec un `beats` invalide produisait un total NaN pour toute sa partie ("NaN mes." dans
@@ -1354,6 +1372,7 @@ class HarmoHubApp {
         this.filesRedoStack = [];
 
         this.setupEventListeners();
+        this.setupDurationPicker();
         this.setupGridInteractions();
         this.setupLoopRangeInteractions();
         this.setupSequencerInteractions();
@@ -2524,6 +2543,7 @@ class HarmoHubApp {
         this.revealComplexQualityIfNeeded(d.quality);
         document.getElementById('quality').value = d.quality;
         document.getElementById('duration').value = String(beatsFromData(d));
+        this.syncDurationPicker(); // reflète la nouvelle valeur sur le bouton/menu d'icônes (voir setupDurationPicker)
         this.revealAdvancedIfNeeded(d);
         document.getElementById('octave').value = String(octaveFromData(d));
         document.getElementById('inversion').value = d.inversion;
@@ -4236,6 +4256,72 @@ class HarmoHubApp {
         }
     }
 
+    // ---------- Durée de l'accord : bouton fermé + menu déroulant d'icônes ----------
+    // Pilote le <select id="duration"> resté dans le DOM mais masqué (voir index.html) : il reste la
+    // seule source de vérité, lue partout ailleurs (addChordFromSymbol, onResizeStart...) via
+    // document.getElementById('duration').value — ce menu ne fait qu'écrire dedans et se resynchroniser
+    // avec lui (voir syncDurationPicker, appelée aussi par editChord quand un accord existant se charge).
+    setupDurationPicker() {
+        const menu = document.getElementById('duration-dd-menu');
+        menu.innerHTML = DURATION_OPTIONS.map(d => `
+            <button type="button" class="duration-dd-item" data-beats="${d.beats}">
+                <svg viewBox="0 0 24 24">${d.svg}</svg>
+                <span>${d.name}</span>
+            </button>`).join('');
+
+        document.getElementById('duration-dd-toggle').addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (menu.hidden) this.openDurationMenu(); else this.closeDurationMenu();
+        });
+        // Ferme au clic ailleurs, comme le menu contextuel de la grille — sauf sur le menu/bouton eux-mêmes.
+        document.addEventListener('click', (e) => {
+            if (!document.getElementById('duration-dd').contains(e.target)) this.closeDurationMenu();
+        });
+
+        menu.addEventListener('click', (e) => {
+            const item = e.target.closest('.duration-dd-item');
+            if (!item) return;
+            const select = document.getElementById('duration');
+            select.value = item.dataset.beats;
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+            this.syncDurationPicker();
+            this.closeDurationMenu();
+        });
+
+        this.syncDurationPicker();
+    }
+
+    openDurationMenu() {
+        const toggle = document.getElementById('duration-dd-toggle');
+        const menu = document.getElementById('duration-dd-menu');
+        menu.hidden = false;
+        toggle.setAttribute('aria-expanded', 'true');
+        // Position fixed (voir CSS) : coordonnées calculées ici sous le bouton, repliées à gauche si
+        // ça déborderait de la fenêtre — même logique que openContextMenu/openSectionPicker.
+        const rect = toggle.getBoundingClientRect();
+        const pad = 8;
+        const left = Math.min(rect.left, window.innerWidth - menu.offsetWidth - pad);
+        menu.style.left = `${Math.max(pad, left)}px`;
+        menu.style.top = `${Math.min(rect.bottom + 4, window.innerHeight - menu.offsetHeight - pad)}px`;
+    }
+
+    closeDurationMenu() {
+        const menu = document.getElementById('duration-dd-menu');
+        if (menu.hidden) return;
+        menu.hidden = true;
+        document.getElementById('duration-dd-toggle').setAttribute('aria-expanded', 'false');
+    }
+
+    // Reflète la durée actuelle du <select> caché sur le bouton/menu d'icônes — à appeler chaque fois
+    // que sa valeur change par un autre chemin que ce menu lui-même (voir editChord).
+    syncDurationPicker() {
+        const select = document.getElementById('duration');
+        const d = DURATION_OPTIONS.find(x => x.beats === select.value) || DURATION_OPTIONS[2];
+        document.querySelector('#duration-dd-toggle [data-icon-slot]').innerHTML = `<svg viewBox="0 0 24 24">${d.svg}</svg>`;
+        document.querySelector('#duration-dd-toggle [data-label-slot]').textContent = d.label;
+        document.querySelectorAll('.duration-dd-item').forEach(b => b.classList.toggle('active', b.dataset.beats === d.beats));
+    }
+
     // ---------- Grille interactive : tap (écoute), glisser (déplacer) ----------
     // Un seul écouteur délégué sur le conteneur de TOUTES les parties (chaque grille est reconstruite
     // à chaque rendu, contrairement à ce conteneur qui reste stable).
@@ -5645,6 +5731,7 @@ class HarmoHubApp {
 
             if (e.key === 'Escape' && !document.getElementById('context-menu').hidden) { this.closeContextMenu(); return; }
             if (e.key === 'Escape' && !document.getElementById('section-picker-menu').hidden) { this.closeSectionPicker(); return; }
+            if (e.key === 'Escape' && !document.getElementById('duration-dd-menu').hidden) { this.closeDurationMenu(); return; }
             if (e.key === 'Escape' && this.settingsOpen) { this.closeSettings(); return; }
 
             // Barre d'espace : joue/stoppe l'accord courant si le séquenceur est ouvert (pour
