@@ -1114,7 +1114,7 @@ button:active { transform: translateY(1px); }
 /* Grille d'accords façon lead sheet */
 .chord-grid {
     --row-h: 64px;
-    --measure-row-h: 15px;
+    --measure-row-h: 20px;
     display: grid;
     grid-template-columns: repeat(16, 1fr); /* par défaut (grille vide) ; posé dynamiquement en JS sinon,
                                                 selon la signature rythmique du morceau */
@@ -1393,16 +1393,36 @@ button:active { transform: translateY(1px); }
 
 /* Plage d'accords à boucler (glisser sur la ligne des numéros de mesure, voir
    setupLoopRangeInteractions/setLoopRange) — inspirée de la barre de cycle jaune de GarageBand. Un
-   jaune/doré distinct du vert (sélection/lecture) et de l'orange (édition) pour ne pas s'y confondre. */
+   jaune/doré distinct du vert (sélection/lecture) et de l'orange (édition) pour ne pas s'y confondre.
+   Plus haute qu'avant (plus facile à attraper au doigt) et même texture que les boutons (reflet
+   diagonal + profondeur) plutôt qu'un dégradé plat à 2 tons. Interactive : un simple clic/tap dessus
+   (sans glisser) la supprime (voir onLoopRangeEnd), glisser son CORPS la redéfinit depuis ce point
+   (comme avant), et ses poignées (.loop-range-handle-*) étirent un seul bord à la fois. */
 .loop-range-bar {
+    position: relative;
     align-self: center;
-    height: 6px;
-    margin-top: 1px;
-    border-radius: 3px;
-    background: linear-gradient(180deg, #ffd54f, #ffb300);
-    box-shadow: 0 0 5px rgba(255, 213, 79, 0.45);
+    height: 13px;
+    margin-top: 2px;
+    border-radius: 5px;
+    background-image: radial-gradient(120% 160% at 25% 20%, rgba(255,255,255,0.4), transparent 60%), linear-gradient(160deg, #ffd54f, #ffb300 75%);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.3) inset, 0 0 6px rgba(255, 179, 0, 0.4), 0 2px 4px rgba(0,0,0,0.3);
     z-index: 1;
-    pointer-events: none;
+    cursor: pointer;
+    pointer-events: auto;
+    touch-action: none;
+}
+
+/* Poignées de bord (étire un seul côté de la plage, l'autre reste fixe) — élément de grille
+   INDÉPENDANT posé sur la même case qu'un .loop-range-bar/.row-measure (voir buildLoopRangeBars),
+   pas un enfant absolu de la bande : imbriquées, elles resteraient piégées dans le contexte
+   d'empilement isolé de la bande (position+z-index) et ne passeraient jamais devant .row-measure
+   (z-index:2), qui occupe pourtant la case juste là la plupart du temps (un bord de plage tombe
+   presque toujours sur un début de mesure). Zone invisible + curseur seul, comme .cell-resize-*. */
+.loop-range-handle {
+    align-self: stretch;
+    z-index: 3;
+    cursor: ew-resize;
+    touch-action: none;
 }
 
 /* Le lavis doré des cases couvertes par la plage (.in-loop-range) est désormais composé directement

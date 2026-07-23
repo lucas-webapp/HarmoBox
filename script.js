@@ -4501,40 +4501,76 @@ class HarmoBoxApp {
         return seg ? seg.index : null;
     }
 
+    // Trois façons de commencer un geste sur la plage à boucler, selon l'élément visé :
+    //  - une poignée (.loop-range-handle-left/right) : étire CE bord seul, l'autre reste fixe ;
+    //  - le corps d'une bande déjà là (.loop-range-bar) : un simple tap (sans bouger, voir
+    //    onLoopRangeEnd) la SUPPRIME ; un glisser la redéfinit depuis ce point, comme ci-dessous ;
+    //  - la ligne des numéros de mesure ailleurs (.row-measure) : définit une nouvelle plage depuis
+    //    ce point (comportement historique, inchangé).
     onLoopRangeStart(e) {
         if (e.button != null && e.button !== 0) return; // clic gauche / toucher uniquement
-        if (!e.target.closest('.row-measure')) return;
+        const handle = e.target.closest('.loop-range-handle');
+        const bar = e.target.closest('.loop-range-bar');
+        if (!handle && !bar && !e.target.closest('.row-measure')) return;
         const gridEl = e.target.closest('.chord-grid');
         if (!gridEl) return;
         e.preventDefault();
         e.stopPropagation(); // n'ouvre pas aussi le glisser-déposer (réordonner) de la grille
         const section = +gridEl.dataset.section;
-        const index = this.chordIndexAtPoint(gridEl, section, e.clientX, e.clientY);
-        if (index == null) return;
+        const range = this.loopRange;
 
         // Ne PAS garder `gridEl` : setLoopRange() re-rend la grille (loadProgression), ce qui
         // remplace tout le sous-arbre DOM — l'élément capturé ici deviendrait détaché dès le premier
         // appel, faussant tout calcul de géométrie basé dessus par la suite (voir chordIndexAtPoint).
         // On re-cherche la grille VIVANTE (par data-section) à chaque déplacement à la place.
-        this.loopRangeDrag = { section, anchor: index };
+        if (handle) {
+            if (!range || range.section !== section) return;
+            const edge = handle.dataset.edge;
+            this.loopRangeDrag = { section, mode: edge === 'left' ? 'edge-left' : 'edge-right', fixed: edge === 'left' ? range.end : range.start, moved: false };
+        } else if (bar) {
+            // Tap sans bouger = supprime (voir onLoopRangeEnd) ; glisser = redéfinit depuis ce point,
+            // exactement comme un glisser démarré ailleurs sur la ligne — seul le tap immobile change
+            // de sens ici, d'où un mode distinct ('bar-tap') malgré une logique de glisser identique.
+            if (!range || range.section !== section) return;
+            const anchor = this.chordIndexAtPoint(gridEl, section, e.clientX, e.clientY);
+            if (anchor == null) return;
+            this.loopRangeDrag = { section, mode: 'bar-tap', anchor, moved: false };
+        } else {
+            const index = this.chordIndexAtPoint(gridEl, section, e.clientX, e.clientY);
+            if (index == null) return;
+            this.loopRangeDrag = { section, mode: 'new', anchor: index, moved: false };
+            this.setLoopRange(section, index, index);
+        }
+
+        this.loopRangeDragStart = { x: e.clientX, y: e.clientY };
         this._onLoopRangeMove = (ev) => this.onLoopRangeMove(ev);
         this._onLoopRangeUp = () => this.onLoopRangeEnd();
         window.addEventListener('pointermove', this._onLoopRangeMove);
         window.addEventListener('pointerup', this._onLoopRangeUp);
         window.addEventListener('pointercancel', this._onLoopRangeUp);
-        this.setLoopRange(section, index, index);
     }
 
     onLoopRangeMove(e) {
         const d = this.loopRangeDrag;
         if (!d) return;
+        const start = this.loopRangeDragStart;
+        if (!d.moved && Math.hypot(e.clientX - start.x, e.clientY - start.y) < 6) return; // seuil : distingue un tap d'un glisser
+        d.moved = true;
+
         const gridEl = document.querySelector(`.chord-grid[data-section="${d.section}"]`);
         if (!gridEl) return;
         const index = this.chordIndexAtPoint(gridEl, d.section, e.clientX, e.clientY);
         if (index == null) return;
-        const lo = Math.min(d.anchor, index), hi = Math.max(d.anchor, index);
-        if (!this.loopRange || this.loopRange.start !== lo || this.loopRange.end !== hi) {
-            this.setLoopRange(d.section, lo, hi);
+
+        if (d.mode === 'edge-left') {
+            this.setLoopRange(d.section, index, d.fixed);
+        } else if (d.mode === 'edge-right') {
+            this.setLoopRange(d.section, d.fixed, index);
+        } else {
+            const lo = Math.min(d.anchor, index), hi = Math.max(d.anchor, index);
+            if (!this.loopRange || this.loopRange.start !== lo || this.loopRange.end !== hi) {
+                this.setLoopRange(d.section, lo, hi);
+            }
         }
     }
 
@@ -4542,7 +4578,14 @@ class HarmoBoxApp {
         window.removeEventListener('pointermove', this._onLoopRangeMove);
         window.removeEventListener('pointerup', this._onLoopRangeUp);
         window.removeEventListener('pointercancel', this._onLoopRangeUp);
+        const d = this.loopRangeDrag;
         this.loopRangeDrag = null;
+        // Tap (sans glisser) pile sur une bande déjà là, pas sur une poignée : la supprime — sans ça,
+        // aucun moyen tactile d'annuler une plage à boucler une fois posée.
+        if (d && d.mode === 'bar-tap' && !d.moved && this.loopRange && this.loopRange.section === d.section) {
+            this.loopRange = null;
+            this.loadProgression();
+        }
     }
 
     setLoopRange(section, start, end) {
@@ -4553,6 +4596,14 @@ class HarmoBoxApp {
     // Bande(s) façon barre de cycle (GarageBand) marquant la plage à boucler, sur la ligne des
     // numéros de mesure — une par LIGNE de la grille effectivement couverte (un accord scindé sur
     // plusieurs lignes, ou une plage qui déborde sur la ligne suivante, ont chacun leur propre bande).
+    // Poignées d'étirement (voir .loop-range-handle) posées UNIQUEMENT sur le vrai bord de la plage
+    // (premier segment de loopRange.start, dernier segment de loopRange.end) : une bande intermédiaire
+    // (plage qui traverse plusieurs lignes) n'a pas de poignée, ses bords ne sont que des retours à la
+    // ligne, pas de vraies extrémités déplaçables. Poignées posées comme éléments de grille INDÉPENDANTS
+    // (pas imbriquées dans .loop-range-bar) : imbriquées, leur z-index resterait piégé dans le contexte
+    // d'empilement isolé de la bande (position+z-index), sans jamais pouvoir passer devant .row-measure
+    // — qui occupe pourtant la case juste là la plupart du temps (un bord de plage tombe presque
+    // toujours sur un début de mesure).
     buildLoopRangeBars(cells, loopRange) {
         if (!loopRange) return '';
         const byRow = new Map();
@@ -4563,9 +4614,16 @@ class HarmoBoxApp {
             r.maxCol = Math.max(r.maxCol, s.col + s.span);
             byRow.set(s.row, r);
         });
-        return Array.from(byRow.entries()).map(([row, r]) => `
+        const startCell = cells.find(s => s.index === loopRange.start && s.isFirst);
+        const endCell = cells.find(s => s.index === loopRange.end && s.isLast);
+        const bars = Array.from(byRow.entries()).map(([row, r]) => `
                     <div class="loop-range-bar" style="grid-column: ${r.minCol + 1} / ${r.maxCol + 1}; grid-row: ${row * 2 + 2};"></div>`
         ).join('');
+        const leftHandle = startCell ? `
+                    <div class="loop-range-handle loop-range-handle-left" data-edge="left" style="grid-column: ${startCell.col + 1} / span 1; grid-row: ${startCell.row * 2 + 2};"></div>` : '';
+        const rightHandle = endCell ? `
+                    <div class="loop-range-handle loop-range-handle-right" data-edge="right" style="grid-column: ${endCell.col + endCell.span} / span 1; grid-row: ${endCell.row * 2 + 2};"></div>` : '';
+        return bars + leftHandle + rightHandle;
     }
 
     // Case "+" en bout de grille (une par partie) : un simple champ texte (placeholder "+"), pour
