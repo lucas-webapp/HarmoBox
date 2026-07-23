@@ -753,19 +753,24 @@ class Chord {
 const ROLE_COLOR = { root: '#00c853', third: '#2f81f7', fifth: '#e53922', seventh: '#ff9800', ext: '#8bd6a8' };
 
 // Détecte un barré POUR L'AFFICHAGE (un doigt à plat sur plusieurs cordes à la case la plus basse
-// de la forme) — plus permissif que fingersNeeded (voir solveGuitarFingerings, qui compte les doigts
-// pour évaluer la difficulté) : là où fingersNeeded exige que toutes les cordes entre les deux
-// extrêmes soient à LA MÊME case pour compter un vrai barré (sinon il suppose des doigts séparés,
-// plus prudent pour la difficulté), le barré existe visuellement même quand d'autres doigts pressent
-// PAR-DESSUS à une case plus haute sur des cordes intermédiaires (cas réel du Fa en forme de Mi : le
-// barré couvre les 6 cordes, d'autres doigts prennent certaines à une case plus haute) — seule une
-// corde à VIDE entre les deux extrêmes est réellement incompatible avec un barré continu à cet
-// endroit. Fonction autonome, jamais utilisée par le solveur de doigtés lui-même. Renvoie
-// {fret, loString, hiString} ou null.
+// de la forme). Un barré n'est réellement la façon la plus commune de jouer une forme QUE lorsqu'il
+// est nécessaire, c'est-à-dire quand il y a plus de cases différentes à tenir que de doigts
+// disponibles (4) : en-dessous de ce seuil, un guitariste pose un doigt par corde, même si 2-3 cordes
+// se retrouvent par coïncidence à la même case (ex. La ouvert x02220 : Ré/Sol/Si à la case 2, joués
+// avec 3 doigts séparés, jamais un mini-barré ; Ré ouvert xx0232 : Sol et Mi aigu à la case 2 avec un
+// 3e doigt sur Si à la case 3 entre les deux, jamais un barré non plus). Ce seuil ne concerne QUE cet
+// affichage — voir fingersNeeded (dans solveGuitarFingerings) qui, lui, préfère déjà un barré dès que
+// c'est possible pour évaluer la difficulté d'un doigté, une hypothèse plus prudente utile au tri mais
+// trop permissive pour décider si on DESSINE un barré. Une fois le barré jugé nécessaire, la
+// compatibilité géométrique reste la même : seule une corde à VIDE entre les deux cordes extrêmes du
+// groupe à la case la plus basse est réellement incompatible avec un barré continu à cet endroit
+// (d'autres doigts peuvent presser PAR-DESSUS à une case plus haute sur des cordes intermédiaires,
+// cas réel du Fa en forme de Mi). Fonction autonome, jamais utilisée par le solveur de doigtés
+// lui-même. Renvoie {fret, loString, hiString} ou null.
 function detectBarre(byString) {
     const fretted = [];
     byString.forEach((e, s) => { if (e && e.fret > 0) fretted.push({ s, fret: e.fret }); });
-    if (!fretted.length) return null;
+    if (fretted.length <= GUITAR_MAX_FINGERS) return null; // jouable un doigt par case, barré pas nécessaire
     const minFret = Math.min(...fretted.map(f => f.fret));
     const atMin = fretted.filter(f => f.fret === minFret);
     if (atMin.length < 2) return null;
