@@ -2677,7 +2677,7 @@ class HarmoHubApp {
         const useFlats = useFlatsForKey(NOTES.indexOf(gRoot), gMode);
         const beatsPerBar = this.beatsPerBar();
         const styleMap = {
-            held: 'Tenu', pulsed: 'Noire stac.', arpeggio: 'Arpège',
+            held: 'Tenu', pulsed: 'Noire stac.', arpeggio: 'Manuel',
             ronde_maintenu: 'Ronde', ronde_staccato: 'Ronde stac.',
             blanche_maintenu: 'Blanche', blanche_staccato: 'Blanche stac.',
             noire_maintenu: 'Noire', noire_staccato: 'Noire stac.',
