@@ -1139,6 +1139,12 @@ button:active { transform: translateY(1px); }
        changent ci-dessous) pour qu'il reste visible dans tous les cas sans le redéfinir partout. */
     background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0) 45%);
     border: 1px solid #202020;
+    /* Léger arrondi : les cases se touchent (gap:0), donc chaque coin arrondi révèle un petit
+       triangle du fond sombre de la grille entre deux accords voisins — une démarcation discrète
+       en plus du bord, sans dépendre uniquement de sa faible opacité. Voir .seg-first/-mid/-last
+       ci-dessous : un accord scindé sur plusieurs cases n'est PAS coupé au milieu, seuls ses deux
+       vrais bords (début/fin) restent arrondis. */
+    border-radius: 5px;
     padding: 4px 6px;
     display: flex;
     align-items: center;
@@ -1168,10 +1174,12 @@ button:active { transform: translateY(1px); }
    pour distinguer les cases au survol/sélection), repère de mesure quasi plein et plus épais. */
 .grid-cell.bar-start { border-left: 4px solid rgba(255, 255, 255, 0.8); }
 
-/* Segments d'un accord scindé : bord de coupe en pointillé */
-.grid-cell.seg-first { border-right: 1px dashed #5a5a5a; }
-.grid-cell.seg-mid   { border-left: 1px dashed #5a5a5a; border-right: 1px dashed #5a5a5a; }
-.grid-cell.seg-last  { border-left: 1px dashed #5a5a5a; }
+/* Segments d'un accord scindé : bord de coupe en pointillé, et arrondi UNIQUEMENT sur le vrai bord
+   de l'accord (début pour seg-first, fin pour seg-last) — seg-mid n'a aucun vrai bord, donc pas
+   d'arrondi du tout, sinon la démarcation (voir .grid-cell) laisserait croire à deux accords. */
+.grid-cell.seg-first { border-right: 1px dashed #5a5a5a; border-radius: 5px 0 0 5px; }
+.grid-cell.seg-mid   { border-left: 1px dashed #5a5a5a; border-right: 1px dashed #5a5a5a; border-radius: 0; }
+.grid-cell.seg-last  { border-left: 1px dashed #5a5a5a; border-radius: 0 5px 5px 0; }
 
 .grid-cell:hover { background: #1c1c1c; border-color: #555; z-index: 1; }
 
