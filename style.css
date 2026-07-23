@@ -706,11 +706,34 @@ select:disabled {
     color: var(--text-muted);
     font-weight: 600;
 }
-.groove-group select {
+/* Groove réduit (moins large qu'avant) pour laisser la transposition du morceau (voir
+   .transpose-field) partager la même ligne, plutôt que d'encombrer la ligne tonalité/mode/signature
+   juste au-dessus, déjà dense. */
+.groove-field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.groove-field select {
     flex: none;
     width: auto;
-    min-width: 150px;
+    min-width: 108px;
 }
+
+/* Transposition du morceau : "Ton" en toutes lettres plutôt que des flèches seules — on ne comprend
+   pas au premier coup d'œil qu'un simple chevron change la tonalité (voir aussi le transpose-song-*
+   déplacé ici depuis .song-row, qui devient moins chargée). */
+.transpose-field {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: none;
+}
+.transpose-label {
+    font-size: var(--fs-xs);
+    white-space: nowrap;
+}
+.transpose-field .icon-btn { width: 26px; height: 26px; }
 
 /* Valeur du tempo éditable au clavier : se fond dans le texte du libellé tant qu'on n'y touche pas
    (pas de bordure pleine, pas de fond), mais reste clairement un champ de saisie au survol/focus. */
@@ -1681,16 +1704,6 @@ select.song-select-narrow {
 .mode-field select { flex: 4; min-width: 0; }
 .mode-field .icon-btn { flex: 1; min-width: 24px; width: auto; height: auto; padding: 0; }
 
-/* Tonalité + transposition du morceau, groupées comme .mode-field : c'est le morceau (sa tonalité
-   affichée juste à côté) qui est transposé, pas seulement une partie de la grille. */
-.root-field {
-    display: flex;
-    flex: 1 1 0;
-    min-width: 0;
-    gap: 4px;
-}
-.root-field select { flex: 3; min-width: 0; }
-.root-field .icon-btn { flex: 1; min-width: 20px; width: auto; height: auto; padding: 0; }
 
 /* Libellé de bouton en deux versions (ex. "sélection" / "Sélect.") : la version courte ne s'affiche
    que sur écran étroit, là où la version complète ne rentre pas (voir #seq-delete-selection). */

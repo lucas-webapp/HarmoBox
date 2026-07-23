@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>HarmoBox</title>
-    <link rel="stylesheet" href="style.css?v=202607231715">
+    <link rel="stylesheet" href="style.css?v=202607231830">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
 </head>
@@ -227,19 +227,11 @@
                     </div>
                     <select id="song-select" class="compact song-select-full"></select>
                     <div class="song-row">
-                        <div class="root-field">
-                            <select id="global-root" class="compact song-select-narrow" title="Tonalité">
-                                <option value="C">C</option><option value="C#">C#</option><option value="D">D</option><option value="D#">D#</option>
-                                <option value="E">E</option><option value="F">F</option><option value="F#">F#</option><option value="G">G</option>
-                                <option value="G#">G#</option><option value="A">A</option><option value="A#">A#</option><option value="B">B</option>
-                            </select>
-                            <button type="button" id="transpose-song-down" class="icon-btn" title="Transposer tout le morceau d'un demi-ton vers le bas" aria-label="Transposer tout le morceau vers le bas">
-                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="m5 12 7 7 7-7"/></svg>
-                            </button>
-                            <button type="button" id="transpose-song-up" class="icon-btn" title="Transposer tout le morceau d'un demi-ton vers le haut" aria-label="Transposer tout le morceau vers le haut">
-                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
-                            </button>
-                        </div>
+                        <select id="global-root" class="compact song-select-narrow" title="Tonalité">
+                            <option value="C">C</option><option value="C#">C#</option><option value="D">D</option><option value="D#">D#</option>
+                            <option value="E">E</option><option value="F">F</option><option value="F#">F#</option><option value="G">G</option>
+                            <option value="G#">G#</option><option value="A">A</option><option value="A#">A#</option><option value="B">B</option>
+                        </select>
                         <div class="mode-field">
                             <select id="global-mode" class="compact song-select-narrow" title="Mode">
                                 <option value="maj">Majeur</option><option value="min">Mineur</option>
@@ -268,6 +260,14 @@
                         <div class="bpm-head">
                             <label for="bpm">Tempo : <input type="number" id="bpm-val" class="bpm-val-input" min="60" max="240" value="120" title="Cliquer pour saisir une valeur précise"> BPM</label>
                             <button type="button" id="tap-tempo" class="btn-sec tap-tempo-btn" title="Tap tempo : cliquer plusieurs fois au rythme voulu pour régler le BPM">TAP</button>
+                            <button type="button" id="toggle-metronome-subdivision" class="icon-btn" title="Ajouter un clic faible sur le contretemps (croches)" aria-label="Ajouter un clic faible sur le contretemps">
+                                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                                    <circle cx="3" cy="12" r="2.4" fill="currentColor"/>
+                                    <circle cx="9" cy="12" r="1.3" fill="currentColor" opacity="0.55"/>
+                                    <circle cx="15" cy="12" r="2.4" fill="currentColor"/>
+                                    <circle cx="21" cy="12" r="1.3" fill="currentColor" opacity="0.55"/>
+                                </svg>
+                            </button>
                             <button type="button" id="toggle-metronome" class="icon-btn" title="Garder le métronome pendant la lecture de la grille" aria-label="Garder le métronome pendant la lecture de la grille">
                                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                     <path d="M7 20h10L14 5h-4L7 20Z"/>
@@ -279,12 +279,23 @@
                         <input type="range" id="bpm" min="60" max="240" value="120">
                     </div>
                     <div class="groove-group">
-                        <label for="groove">Groove</label>
-                        <select id="groove" class="compact">
-                            <option value="straight" selected>Droit</option>
-                            <option value="shuffle">Shuffle léger</option>
-                            <option value="ternary">Ternaire (triolet)</option>
-                        </select>
+                        <div class="groove-field">
+                            <label for="groove">Groove</label>
+                            <select id="groove" class="compact">
+                                <option value="straight" selected>Droit</option>
+                                <option value="shuffle">Shuffle léger</option>
+                                <option value="ternary">Ternaire (triolet)</option>
+                            </select>
+                        </div>
+                        <div class="transpose-field">
+                            <span class="transpose-label">Ton</span>
+                            <button type="button" id="transpose-song-down" class="icon-btn" title="Transposer tout le morceau d'un demi-ton vers le bas" aria-label="Transposer tout le morceau vers le bas">
+                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="m5 12 7 7 7-7"/></svg>
+                            </button>
+                            <button type="button" id="transpose-song-up" class="icon-btn" title="Transposer tout le morceau d'un demi-ton vers le haut" aria-label="Transposer tout le morceau vers le haut">
+                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
+                            </button>
+                        </div>
                     </div>
                 </section>
             </div>
@@ -373,6 +384,6 @@
          script.js) — vendu en local plutôt qu'hébergé sur un CDN. Projet LAME (lame.sourceforge.net),
          licence LGPL. -->
     <script src="lame.min.js"></script>
-    <script src="script.js?v=202607231715"></script>
+    <script src="script.js?v=202607231830"></script>
 </body>
 </html>

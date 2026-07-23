@@ -1083,6 +1083,7 @@ const METRONOME_SOUND_KEY = 'harmoboxMetronomeSound';
 const GENERAL_VOLUME_KEY = 'harmoboxGeneralVolume';
 const AUTOPLAY_SELECT_KEY = 'harmoboxAutoplaySelect';
 const METRONOME_COUNTIN_KEY = 'harmoboxMetronomeCountIn';
+const METRONOME_SUBDIVISION_KEY = 'harmoboxMetronomeSubdivision';
 
 // Curseurs de volume (0-100, plus intuitif qu'une valeur en décibels) : 0 = silence, 100 = 0 dB
 // (plein volume « normal »), avec un plancher à -40 dB pour que même « presque muet » reste audible
@@ -1095,6 +1096,8 @@ function percentToDb(percent) {
 // timbres assez différents pour ne pas pouvoir se contenter de changer la hauteur d'un seul synthé)
 // et sait se déclencher elle-même via `trigger`, en distinguant le temps accentué (1er temps de la
 // mesure) du temps normal — par la hauteur pour les sons avec pitch, par le volume pour le bruit blanc.
+// `sub` (subdivision, voir metronomeSubdivision) marque un clic de croche entre deux temps : toujours
+// le plus discret des trois niveaux, quel que soit `accent` (une subdivision n'est jamais LE temps 1).
 const METRONOME_SOUNDS = {
     click: {
         label: 'Clic classique',
@@ -1102,7 +1105,7 @@ const METRONOME_SOUNDS = {
             oscillator: { type: 'triangle' },
             envelope: { attack: 0.001, decay: 0.04, sustain: 0, release: 0.02 }
         }),
-        trigger: (inst, accent, time) => inst.triggerAttackRelease(accent ? 1500 : 1000, 0.03, time)
+        trigger: (inst, accent, time, sub) => inst.triggerAttackRelease(sub ? 1250 : (accent ? 1500 : 1000), 0.03, time, sub ? 0.5 : 1)
     },
     // Un vrai coup de baguette/bloc de bois est un bruit bref coloré par une résonance courte — pas
     // une corde qui vibre. PluckSynth (Karplus-Strong) sustient toujours une hauteur nette, façon
@@ -1136,9 +1139,9 @@ const METRONOME_SOUNDS = {
         },
         // La hauteur perçue vient du centre du filtre (pas d'une note) : légèrement plus haut sur le
         // temps accentué, comme deux zones différentes d'un même bloc de bois.
-        trigger: (inst, accent, time) => {
-            inst._filter.frequency.setValueAtTime(accent ? 1100 : 780, time);
-            inst.triggerAttackRelease(0.05, time, accent ? 0.95 : 0.65);
+        trigger: (inst, accent, time, sub) => {
+            inst._filter.frequency.setValueAtTime(sub ? 950 : (accent ? 1100 : 780), time);
+            inst.triggerAttackRelease(0.05, time, sub ? 0.35 : (accent ? 0.95 : 0.65));
         }
     },
     clave: {
@@ -1147,7 +1150,7 @@ const METRONOME_SOUNDS = {
             envelope: { attack: 0.001, decay: 0.03, release: 0.01 },
             harmonicity: 3.1, modulationIndex: 16, resonance: 3500, octaves: 0.5
         }),
-        trigger: (inst, accent, time) => inst.triggerAttackRelease(accent ? 'C7' : 'G6', 0.02, time)
+        trigger: (inst, accent, time, sub) => inst.triggerAttackRelease(sub ? 'E6' : (accent ? 'C7' : 'G6'), 0.02, time, sub ? 0.5 : 1)
     },
     // FMSynth avec un ratio porteuse/modulante non entier : les partiels obtenus sont inharmoniques
     // mais peu nombreux et bien espacés, ce qui donne un timbre de cloche propre (technique FM
@@ -1164,7 +1167,7 @@ const METRONOME_SOUNDS = {
             envelope: { attack: 0.012, decay: 0.6, sustain: 0, release: 1.4 },
             modulationEnvelope: { attack: 0.012, decay: 0.4, sustain: 0, release: 0.6 }
         }),
-        trigger: (inst, accent, time) => inst.triggerAttackRelease(accent ? 'C6' : 'A5', 0.4, time, accent ? 0.55 : 0.4)
+        trigger: (inst, accent, time, sub) => inst.triggerAttackRelease(sub ? 'E5' : (accent ? 'C6' : 'A5'), 0.4, time, sub ? 0.22 : (accent ? 0.55 : 0.4))
     },
     tic: {
         label: 'Tic sec',
@@ -1174,7 +1177,7 @@ const METRONOME_SOUNDS = {
         }),
         // Le bruit blanc n'a pas de hauteur : l'accent se distingue par le volume (vélocité) plutôt
         // que par la note.
-        trigger: (inst, accent, time) => inst.triggerAttackRelease(0.03, time, accent ? 1 : 0.55)
+        trigger: (inst, accent, time, sub) => inst.triggerAttackRelease(0.03, time, sub ? 0.3 : (accent ? 1 : 0.55))
     }
 };
 
@@ -1271,6 +1274,11 @@ class HarmoBoxApp {
         // distinct du métronome PENDANT la lecture (this.metronomeDuringPlayback, bouton dédié) :
         // désactivable séparément dans Paramètres > Son (voir playProgression).
         this.metronomeCountIn = localStorage.getItem(METRONOME_COUNTIN_KEY) !== '0';
+
+        // Clic faible additionnel sur le contretemps (croches, "et" de chaque temps) — désactivé par
+        // défaut pour ne rien changer au comportement existant (bouton dédié, voir toggle-metronome-
+        // subdivision), qu'on garde ou non le métronome pendant la lecture par ailleurs.
+        this.metronomeSubdivision = localStorage.getItem(METRONOME_SUBDIVISION_KEY) === '1';
 
         // Chaque accord choisit sa propre banque de son (voir data.instrument) : plusieurs
         // instruments Tone.js peuvent donc jouer simultanément. Construits à la demande et mis en
@@ -1411,6 +1419,15 @@ class HarmoBoxApp {
             this.metronomeDuringPlayback = !this.metronomeDuringPlayback;
             e.currentTarget.classList.toggle('active', this.metronomeDuringPlayback);
             localStorage.setItem(METRONOME_KEY, this.metronomeDuringPlayback ? '1' : '0');
+        };
+
+        // Clic faible sur le contretemps (croches), en plus du clic normal sur chaque temps
+        const metroSubBtn = document.getElementById('toggle-metronome-subdivision');
+        metroSubBtn.classList.toggle('active', this.metronomeSubdivision);
+        metroSubBtn.onclick = (e) => {
+            this.metronomeSubdivision = !this.metronomeSubdivision;
+            e.currentTarget.classList.toggle('active', this.metronomeSubdivision);
+            localStorage.setItem(METRONOME_SUBDIVISION_KEY, this.metronomeSubdivision ? '1' : '0');
         };
 
         // Boucle la partie active (bouton Grille) au lieu de jouer toute la grille — pratique
@@ -2118,6 +2135,17 @@ class HarmoBoxApp {
                     disp.innerHTML = `Décompte<span class="chord-notes">${label} / ${COUNT_IN}</span>`;
                 }, t);
             }, clickTime);
+            // Clic faible sur le contretemps (croche entre ce temps et le suivant), voir metronomeSubdivision
+            if (this.metronomeSubdivision) {
+                const subTime = clickTime + secPerBeat / 2;
+                Tone.Transport.schedule((t) => {
+                    if (this.metronomeCountIn) {
+                        try {
+                            this.playMetronomeClick(false, t, true);
+                        } catch (e) { console.warn('Clic de décompte (croche) ignoré :', e.message); }
+                    }
+                }, subTime);
+            }
         }
 
         // La progression démarre juste après le décompte
@@ -2145,6 +2173,15 @@ class HarmoBoxApp {
                             this.playMetronomeClick(accent, t);
                         } catch (e) { console.warn('Clic de métronome ignoré :', e.message); }
                     }, clickTime);
+                    // Clic faible sur le contretemps (croche), voir metronomeSubdivision
+                    if (this.metronomeSubdivision) {
+                        const subTime = clickTime + secPerBeat / 2;
+                        Tone.Transport.schedule((t) => {
+                            try {
+                                this.playMetronomeClick(false, t, true);
+                            } catch (e) { console.warn('Clic de métronome (croche) ignoré :', e.message); }
+                        }, subTime);
+                    }
                     songBeat++;
                 }
             }
@@ -3153,8 +3190,8 @@ class HarmoBoxApp {
     // Point d'entrée UNIQUE pour faire sonner le métronome, quel que soit le son choisi (voir
     // METRONOME_SOUNDS) : chaque sonorité sait comment se déclencher elle-même (hauteur ou volume
     // selon le cas), les deux endroits qui font cliquer le métronome n'ont pas à s'en soucier.
-    playMetronomeClick(accent, time) {
-        METRONOME_SOUNDS[this.metronomeSoundKey].trigger(this.metronome, accent, time);
+    playMetronomeClick(accent, time, sub = false) {
+        METRONOME_SOUNDS[this.metronomeSoundKey].trigger(this.metronome, accent, time, sub);
     }
 
     // Tap tempo : cliquer plusieurs fois au rythme voulu règle le BPM sans avoir à connaître ni taper
