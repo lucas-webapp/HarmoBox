@@ -1744,6 +1744,12 @@ class HarmoHubApp {
             if (e.target.id === 'settings-overlay') this.closeSettings(); // clic sur le fond, pas la fenêtre
         });
 
+        // Boîte "modifications non enregistrées" (voir confirmDiscardUnsavedIfNeeded) : clic sur le
+        // fond = comme Annuler, jamais une perte de données silencieuse.
+        document.getElementById('unsaved-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'unsaved-modal' && this._unsavedModalCancel) this._unsavedModalCancel();
+        });
+
         // Vue agrandie du séquenceur (voir openSeqZoom/closeSeqZoom) : ne fait que déplacer
         // #arp-sequencer dans une fenêtre plus grande, jamais le dupliquer.
         document.getElementById('seq-zoom').onclick = () => this.openSeqZoom();
@@ -3158,10 +3164,98 @@ class HarmoHubApp {
     // si des modifications ne sont pas enregistrées (voir hasUnsavedChanges/saveCurrentSong), prévient
     // qu'elles seront perdues — que le morceau ait déjà un nom ou non, contrairement à l'ancien
     // comportement (qui ne prévenait que pour un morceau jamais enregistré, puisque tout le reste
-    // s'auto-sauvegardait aussitôt).
+    // s'auto-sauvegardait aussitôt). Désormais async (voir openUnsavedModal) pour laisser le temps
+    // de choisir Enregistrer/Exporter/Continuer/Annuler au lieu d'un simple confirm() natif —
+    // tous les appelants attendent donc sa réponse (voir onSongSelectChange/newSong/openSongFromFiles).
+    // Le beforeunload natif (fermeture RÉELLE de l'onglet/page) reste inchangé à côté : les
+    // navigateurs n'autorisent aucun bouton personnalisé sur cette boîte-là.
     confirmDiscardUnsavedIfNeeded() {
-        if (!hasUnsavedChanges) return true;
-        return confirm('Des modifications ne sont pas enregistrées et seront perdues. Continuer ?');
+        if (!hasUnsavedChanges) return Promise.resolve(true);
+        return this.openUnsavedModal();
+    }
+
+    // Enregistre l'état actuel du tampon comme un NOUVEAU morceau nommé `name` et le rend actif —
+    // cœur commun à saveCurrentAsSong (champ inline dans le panneau Morceau) et à l'enregistrement
+    // direct depuis la boîte "modifications non enregistrées" (voir openUnsavedModal), qui ne peut
+    // pas réutiliser ce champ-là : il peut se trouver masqué derrière Paramètres au moment où la
+    // boîte s'ouvre (voir openSongFromFiles).
+    createNewSongFromCurrentState(name) {
+        const song = {
+            id: 'song_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+            name,
+            savedAt: Date.now(),
+            root: document.getElementById('global-root').value,
+            mode: document.getElementById('global-mode').value,
+            timeSig: document.getElementById('time-sig').value,
+            groove: document.getElementById('groove').value,
+            bpm: parseInt(document.getElementById('bpm').value),
+            sections: loadProgressionSections()
+        };
+        const songs = loadSongs();
+        songs.push(song);
+        saveSongs(songs);
+        setCurrentSongId(song.id);
+        hasUnsavedChanges = false;
+        this.refreshSongList();
+        return song;
+    }
+
+    // Boîte "modifications non enregistrées" : Enregistrer / Exporter en JSON / Continuer sans
+    // enregistrer / Annuler (voir #unsaved-modal dans index.html). Si le morceau n'a encore jamais
+    // été nommé, Enregistrer/Exporter basculent la boîte sur un petit champ de saisie du nom
+    // (.unsaved-modal-nameprompt) au lieu du champ inline habituel du panneau Morceau, potentiellement
+    // invisible si cette boîte s'ouvre par-dessus Paramètres. Résout à true (continuer) ou false
+    // (annuler, rien n'a changé).
+    openUnsavedModal() {
+        const overlay = document.getElementById('unsaved-modal');
+        const actions = overlay.querySelector('.unsaved-modal-actions');
+        const namePrompt = overlay.querySelector('.unsaved-modal-nameprompt');
+        const nameInput = namePrompt.querySelector('input');
+        overlay.hidden = false;
+        actions.hidden = false;
+        namePrompt.hidden = true;
+
+        return new Promise((resolve) => {
+            const close = (result) => {
+                overlay.hidden = true;
+                this._unsavedModalCancel = null;
+                resolve(result);
+            };
+            this._unsavedModalCancel = () => close(false);
+
+            const askNameThen = (after) => {
+                actions.hidden = true;
+                namePrompt.hidden = false;
+                nameInput.value = '';
+                nameInput.focus();
+                const confirmName = () => {
+                    const name = nameInput.value.trim() || 'Sans titre';
+                    const song = this.createNewSongFromCurrentState(name);
+                    this.flashHint(`« ${song.name} » enregistré`);
+                    after();
+                };
+                const cancelName = () => { actions.hidden = false; namePrompt.hidden = true; };
+                const onKey = (e) => {
+                    e.stopPropagation();
+                    if (e.key === 'Enter') { e.preventDefault(); confirmName(); }
+                    else if (e.key === 'Escape') { e.preventDefault(); cancelName(); }
+                };
+                nameInput.addEventListener('keydown', onKey, { once: true });
+                namePrompt.querySelector('[data-nameprompt-ok]').onclick = confirmName;
+                namePrompt.querySelector('[data-nameprompt-cancel]').onclick = cancelName;
+            };
+
+            document.getElementById('unsaved-save-continue').onclick = () => {
+                if (getCurrentSongId()) { this.saveCurrentSong(); close(true); }
+                else askNameThen(() => close(true));
+            };
+            document.getElementById('unsaved-export-continue').onclick = () => {
+                if (getCurrentSongId()) { this.exportCurrentSong(); close(true); }
+                else askNameThen(() => { this.exportCurrentSong(); close(true); });
+            };
+            document.getElementById('unsaved-discard').onclick = () => close(true);
+            document.getElementById('unsaved-cancel').onclick = () => close(false);
+        });
     }
 
     refreshSongList() {
@@ -3175,16 +3269,16 @@ class HarmoHubApp {
         document.getElementById('song-save').title = 'Enregistrer (Ctrl+S)';
     }
 
-    onSongSelectChange(id) {
+    async onSongSelectChange(id) {
         if (id === (getCurrentSongId() || '')) return;
-        if (!this.confirmDiscardUnsavedIfNeeded()) { this.refreshSongList(); return; }
+        if (!(await this.confirmDiscardUnsavedIfNeeded())) { this.refreshSongList(); return; }
         if (!id) this.newSong(true);
         else this.loadSong(id);
     }
 
     // Repart d'un morceau vierge (tonalité C majeur, 120 BPM, une partie sans titre)
-    newSong(skipConfirm) {
-        if (!skipConfirm && !this.confirmDiscardUnsavedIfNeeded()) return;
+    async newSong(skipConfirm) {
+        if (!skipConfirm && !(await this.confirmDiscardUnsavedIfNeeded())) return;
         setCurrentSongId(null);
         document.getElementById('global-root').value = 'C';
         document.getElementById('global-mode').value = 'maj';
@@ -3277,24 +3371,7 @@ class HarmoHubApp {
 
         const finish = () => { input.remove(); select.hidden = false; };
         const commit = () => {
-            const name = input.value.trim() || 'Sans titre';
-            const song = {
-                id: 'song_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-                name,
-                savedAt: Date.now(),
-                root: document.getElementById('global-root').value,
-                mode: document.getElementById('global-mode').value,
-                timeSig: document.getElementById('time-sig').value,
-                groove: document.getElementById('groove').value,
-                bpm: parseInt(document.getElementById('bpm').value),
-                sections: loadProgressionSections()
-            };
-            const songs = loadSongs();
-            songs.push(song);
-            saveSongs(songs);
-            setCurrentSongId(song.id);
-            hasUnsavedChanges = false;
-            this.refreshSongList();
+            const song = this.createNewSongFromCurrentState(input.value.trim() || 'Sans titre');
             this.flashHint(`« ${song.name} » enregistré`);
             finish();
         };
@@ -3591,7 +3668,20 @@ class HarmoHubApp {
 
         const currentId = getCurrentSongId();
 
-        const toolbar = `
+        // Emplacement des exports locaux (JSON, PDF, MIDI, MP3) : un navigateur ne laisse pas une
+        // page web choisir ni retenir un dossier de destination par défaut (en dehors d'un vrai
+        // sélecteur de dossier à chaque export, jugé trop lourd ici) — seul le réglage du
+        // navigateur lui-même (dossier de téléchargement / « toujours demander où enregistrer »)
+        // en décide. On l'explique plutôt que de proposer un choix qui n'aurait aucun effet réel.
+        const locationInfo = `
+            <p class="files-location-info">
+                Les fichiers exportés (sauvegarde JSON, PDF, MIDI, MP3) sont enregistrés dans le
+                dossier de téléchargement par défaut de ton navigateur. Pour changer cet
+                emplacement (ou choisir à chaque fois), règle-le dans les préférences de
+                téléchargement de ton navigateur.
+            </p>`;
+
+        const toolbar = locationInfo + `
             <div class="files-toolbar">
                 <button type="button" id="new-folder-btn" class="btn-sec">
                     <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M12 11v4M10 13h4"/></svg>
@@ -3709,9 +3799,9 @@ class HarmoHubApp {
         }
     }
 
-    openSongFromFiles(id) {
+    async openSongFromFiles(id) {
         if (id === (getCurrentSongId() || '')) { this.closeSettings(); return; }
-        if (!this.confirmDiscardUnsavedIfNeeded()) return;
+        if (!(await this.confirmDiscardUnsavedIfNeeded())) return;
         this.loadSong(id);
         this.closeSettings();
     }
@@ -6340,6 +6430,7 @@ class HarmoHubApp {
             if (e.key === 'Escape' && !document.getElementById('context-menu').hidden) { this.closeContextMenu(); return; }
             if (e.key === 'Escape' && !document.getElementById('section-picker-menu').hidden) { this.closeSectionPicker(); return; }
             if (e.key === 'Escape' && !document.getElementById('backup-scope-menu').hidden) { this.closeBackupScopeMenu(); return; }
+            if (e.key === 'Escape' && !document.getElementById('unsaved-modal').hidden) { if (this._unsavedModalCancel) this._unsavedModalCancel(); return; }
             if (e.key === 'Escape' && !document.getElementById('duration-dd-menu').hidden) { this.closeDurationMenu(); return; }
             if (e.key === 'Escape' && !document.getElementById('playstyle-dd-menu').hidden) { this.closePlayStyleMenu(); return; }
             if (e.key === 'Escape' && this.settingsOpen) { this.closeSettings(); return; }

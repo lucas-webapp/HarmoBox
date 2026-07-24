@@ -214,6 +214,20 @@ button, .icon-btn, .prog-section-del, .seq-presets button, .seq-delete-btn {
     overflow: hidden;
 }
 
+/* Boîte de dialogue « modifications non enregistrées » (voir confirmDiscardUnsavedIfNeeded dans
+   script.js) : bien plus compacte que .settings-modal (pas de liste de réglages à faire défiler),
+   juste un message et 4 actions empilées — plus facile à viser au doigt qu'une rangée de boutons. */
+.unsaved-modal { max-width: 380px; }
+.unsaved-modal-body { padding-top: 4px; }
+.unsaved-modal-body p { margin: 0 0 16px; color: var(--text-muted); }
+.unsaved-modal-actions { display: flex; flex-direction: column; gap: 8px; }
+.unsaved-modal-actions button { width: 100%; }
+.unsaved-modal-nameprompt label { display: block; margin-bottom: 6px; color: var(--text-muted); font-size: var(--fs-sm); }
+.unsaved-modal-nameprompt input { width: 100%; box-sizing: border-box; margin-bottom: 14px; }
+/* Doit passer devant .settings-overlay (z-index 100) : peut s'ouvrir PAR-DESSUS la fenêtre Paramètres
+   elle-même (voir openSongFromFiles dans script.js, appelée depuis l'onglet Fichiers). */
+#unsaved-modal { z-index: 200; }
+
 /* Fenêtre agrandie du séquenceur (voir #seq-zoom-overlay/openSeqZoom) : même habillage que
    .settings-modal, mais bien plus large/haute — tout l'intérêt est de donner beaucoup plus de place
    à chaque case pour modifier vite, y compris avec de nombreuses mesures à parcourir. */
@@ -290,6 +304,19 @@ button, .icon-btn, .prog-section-del, .seq-presets button, .seq-delete-btn {
 
 /* ---- Panneau Fichiers ---- */
 .files-empty { color: var(--text-muted); font-size: var(--fs-sm); text-align: center; padding: 30px 10px; }
+
+/* Explique où atterrissent les exports (voir renderFilesPanel) : une page web ne peut ni choisir ni
+   retenir un dossier de destination par défaut, seul le réglage du navigateur en décide. */
+.files-location-info {
+    margin: 0 0 14px;
+    padding: 10px 12px;
+    background: var(--bg-soft, rgba(255,255,255,0.04));
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
+    line-height: 1.5;
+}
 
 /* Barre d'outils : créer un dossier à gauche, export/import de la bibliothèque puis annuler/rétablir à droite */
 .files-toolbar {
