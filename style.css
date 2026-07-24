@@ -277,6 +277,78 @@ button, .icon-btn, .prog-section-del, .seq-presets button, .seq-delete-btn {
    pour aussi défiler horizontalement une fois la grille agrandie au-delà de la largeur disponible. */
 .seq-zoom-host, .grid-zoom-host { overflow: auto; }
 
+/* Séquenceur épinglé en bas de la loupe grille (voir #grid-zoom-pinned-seq et
+   editChordFromGridZoom/syncGridZoomPinnedSeq dans script.js) : outil de modification rapide — un
+   clic sur un accord de la grille agrandie le charge ici pour éditer son rythme sans rouvrir de
+   fenêtre séparée. Hauteur non fixée sur le conteneur lui-même (seul .grid-zoom-pinned-body a une
+   hauteur, réglée par la poignée de redimensionnement) : replié, le conteneur retombe à la hauteur
+   de son seul en-tête, sans transition brusque à gérer côté script. */
+.grid-zoom-pinned-seq {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid var(--border);
+    background: var(--card-bg);
+}
+.grid-zoom-pinned-resize {
+    flex: none;
+    height: 10px;
+    width: 64px;
+    margin: 0 auto;
+    cursor: ns-resize;
+    position: relative;
+    touch-action: none;
+}
+.grid-zoom-pinned-resize::after {
+    content: '';
+    position: absolute;
+    top: 4px; left: 0; right: 0;
+    height: 3px;
+    border-radius: 3px;
+    background: var(--border);
+}
+.grid-zoom-pinned-resize:hover::after { background: var(--text-muted); }
+.grid-zoom-pinned-seq.collapsed .grid-zoom-pinned-resize { visibility: hidden; }
+
+.grid-zoom-pinned-head {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 2px 20px 10px;
+}
+.grid-zoom-pinned-title {
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.grid-zoom-pinned-actions { flex: none; display: flex; align-items: center; gap: 6px; }
+#grid-zoom-pinned-toggle .icon { transition: transform 0.15s ease; }
+.grid-zoom-pinned-seq.collapsed #grid-zoom-pinned-toggle .icon { transform: rotate(-90deg); }
+
+.grid-zoom-pinned-placeholder {
+    margin: 0;
+    padding: 0 20px 20px;
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
+    text-align: center;
+}
+.grid-zoom-pinned-body {
+    overflow: auto;
+    padding: 0 20px 18px;
+}
+.grid-zoom-pinned-body .arp-seq { margin-top: 0; padding-top: 0; border-top: none; }
+/* Cases un cran plus grandes qu'en taille normale, comme dans la fenêtre agrandie du séquenceur :
+   cet emplacement sert justement à modifier vite, autant profiter de cases faciles à viser. */
+.grid-zoom-pinned-body .seq-cell { height: 40px; }
+
+.grid-zoom-pinned-seq.collapsed .grid-zoom-pinned-placeholder,
+.grid-zoom-pinned-seq.collapsed .grid-zoom-pinned-body { display: none; }
+
 .settings-header {
     display: flex;
     align-items: center;

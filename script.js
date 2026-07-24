@@ -11,6 +11,7 @@ const ICONS = {
     up: '<path d="M12 19V5"/><path d="m5 12 7-7 7 7"/>',
     down: '<path d="M12 5v14"/><path d="m5 12 7 7 7-7"/>',
     reverse: '<path d="M3 7h13"/><path d="m13 3 4 4-4 4"/><path d="M21 17H8"/><path d="m11 21-4-4 4-4"/>',
+    'chevron-down': '<path d="m6 9 6 6 6-6"/>',
     'chevron-left': '<path d="m15 18-6-6 6-6"/>',
     'chevron-right': '<path d="m9 18 6-6-6-6"/>',
     loop: '<path d="M17 2 21 6 17 10"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22 3 18 7 14"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>',
@@ -1369,6 +1370,10 @@ const GRID_ZOOM_LEVEL_KEY = 'harmoboxGridZoomLevel';
 const ZOOM_LEVEL_MIN = 0.7;
 const ZOOM_LEVEL_MAX = 2;
 const ZOOM_LEVEL_STEP = 0.1;
+const GRID_ZOOM_SEQ_COLLAPSED_KEY = 'harmoboxGridZoomSeqCollapsed';
+const GRID_ZOOM_SEQ_HEIGHT_KEY = 'harmoboxGridZoomSeqHeight';
+const GRID_ZOOM_SEQ_HEIGHT_DEFAULT = 240;
+const GRID_ZOOM_SEQ_HEIGHT_MIN = 140;
 
 // Curseurs de volume (0-100, plus intuitif qu'une valeur en décibels) : 0 = silence, 100 = 0 dB
 // (plein volume « normal »), avec un plancher à -40 dB pour que même « presque muet » reste audible
@@ -1626,6 +1631,9 @@ class HarmoHubApp {
         // session à l'autre comme les autres préférences d'affichage.
         this.seqZoomLevel = parseFloat(localStorage.getItem(SEQ_ZOOM_LEVEL_KEY)) || 1;
         this.gridZoomLevel = parseFloat(localStorage.getItem(GRID_ZOOM_LEVEL_KEY)) || 1;
+        // Séquenceur épinglé en bas de la loupe grille (voir openGridZoom/toggleGridZoomPinnedSeq) :
+        // replié ou non, mémorisé d'une session à l'autre comme le niveau de zoom ci-dessus.
+        this.gridZoomSeqCollapsed = localStorage.getItem(GRID_ZOOM_SEQ_COLLAPSED_KEY) === '1';
         this.seqTouched = false;   // l'utilisateur a-t-il personnalisé le motif pour l'accord en cours ?
         this.seqSelections = []; // notes du séquenceur sélectionnées : [{ voice, start, end }, ...]
         this.seqDrag = null;       // état de glisser en cours sur le séquenceur
@@ -1950,6 +1958,15 @@ class HarmoHubApp {
             this.adjustZoom('grid', e.deltaY < 0 ? ZOOM_LEVEL_STEP : -ZOOM_LEVEL_STEP);
         }, { passive: false });
 
+        // Séquenceur épinglé en bas de la loupe grille (voir editChordFromGridZoom/
+        // syncGridZoomPinnedSeq) : Enregistrer/Annuler réutilisent tels quels saveCurrent/cancelEdit
+        // (peu importe d'où vient le clic, ces méthodes ne lisent que les contrôles du panneau Accord,
+        // toujours dans le DOM même masqués derrière la loupe).
+        document.getElementById('grid-zoom-pinned-save').onclick = () => { this.saveCurrent(); this.syncGridZoomPinnedSeq(); };
+        document.getElementById('grid-zoom-pinned-cancel').onclick = () => { this.cancelEdit(); this.syncGridZoomPinnedSeq(); };
+        document.getElementById('grid-zoom-pinned-toggle').onclick = () => this.toggleGridZoomPinnedSeq();
+        this.setupGridZoomPinnedResize();
+
         // Menu contextuel (clic droit / appui long) : Renommer/Modifier, Dupliquer (accords
         // uniquement), Supprimer — réutilisé pour les morceaux, les dossiers ET les accords de la
         // grille (voir attachContextMenuTrigger, appelé depuis renderFilesPanel et loadProgression).
@@ -2028,7 +2045,11 @@ class HarmoHubApp {
         document.addEventListener('click', (e) => {
             const inGrid = !!e.target.closest('.chord-grid');
             const inMenu = !!e.target.closest('#context-menu');
-            const inEditor = !!e.target.closest('.col-left');
+            // .grid-zoom-modal inclus : le séquenceur épinglé et ses boutons (Enregistrer/Annuler/
+            // replier, poignée de redimensionnement...) y vivent, hors de .chord-grid ET de .col-left —
+            // sans cet ajout, cliquer par exemple le bouton Fermer de la loupe (ni l'un ni l'autre)
+            // sortait silencieusement du mode édition juste avant que ce clic n'atteigne ce bouton.
+            const inEditor = !!e.target.closest('.col-left') || !!e.target.closest('.grid-zoom-modal');
             let changed = false;
             if (!inGrid && !inMenu && this.selectedIndex != null) { this.selectedIndex = null; changed = true; }
             if (!inGrid && !inMenu && !inEditor && this.editingIndex != null) { this.exitEditMode(); changed = true; }
@@ -5535,6 +5556,16 @@ class HarmoHubApp {
         if (d.menuShown && !d.moved) return;
 
         if (!d.moved) {
+            // Dans la loupe grille (outil de modification rapide, voir editChordFromGridZoom) : un
+            // seul clic n'importe où sur la case — y compris pile sur le symbole, qui ouvrirait sinon
+            // son édition inline — charge directement l'accord pour édition, le séquenceur épinglé en
+            // bas devant suivre l'accord touché sans étape intermédiaire. Renommer le symbole se fait
+            // alors depuis le panneau Accord (root/qualité), rechargé du même coup.
+            if (this.gridZoomOpen) {
+                this._lastTap = null;
+                this.editChordFromGridZoom(d.section, d.index);
+                return;
+            }
             if (d.symTarget) {
                 // Tap/clic pile sur le texte de l'accord (voir onGridPointerDown) : édition inline
                 // immédiate, pas de sélection/écoute ni d'attente d'un éventuel second tap.
@@ -6473,6 +6504,16 @@ class HarmoHubApp {
         dest.appendChild(addBtn);
         document.getElementById('grid-zoom-overlay').hidden = false;
         this.applyZoomLevel('grid');
+
+        // Séquenceur épinglé : toujours affiché une fois la loupe ouverte (masquable ensuite via son
+        // propre chevron, voir toggleGridZoomPinnedSeq) — reflète tout de suite un accord déjà en
+        // édition (ex. double-clic fait avant d'ouvrir la loupe), sinon affiche le message d'attente.
+        document.getElementById('grid-zoom-pinned-seq').hidden = false;
+        document.getElementById('grid-zoom-pinned-body').style.height =
+            `${parseInt(localStorage.getItem(GRID_ZOOM_SEQ_HEIGHT_KEY)) || GRID_ZOOM_SEQ_HEIGHT_DEFAULT}px`;
+        this.applyGridZoomPinnedCollapsed();
+        if (this.editingIndex != null) this.pinSequencerHost();
+        this.syncGridZoomPinnedSeq();
     }
 
     // Remet #progression-sections et #add-section à leur place d'origine (juste après la rangée
@@ -6486,6 +6527,96 @@ class HarmoHubApp {
         const anchor = document.querySelector('.quick-add-row');
         anchor.insertAdjacentElement('afterend', grid);
         grid.insertAdjacentElement('afterend', addBtn);
+
+        // Le séquenceur épinglé n'a de sens que DANS la loupe grille : remettre #arp-sequencer à sa
+        // place habituelle du volet Lecture (comme closeSeqZoom) — this.seqOpen n'est pas remis à
+        // false pour autant, il continue d'y apparaître normalement si toujours vrai.
+        document.getElementById('grid-zoom-pinned-seq').hidden = true;
+        const seqHost = document.getElementById('arp-sequencer');
+        if (document.getElementById('grid-zoom-pinned-body').contains(seqHost)) {
+            document.getElementById('arpPattern').insertAdjacentElement('afterend', seqHost);
+        }
+    }
+
+    // Clic sur un accord DANS la loupe grille (voir onGridPointerUp) : le charge directement pour
+    // édition — pas besoin d'un double-clic ici, l'intérêt même de cet outil de modification rapide
+    // — et pousse aussitôt son rythme dans le séquenceur épinglé en bas de la fenêtre.
+    editChordFromGridZoom(section, index) {
+        this.seqOpen = true;
+        document.getElementById('toggle-sequencer').classList.add('active');
+        this.pinSequencerHost();
+        this.editChord(section, index);
+        this.syncGridZoomPinnedSeq();
+    }
+
+    // Déplace #arp-sequencer dans #grid-zoom-pinned-body s'il n'y est pas déjà (jamais ne le
+    // duplique) — même principe qu'openSeqZoom, pour cet emplacement épinglé plutôt qu'une fenêtre
+    // séparée.
+    pinSequencerHost() {
+        const body = document.getElementById('grid-zoom-pinned-body');
+        const host = document.getElementById('arp-sequencer');
+        if (!body.contains(host)) body.appendChild(host);
+    }
+
+    // Reflète l'état courant (accord en édition ou non) dans l'en-tête/le corps du séquenceur
+    // épinglé — appelé après un chargement (editChordFromGridZoom), un Enregistrer/Annuler, ou
+    // l'ouverture de la loupe grille si un accord était déjà en édition avant coup.
+    syncGridZoomPinnedSeq() {
+        const editing = this.editingIndex != null;
+        const title = document.getElementById('grid-zoom-pinned-title');
+        title.textContent = editing
+            ? flatTight(this.readChord().getLabel(this.useFlatsForRoot(document.getElementById('root').value)))
+            : 'Séquenceur';
+        document.getElementById('grid-zoom-pinned-placeholder').hidden = editing;
+        document.getElementById('grid-zoom-pinned-body').hidden = !editing;
+        document.getElementById('grid-zoom-pinned-save').hidden = !editing;
+        document.getElementById('grid-zoom-pinned-cancel').hidden = !editing;
+    }
+
+    // Replie/déplie le séquenceur épinglé (chevron dans son en-tête) : masqué complètement (ne garde
+    // que l'en-tête, comme la carte Morceau — voir toggleSongCardCollapse) sans perdre le motif en
+    // cours, mémorisé d'une session à l'autre.
+    toggleGridZoomPinnedSeq() {
+        this.gridZoomSeqCollapsed = !this.gridZoomSeqCollapsed;
+        localStorage.setItem(GRID_ZOOM_SEQ_COLLAPSED_KEY, this.gridZoomSeqCollapsed ? '1' : '0');
+        this.applyGridZoomPinnedCollapsed();
+    }
+
+    applyGridZoomPinnedCollapsed() {
+        const el = document.getElementById('grid-zoom-pinned-seq');
+        el.classList.toggle('collapsed', this.gridZoomSeqCollapsed);
+        const btn = document.getElementById('grid-zoom-pinned-toggle');
+        btn.setAttribute('aria-pressed', String(!this.gridZoomSeqCollapsed));
+        const label = this.gridZoomSeqCollapsed ? 'Afficher le séquenceur' : 'Masquer le séquenceur';
+        btn.title = label;
+        btn.setAttribute('aria-label', label);
+    }
+
+    // Glisser la poignée du haut change la hauteur de #grid-zoom-pinned-body (pas celle du conteneur
+    // lui-même, voir le commentaire CSS de .grid-zoom-pinned-seq) — glisser VERS LE HAUT agrandit
+    // (la poignée est en haut du panneau, "la tirer vers le haut" l'agrandit vers le haut).
+    setupGridZoomPinnedResize() {
+        const handle = document.getElementById('grid-zoom-pinned-resize');
+        const body = document.getElementById('grid-zoom-pinned-body');
+        let startY = 0, startHeight = 0;
+        const onMove = (e) => {
+            const modal = document.querySelector('.grid-zoom-modal');
+            const maxHeight = Math.round(modal.getBoundingClientRect().height * 0.75);
+            const next = Math.max(GRID_ZOOM_SEQ_HEIGHT_MIN, Math.min(maxHeight, startHeight - (e.clientY - startY)));
+            body.style.height = `${next}px`;
+        };
+        const onUp = () => {
+            window.removeEventListener('pointermove', onMove);
+            window.removeEventListener('pointerup', onUp);
+            localStorage.setItem(GRID_ZOOM_SEQ_HEIGHT_KEY, String(parseInt(body.style.height)));
+        };
+        handle.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            startY = e.clientY;
+            startHeight = body.getBoundingClientRect().height;
+            window.addEventListener('pointermove', onMove);
+            window.addEventListener('pointerup', onUp, { once: true });
+        });
     }
 
     // Règle le niveau de zoom (indépendant pour le séquenceur et la grille) d'un cran, une fois la

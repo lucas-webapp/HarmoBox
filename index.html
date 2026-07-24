@@ -6,13 +6,13 @@
     <title>HarmoHub</title>
     <!-- Logo « grille en dégradé » (4 barres, une seule teinte, intensité croissante) : voir aussi
          .logo-mark dans style.css (même dessin, en ligne) et /icons/ pour les sources. -->
-    <link rel="icon" type="image/svg+xml" href="icons/favicon.svg?v=202607251000">
-    <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=202607251000">
-    <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png?v=202607251000">
-    <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?v=202607251000">
-    <link rel="manifest" href="manifest.json?v=202607251000">
+    <link rel="icon" type="image/svg+xml" href="icons/favicon.svg?v=202607252000">
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=202607252000">
+    <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png?v=202607252000">
+    <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?v=202607252000">
+    <link rel="manifest" href="manifest.json?v=202607252000">
     <meta name="theme-color" content="#0a0a0a">
-    <link rel="stylesheet" href="style.css?v=202607251000">
+    <link rel="stylesheet" href="style.css?v=202607252000">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
 </head>
@@ -194,6 +194,31 @@
                 </div>
             </div>
             <div id="grid-zoom-host" class="seq-zoom-host grid-zoom-host"></div>
+
+            <!-- Séquenceur épinglé (voir editChordFromGridZoom/syncGridZoomPinnedSeq dans script.js) :
+                 cliquer un accord dans la grille ci-dessus le charge directement pour édition et
+                 affiche/édite son rythme ici, sans quitter la loupe. #arp-sequencer y est DÉPLACÉ
+                 (jamais dupliqué) tant qu'un accord y est en édition. Redimensionnable (poignée du
+                 haut) et masquable (chevron), état mémorisé d'une session à l'autre. -->
+            <div id="grid-zoom-pinned-seq" class="grid-zoom-pinned-seq" hidden>
+                <div id="grid-zoom-pinned-resize" class="grid-zoom-pinned-resize" title="Glisser pour redimensionner"></div>
+                <div class="grid-zoom-pinned-head">
+                    <span id="grid-zoom-pinned-title" class="grid-zoom-pinned-title">Séquenceur</span>
+                    <div class="grid-zoom-pinned-actions">
+                        <button type="button" id="grid-zoom-pinned-cancel" class="icon-btn" hidden title="Annuler" aria-label="Annuler">
+                            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+                        </button>
+                        <button type="button" id="grid-zoom-pinned-save" class="icon-btn" hidden title="Enregistrer" aria-label="Enregistrer">
+                            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+                        </button>
+                        <button type="button" id="grid-zoom-pinned-toggle" class="icon-btn" title="Masquer le séquenceur" aria-label="Masquer le séquenceur" aria-pressed="true">
+                            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <p id="grid-zoom-pinned-placeholder" class="grid-zoom-pinned-placeholder">Clique un accord dans la grille pour éditer son rythme ici.</p>
+                <div id="grid-zoom-pinned-body" class="grid-zoom-pinned-body" hidden></div>
+            </div>
         </div>
     </div>
 
@@ -571,6 +596,6 @@
          script.js) — vendu en local plutôt qu'hébergé sur un CDN. Projet LAME (lame.sourceforge.net),
          licence LGPL. -->
     <script src="lame.min.js"></script>
-    <script src="script.js?v=202607251000"></script>
+    <script src="script.js?v=202607252000"></script>
 </body>
 </html>
