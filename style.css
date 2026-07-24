@@ -1045,11 +1045,18 @@ button:active { transform: translateY(1px); }
     transition: background 0.08s ease, transform 0.08s ease;
 }
 
+/* Ivoire réaliste (légèrement chaud, pas le blanc pur clinique d'avant) + un biseau discret sur
+   chaque touche : un fil de lumière à gauche, une ombre fine à droite — assez pour suggérer le
+   relief d'une vraie touche sans virer au brillant "jouet". Le bord (border) de chaque touche
+   crée déjà l'interstice visible avec sa voisine. */
 .key.white {
     flex: 1 1 0;          /* toutes les blanches de largeur égale */
-    background: #fafafa;
-    border: 1px solid #3a3a3a;
-    border-radius: 0 0 5px 5px;
+    background:
+        linear-gradient(to right, rgba(255,255,255,.8) 0%, rgba(255,255,255,0) 7%),
+        linear-gradient(to left, rgba(0,0,0,.15) 0%, rgba(0,0,0,0) 7%),
+        linear-gradient(180deg, #f3ede0 0%, #e7dcc4 100%);
+    border: 1px solid #2a2a2a;
+    border-radius: 0 0 6px 6px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.35);
     z-index: 1;
 }
@@ -1059,9 +1066,11 @@ button:active { transform: translateY(1px); }
     top: 0;
     /* largeur et position (≈62% d'une blanche) posées en JS pour rester proportionnelles */
     height: 62%;
-    background: #141414;
+    background:
+        linear-gradient(135deg, rgba(255,255,255,.12) 0%, rgba(255,255,255,0) 35%),
+        #171310;
     border: 1px solid #000;
-    border-radius: 0 0 4px 4px;
+    border-radius: 0 0 5px 5px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.6), inset 0 -2px 3px rgba(255,255,255,0.08);
     z-index: 2;
 }
