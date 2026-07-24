@@ -599,6 +599,46 @@ function flatTight(text) {
 // une double-croche, sans multiplier le nombre de rectangles visibles.
 const SEQ_STEPS_PER_BEAT = 4;
 
+// ---------- Notes libres du séquenceur : seuils avant de renommer l'accord ----------
+// Une note libre (voir addSequencerNote) ne renomme l'accord (voir reevaluateExtraNoteUpgrades) que
+// si elle est réellement JOUÉE assez longtemps — une note de passage furtive ne doit jamais renommer
+// l'accord, même si sa hauteur complète pile une qualité reconnue. Deux façons de "compter", au
+// choix de la manière dont elle est jouée (voir seqVoiceCoverage) :
+// - tenue en continu (liée) au moins SEQ_HELD_MIN_STEPS cases d'affilée -> clairement une vraie voix
+//   soutenue de l'accord, peu importe le reste du motif ;
+// - à défaut, en détaché/staccato (plusieurs attaques courtes séparées) -> il en faut BEAUCOUP plus,
+//   couvrant au moins SEQ_STACCATO_MIN_COVERAGE de la durée totale de l'accord, pour distinguer un
+//   martèlement voulu (vraie voix) d'une simple broderie ponctuelle.
+// Réglages à affiner si besoin : 4 cases = 1 temps plein tenu ; 0.5 = la moitié de l'accord au moins.
+const SEQ_HELD_MIN_STEPS = SEQ_STEPS_PER_BEAT; // 1 temps plein tenu en continu
+const SEQ_STACCATO_MIN_COVERAGE = 0.5; // 50% de la durée totale, même en attaques séparées
+
+// Compte, pour une voix donnée, ses cases actives au total et sa plus longue série de cases LIÉES
+// consécutives (une même note tenue) — voir reevaluateExtraNoteUpgrades.
+function seqVoiceCoverage(pattern, tie, voiceIndex) {
+    let onSteps = 0, longestRun = 0, currentRun = 0;
+    for (let s = 0; s < pattern.length; s++) {
+        const isOn = pattern[s].includes(voiceIndex);
+        if (isOn) {
+            onSteps++;
+            const continuesPrev = s > 0 && pattern[s - 1].includes(voiceIndex) && tie[s].includes(voiceIndex);
+            currentRun = continuesPrev ? currentRun + 1 : 1;
+        } else {
+            currentRun = 0;
+        }
+        if (currentRun > longestRun) longestRun = currentRun;
+    }
+    return { onSteps, totalSteps: pattern.length, longestRun };
+}
+
+// Une voix est-elle jouée assez longtemps pour compter comme une vraie voix de l'accord (voir les
+// seuils ci-dessus) ? Tenue assez longtemps EN CONTINU, ou à défaut assez de couverture totale
+// (staccato).
+function seqCoverageQualifies(cov) {
+    if (cov.longestRun >= SEQ_HELD_MIN_STEPS) return true;
+    return cov.totalSteps > 0 && (cov.onSteps / cov.totalSteps) >= SEQ_STACCATO_MIN_COVERAGE;
+}
+
 // ---------- Groove (droit / shuffle / ternaire) ----------
 // La grille du séquenceur reste TOUJOURS affichée droite (comme dans la plupart des séquenceurs/DAW) :
 // le groove ne change rien à son édition, seulement l'instant réel où chaque case tombe à la lecture
@@ -6325,11 +6365,15 @@ class HarmoHubApp {
     }
 
     renderSequencer() {
-        const chord = this.syncSeqPatternForCurrentChord();
         const host = document.getElementById('arp-sequencer');
         if (!host) return;
         host.hidden = !this.seqOpen;
         if (!this.seqOpen) return;
+        // Avant toute chose : une note libre jouée assez longtemps depuis le dernier rendu complète-
+        // t-elle désormais l'accord (voir reevaluateExtraNoteUpgrades) ? Peut changer la qualité/le
+        // nombre de voix, donc AVANT de (re)synchroniser le motif ci-dessous.
+        this.reevaluateExtraNoteUpgrades();
+        const chord = this.syncSeqPatternForCurrentChord();
 
         const midis = chord.getSeqMidiNotes();
         const noteNames = chord.getSeqDisplayNotes(this.useFlatsForRoot(chord.root));
@@ -6587,11 +6631,11 @@ class HarmoHubApp {
     }
 
     // Valide (ou annule) la saisie d'une note libre (voir addSequencerNote) : texte vide -> supprime
-    // cette voix ; hauteur reconnue (ex. "E3") -> si elle complète EXACTEMENT une autre qualité déjà
-    // reconnue (ex. 7e ajoutée sur un accord majeur), absorbe la note dans la qualité de l'accord
-    // (elle n'est alors plus "libre" : cf. constructeur de Chord) ; sinon la garde comme note
-    // "étrangère" (souvent une note de passage vers l'accord suivant, sans rapport avec celui-ci —
-    // affichée en violet comme les autres degrés hors 1-3-5-7, voir _computeVoices).
+    // cette voix ; hauteur reconnue (ex. "E3") -> mémorisée telle quelle. La hauteur seule ne décide
+    // JAMAIS de renommer l'accord (une note fraîchement tapée n'a encore aucun rythme peint, donc
+    // aucune durée) — c'est reevaluateExtraNoteUpgrades, appelé à chaque rendu du séquenceur, qui
+    // tranche une fois qu'on l'a réellement jouée (voir les seuils SEQ_HELD_MIN_STEPS/
+    // SEQ_STACCATO_MIN_COVERAGE plus haut).
     commitExtraNoteLabel(extraIndex, text) {
         const trimmed = text.trim();
         if (!trimmed) {
@@ -6606,31 +6650,53 @@ class HarmoHubApp {
             this.renderSequencer(); // revient à l'ancienne valeur (le rendu relit this.extraNotes)
             return;
         }
-
-        const qualitySelect = document.getElementById('quality');
-        const rootPc = NOTES.indexOf(document.getElementById('root').value);
-        const newPc = NOTES.indexOf(parsed.note);
-        const relPc = ((newPc - rootPc) % 12 + 12) % 12;
-        const currentSet = pitchClassSetForQuality(qualitySelect.value);
-        const unionSet = new Set([...currentSet, relPc]);
-        const matched = findQualityMatchingPitchClasses(unionSet);
-
-        if (matched && matched !== qualitySelect.value) {
-            // Révéler d'ABORD (peut reconstruire la liste d'options du <select>, voir
-            // activateMoreOptions/toggleSelectOptions) : régler la valeur avant l'effacerait, la
-            // qualité visée n'existant pas encore dans les options tant que le mode courant reste
-            // masqué (même ordre qu'editChord, qui a le même piège avec la basse différente).
-            this.revealComplexQualityIfNeeded(matched);
-            qualitySelect.value = matched;
-            this.extraNotes.splice(extraIndex, 1);
-            const label = QUALITY_LABEL[matched] || '';
-            this.flashHint(`Accord complété : ${document.getElementById('root').value}${label}`);
-        } else {
-            this.extraNotes[extraIndex] = { note: parsed.note, octave: parsed.octave };
-        }
+        this.extraNotes[extraIndex] = { note: parsed.note, octave: parsed.octave };
         this.seqTouched = true;
         this.renderSequencer();
         this.refreshPreview();
+    }
+
+    // Réévalue, à CHAQUE rendu du séquenceur (peindre/étirer/effacer une case, pas seulement taper le
+    // nom de la note), si une note libre est désormais jouée assez longtemps pour compléter l'accord
+    // (voir seqCoverageQualifies) : si oui, absorbée dans la qualité de l'accord comme
+    // commitExtraNoteLabel le faisait autrefois sur la seule hauteur ; sinon reste une note
+    // "étrangère" (de passage), même si sa hauteur complèterait pile une qualité reconnue — SEULE la
+    // durée réellement jouée décide désormais, jamais la hauteur seule (retour utilisateur).
+    // Rappelée en boucle tant qu'une note se qualifie : en fusionner une décale les index des
+    // suivantes (voir _computeVoices), plus sûr de tout recalculer depuis le début à chaque fois.
+    reevaluateExtraNoteUpgrades() {
+        let again = this.extraNotes.length > 0;
+        while (again) {
+            again = false;
+            const chord = this.readChord();
+            const { pattern, tie } = this.getLiveSeqPattern(chord);
+            const extraStart = chord.getIntervals().length;
+
+            for (let i = 0; i < this.extraNotes.length; i++) {
+                const cov = seqVoiceCoverage(pattern, tie, extraStart + i);
+                if (!seqCoverageQualifies(cov)) continue;
+
+                const qualitySelect = document.getElementById('quality');
+                const rootPc = NOTES.indexOf(document.getElementById('root').value);
+                const relPc = ((NOTES.indexOf(this.extraNotes[i].note) - rootPc) % 12 + 12) % 12;
+                const currentSet = pitchClassSetForQuality(qualitySelect.value);
+                const unionSet = new Set([...currentSet, relPc]);
+                const matched = findQualityMatchingPitchClasses(unionSet);
+                if (!matched || matched === qualitySelect.value) continue; // jouée assez longtemps, mais ne complète rien de reconnu
+
+                // Révéler d'ABORD (peut reconstruire la liste d'options du <select>, voir
+                // activateMoreOptions/toggleSelectOptions) : régler la valeur avant l'effacerait, la
+                // qualité visée n'existant pas encore dans les options tant que le mode courant reste
+                // masqué (même ordre qu'editChord, qui a le même piège avec la basse différente).
+                this.revealComplexQualityIfNeeded(matched);
+                qualitySelect.value = matched;
+                this.extraNotes.splice(i, 1);
+                const label = QUALITY_LABEL[matched] || '';
+                this.flashHint(`Accord complété : ${document.getElementById('root').value}${label}`);
+                again = this.extraNotes.length > 0;
+                break; // état changé (qualité + extraNotes) : on recommence le for depuis le début
+            }
+        }
     }
 
     // Déplace le curseur de lecture (petite ligne verticale) du séquenceur au pas `step` en cours ;
