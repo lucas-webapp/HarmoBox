@@ -68,6 +68,42 @@ const CHORD_INTERVALS = {
     dom13: [{ semi: 0, degree: 0, role: 'root' }, { semi: 4, degree: 2, role: 'third' }, { semi: 10, degree: 6, role: 'seventh' }, { semi: 14, degree: 1, role: 'ext' }, { semi: 21, degree: 5, role: 'ext' }]
 };
 
+// Ensemble de classes de hauteur (0-11, relatives à la fondamentale) d'une qualité — sert à repérer
+// si l'ajout d'une note libre au séquenceur complète exactement une AUTRE qualité déjà reconnue
+// (voir commitExtraNoteLabel/findQualityMatchingPitchClasses).
+function pitchClassSetForQuality(quality) {
+    const ivs = CHORD_INTERVALS[quality] || CHORD_INTERVALS.maj;
+    return new Set(ivs.map(iv => ((iv.semi % 12) + 12) % 12));
+}
+
+// Cherche, parmi toutes les qualités connues, celle dont l'ensemble de classes de hauteur est
+// EXACTEMENT `pcSet` (même taille, mêmes membres) — ou null si aucune ne correspond exactement.
+function findQualityMatchingPitchClasses(pcSet) {
+    for (const q of Object.keys(CHORD_INTERVALS)) {
+        const qSet = pitchClassSetForQuality(q);
+        if (qSet.size === pcSet.size && [...qSet].every(pc => pcSet.has(pc))) return q;
+    }
+    return null;
+}
+
+// Parse "E3", "F#4", "Bb2"... (lettre + dièse/bémol optionnel + chiffre d'octave, signé) en
+// { note, octave }, ou null si non reconnu — note libre ajoutée au séquenceur (voir
+// addSequencerNote/commitExtraNoteLabel), à la différence de parseChordSymbol qui lit un SYMBOLE
+// D'ACCORD entier (fondamentale + qualité, jamais d'octave).
+function parseNoteNameOctave(text) {
+    const m = (text || '').trim().match(/^([A-Ga-g])(#|b)?(-?\d+)$/);
+    if (!m) return null;
+    const [, letter, accidental, octaveStr] = m;
+    const BASE_PC = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+    let pc = BASE_PC[letter.toUpperCase()];
+    if (accidental === '#') pc += 1;
+    else if (accidental === 'b') pc -= 1;
+    pc = ((pc % 12) + 12) % 12;
+    const octave = parseInt(octaveStr, 10);
+    if (!Number.isFinite(octave)) return null;
+    return { note: NOTES[pc], octave };
+}
+
 // Symboles d'accord lisibles pour l'affichage
 const QUALITY_LABEL = {
     maj: '', min: 'm', maj7: 'maj7', min7: 'm7', dom7: '7',
@@ -449,7 +485,16 @@ function transposeChordData(data, semitones) {
         const shifted = guitarLock.map(f => (f == null ? null : f + semitones));
         guitarLock = shifted.some(f => f != null && (f < 0 || f > GUITAR_MAX_FRET)) ? null : shifted;
     }
-    return { ...data, root: shift(data.root), bass: data.bass ? shift(data.bass) : data.bass, guitarLock };
+    // Les notes libres (voir addSequencerNote) transposent en hauteur ABSOLUE, comme n'importe quelle
+    // autre voix de l'accord — recalculées via leur MIDI plutôt qu'un simple décalage de lettre (qui
+    // ne saurait pas quand faire déborder l'octave, ex. un Si transposé d'un demi-ton devient un Do
+    // à l'octave AU-DESSUS, pas le même octave).
+    const extraNotes = (data.extraNotes || []).map(x => {
+        const midi = NOTES.indexOf(x.note) + 12 * (x.octave + 1) + semitones;
+        const pc = ((midi % 12) + 12) % 12;
+        return { note: NOTES[pc], octave: Math.floor(midi / 12) - 1 };
+    });
+    return { ...data, root: shift(data.root), bass: data.bass ? shift(data.bass) : data.bass, guitarLock, extraNotes };
 }
 
 // ---------- Sections de la progression (couplet, refrain, etc.) ----------
@@ -735,7 +780,7 @@ function diatonicNumeralFor(diff, keyMode) {
 }
 
 class Chord {
-    constructor(root, quality, beats, inversion, drop, octave = 3, bass = null, guitarLock = null) {
+    constructor(root, quality, beats, inversion, drop, octave = 3, bass = null, guitarLock = null, extraNotes = null) {
         this.root = root;
         this.quality = quality;
         this.beats = parseInt(beats); // durée en temps
@@ -746,6 +791,12 @@ class Chord {
         // Doigté guitare verrouillé par l'utilisateur (case par corde, `null` = corde étouffée), ou
         // null si laissé au choix automatique — voir guitarFingeringsForChord/toggleGuitarLock.
         this.guitarLock = guitarLock || null;
+        // Notes ajoutées librement au séquenceur ({note, octave}), en plus des voix de la qualité —
+        // typiquement des notes de passage vers l'accord suivant, sans rapport avec l'accord joué
+        // (voir addSequencerNote/commitExtraNoteLabel). Si l'une d'elles complète exactement une
+        // AUTRE qualité reconnue, elle est absorbée dans `quality` au lieu de rester ici — voir
+        // commitExtraNoteLabel.
+        this.extraNotes = extraNotes || [];
     }
 
     getIntervals() {
@@ -804,6 +855,20 @@ class Chord {
 
         const rootMidi = NOTES.indexOf(this.root) + 12 * (this.octave + 1); // octave 3 -> C3 = 48
         const voiced = notes.map(n => ({ midi: rootMidi + n.semi, role: n.role, degree: n.degree }));
+
+        // Notes libres ajoutées au séquenceur (voir addSequencerNote) : hauteur ABSOLUE (note+octave
+        // tels que tapés, pas relatifs à rootMidi comme les voix ci-dessus) — ajoutées ICI, avant la
+        // basse, pour que leur index de voix reste stable même si la basse est activée/désactivée
+        // ensuite (voir getSeqVoices, même raisonnement que pour la basse juste en dessous). Rôle/
+        // degré empruntés à la voix de l'accord qui partage leur classe de hauteur, s'il y en a une
+        // (ex. doubler la tierce une octave plus haut reste bleu) — sinon note « étrangère » (violet,
+        // orthographe générique), typiquement une note de passage sans rapport avec l'accord joué.
+        this.extraNotes.forEach(x => {
+            const midi = NOTES.indexOf(x.note) + 12 * (x.octave + 1);
+            const relPc = ((NOTES.indexOf(x.note) - NOTES.indexOf(this.root)) % 12 + 12) % 12;
+            const match = notes.find(n => ((n.semi % 12) + 12) % 12 === relPc);
+            voiced.push({ midi, role: match ? match.role : 'ext', degree: match ? match.degree : null });
+        });
 
         // Basse différente (accord « sur » une note, ex. Cmaj7/D) : ajoutée SOUS la voix la plus
         // grave actuelle, sans toucher au reste du voicing (renversement/drop restent ceux définis
@@ -1503,6 +1568,7 @@ class HarmoHubApp {
         this.guitarFingeringIndex = 0; // doigté actuellement affiché parmi guitarFingerings
         this.guitarLock = null;    // doigté verrouillé en attente pour l'accord en cours d'édition (voir toggleGuitarLock)
         this._keepGuitarLockOnce = false; // laisse passer guitarLock au PROCHAIN recalcul (voir ensureGuitarDiagram)
+        this.extraNotes = [];      // notes libres en attente pour l'accord en cours d'édition (voir addSequencerNote)
         this._lastTap = null;      // pour le double-tap (suppression mobile)
         this.tapTimes = [];        // horodatages du tap tempo (voir handleTapTempo)
         this.isPlaying = false;    // une lecture (accord/progression) est-elle en cours ?
@@ -1971,7 +2037,9 @@ class HarmoHubApp {
         this.activateMoreOptions();
     }
 
-    // Lit les réglages de l'interface et renvoie un Chord
+    // Lit les réglages de l'interface et renvoie un Chord. Le doigté guitare verrouillé (voir
+    // toggleGuitarLock) n'est PAS passé ici : ensureGuitarDiagram le fournit explicitement à
+    // guitarFingeringsForChord (ce Chord est reconstruit à chaque frappe, il ne le porte jamais).
     readChord() {
         return new Chord(
             document.getElementById('root').value,
@@ -1980,7 +2048,9 @@ class HarmoHubApp {
             document.getElementById('inversion').value,
             document.getElementById('drop').value,
             document.getElementById('octave').value,
-            document.getElementById('bass').value || null
+            document.getElementById('bass').value || null,
+            null,
+            this.extraNotes
         );
     }
 
@@ -2474,7 +2544,7 @@ class HarmoHubApp {
 
         flat.slice(startPos).forEach(({ section, index, data }) => {
             const beats = beatsFromData(data);
-            const chord = new Chord(data.root, data.quality, beats, data.inversion, data.drop, octaveFromData(data), data.bass);
+            const chord = new Chord(data.root, data.quality, beats, data.inversion, data.drop, octaveFromData(data), data.bass, null, data.extraNotes);
             const notes = chord.getSeqNotes();
             const { pattern: seqPattern, tie: seqTie } = this.resolveSeqPatternForData(chord, data);
             this.schedulePlayback(notes, chord.getSeqMidiNotes(), seqPattern, seqTie, secPerBeat, timeOffset, chord.getRoleMap(), data.instrument || 'piano', chord, false, { section, index });
@@ -2636,7 +2706,8 @@ class HarmoHubApp {
             instrument: document.getElementById('instrument').value,
             arpPattern: document.getElementById('arpPattern').value,
             seqEdited: true,
-            guitarLock: this.guitarLock || null
+            guitarLock: this.guitarLock || null,
+            extraNotes: this.extraNotes.map(x => ({ ...x }))
         };
         const sections = loadProgressionSections();
         this.pushUndo(sections);
@@ -2676,6 +2747,7 @@ class HarmoHubApp {
             arpPattern: serializeSeqPattern(pattern, tie),
             seqEdited: false,
             guitarLock: null,
+            extraNotes: [],
         };
     }
 
@@ -3015,7 +3087,7 @@ class HarmoHubApp {
         this.syncPlayStylePicker(); // reflète la nouvelle valeur sur le bouton/menu d'icônes (voir setupPlayStylePicker)
         document.getElementById('instrument').value = d.instrument || 'piano';
 
-        const chord = new Chord(d.root, d.quality, beatsFromData(d), d.inversion, d.drop, octaveFromData(d), d.bass, d.guitarLock);
+        const chord = new Chord(d.root, d.quality, beatsFromData(d), d.inversion, d.drop, octaveFromData(d), d.bass, d.guitarLock, d.extraNotes);
         this.seqTouched = true; // le motif résolu ci-dessous fait autorité, on ne le régénère plus tant qu'on ne touche pas un réglage
         this.seqSelections = [];
         this.seqPage = 0; // nouvel accord chargé pour édition : on repart de sa première mesure
@@ -3034,6 +3106,9 @@ class HarmoHubApp {
         // (sinon il l'effacerait, croyant passer à un accord différent — voir keepGuitarLockOnce).
         this.guitarLock = d.guitarLock || null;
         this._keepGuitarLockOnce = true;
+        // Restaure les notes libres déjà enregistrées pour CET accord (voir addSequencerNote) — clonées
+        // pour ne jamais muter directement le tableau stocké dans sections[].chords[].
+        this.extraNotes = (d.extraNotes || []).map(x => ({ ...x }));
         this.refreshPreview();
         this.renderSequencer();
         this.loadProgression();     // met en évidence la case en édition
@@ -3051,6 +3126,9 @@ class HarmoHubApp {
         document.getElementById('save').innerHTML = svgIcon('plus') + ' Ajouter';
         document.getElementById('cancel-edit').hidden = true;
         this.updateEditActionsDocking();
+        // Les notes libres restaurées (voir editChord) étaient propres à CET accord — repartir sans,
+        // comme pour un tout nouvel accord, plutôt que les recopier malgré soi sur le suivant.
+        this.extraNotes = [];
     }
 
     // Déplace le bloc Ajouter/À la suite/Annuler entre sa place normale (juste au-dessus de la carte
@@ -4642,7 +4720,7 @@ class HarmoHubApp {
                 page1 += `<div class="print-chord-row">`;
                 cells.filter(c => c.row === r).forEach(s => {
                     const data = sec.chords[s.index];
-                    const chord = new Chord(data.root, data.quality, beatsFromData(data), data.inversion, data.drop, octaveFromData(data), data.bass, data.guitarLock);
+                    const chord = new Chord(data.root, data.quality, beatsFromData(data), data.inversion, data.drop, octaveFromData(data), data.bass, data.guitarLock, data.extraNotes);
                     const chordUseFlats = useFlatsForChordRoot(NOTES.indexOf(data.root), NOTES.indexOf(gRoot), gMode, useFlats);
                     const sym = chord.getBareLabel(chordUseFlats) + ((s.split && !s.isFirst) ? ' ↩' : '');
                     const roman = (s.isFirst && this.showRomanNumerals) ? this.getRomanNumeral(gRoot, gMode, data.root, data.quality) : '';
@@ -4772,7 +4850,7 @@ class HarmoHubApp {
             if (sec.title && sec.title.trim()) meta.push(tick, midiTextEvent(0x06, sec.title.trim()));
             sec.chords.forEach(data => {
                 const beats = beatsFromData(data);
-                const chord = new Chord(data.root, data.quality, beats, data.inversion, data.drop, octaveFromData(data), data.bass);
+                const chord = new Chord(data.root, data.quality, beats, data.inversion, data.drop, octaveFromData(data), data.bass, null, data.extraNotes);
                 const midis = chord.getSeqMidiNotes();
                 const { pattern, tie } = this.resolveSeqPatternForData(chord, data);
                 const steps = pattern.length;
@@ -4880,7 +4958,7 @@ class HarmoHubApp {
             sections.forEach(sec => {
                 sec.chords.forEach(data => {
                     const beats = beatsFromData(data);
-                    const chord = new Chord(data.root, data.quality, beats, data.inversion, data.drop, octaveFromData(data), data.bass);
+                    const chord = new Chord(data.root, data.quality, beats, data.inversion, data.drop, octaveFromData(data), data.bass, null, data.extraNotes);
                     const notes = chord.getSeqNotes();
                     const { pattern, tie } = this.resolveSeqPatternForData(chord, data);
                     const steps = pattern.length;
@@ -6303,10 +6381,25 @@ class HarmoHubApp {
         // `data-step` garde l'indice ABSOLU (pas relatif à la page) : le glissé/étirement (voir
         // onSeqPointerDown et findSeqStepAt, qui ne connaissent que les cases réellement dans le
         // DOM, donc celles de la page affichée) continue de raisonner sur le motif complet.
+        // Les voix "notes libres" (voir addSequencerNote) occupent toujours les indices juste après
+        // les voix normales de la qualité, avant la basse éventuelle (voir _computeVoices) — leur
+        // étiquette devient un champ éditable au lieu d'un simple texte, seul endroit où renommer une
+        // note directement (voir commitExtraNoteLabel). `rowOrder` les replace déjà au bon endroit
+        // visuellement (tri par hauteur), sans rien à faire de spécial ici pour ça.
+        const extraStart = chord.getIntervals().length;
+        const extraEnd = extraStart + chord.extraNotes.length;
+
         let rowIndex = 0;
         for (const r of rowOrder) {
             rowIndex++;
-            html += `<div class="seq-label" style="grid-row:${rowIndex}; grid-column:1;">${noteNames[r]}</div>`;
+            if (r >= extraStart && r < extraEnd) {
+                const extraIdx = r - extraStart;
+                html += `<div class="seq-label seq-label-extra" style="grid-row:${rowIndex}; grid-column:1;">
+                    <input type="text" class="seq-label-input" data-extra-index="${extraIdx}" value="${escapeHtml(noteNames[r])}" title="Note libre : tape une hauteur (ex. E3), ou vide pour la supprimer" autocomplete="off" autocapitalize="off" spellcheck="false">
+                </div>`;
+            } else {
+                html += `<div class="seq-label" style="grid-row:${rowIndex}; grid-column:1;">${noteNames[r]}</div>`;
+            }
             for (let s = pageStart; s < pageEnd; s++) {
                 const col = s - pageStart;
                 const beatStart = (s % SEQ_STEPS_PER_BEAT === 0) ? ' beat-start' : '';
@@ -6413,12 +6506,26 @@ class HarmoHubApp {
             <button type="button" id="seq-play" class="btn-prog seq-icon-btn" title="Lecture" aria-label="Lecture">${svgIcon('play')}</button>
             <button type="button" id="seq-stop" class="btn-stop seq-icon-btn" title="Stop" aria-label="Stop">${svgIcon('stop')}</button>
             <button type="button" id="seq-loop-play" class="icon-btn seq-icon-btn${this.seqLoopPlay ? ' active' : ''}" title="Rejouer en boucle" aria-label="Rejouer en boucle">${svgIcon('loop')}</button>
+            <button type="button" id="seq-add-note" class="icon-btn seq-icon-btn" title="Ajouter une note libre (ex. note de passage)" aria-label="Ajouter une note libre">${svgIcon('plus')}</button>
             <button type="button" data-preset="clear" class="seq-delete-btn">${svgIcon('trash')} tout</button>
             <button type="button" id="seq-delete-selection" class="seq-delete-btn" ${hasSelection ? '' : 'disabled'}>${svgIcon('trash')}
                 <span class="lbl-full">sélection${countSuffix}</span><span class="lbl-short">Sélect.${countSuffix}</span>
             </button>
         </div>`;
         host.innerHTML = html;
+
+        // Étiquette éditable d'une note libre (voir addSequencerNote) : Entrée valide (déclenche le
+        // blur ci-dessous), Échap annule sans valider — même schéma que les autres renommages en
+        // ligne de l'appli (morceau, dossier...).
+        host.querySelectorAll('.seq-label-input').forEach(input => {
+            const extraIdx = parseInt(input.dataset.extraIndex);
+            input.addEventListener('keydown', (e) => {
+                e.stopPropagation();
+                if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+                else if (e.key === 'Escape') { e.preventDefault(); input.value = input.defaultValue; input.blur(); }
+            });
+            input.addEventListener('blur', () => this.commitExtraNoteLabel(extraIdx, input.value));
+        });
 
         // Bouton « X tout » (remplace tout le motif par du silence) : ciblé via [data-preset] pour
         // ne pas capturer « X sélection » ci-dessous, qui a son propre câblage.
@@ -6445,6 +6552,8 @@ class HarmoHubApp {
             this.seqLoopPlay = !this.seqLoopPlay;
             e.currentTarget.classList.toggle('active', this.seqLoopPlay);
         };
+        const addNoteBtn = document.getElementById('seq-add-note');
+        if (addNoteBtn) addNoteBtn.onclick = () => this.addSequencerNote();
 
         // Navigation par page : saut direct d'une mesure (ou groupe de mesures) à l'autre, jamais de
         // scroll continu (voir le commentaire plus haut sur le conflit avec l'étirement tactile).
@@ -6452,6 +6561,76 @@ class HarmoHubApp {
         if (prevBtn) prevBtn.onclick = () => { this.seqPage--; this.renderSequencer(); };
         const nextBtn = document.getElementById('seq-page-next');
         if (nextBtn) nextBtn.onclick = () => { this.seqPage++; this.renderSequencer(); };
+    }
+
+    // Ajoute une voix "libre" au séquenceur (bouton dédié, voir #seq-add-note) : hauteur de départ
+    // arbitraire (une tierce mineure au-dessus de la voix la plus aiguë actuelle, ou La3 à défaut de
+    // voix) — l'essentiel est de faire apparaître aussitôt le champ éditable (voir renderSequencer)
+    // pour que la vraie hauteur voulue soit tapée dans la foulée. Toujours ajoutée à la fin de
+    // extraNotes : sa position d'AFFICHAGE dans le séquenceur (triée par hauteur) se corrige d'elle-
+    // même dès que sa vraie hauteur est validée (voir commitExtraNoteLabel).
+    addSequencerNote() {
+        const chord = this.readChord();
+        const midis = chord.getSeqMidiNotes();
+        const highestMidi = midis.length ? Math.max(...midis) : 57; // La3 à défaut de tout accord jouable
+        const defaultMidi = highestMidi + 3;
+        const pc = ((defaultMidi % 12) + 12) % 12;
+        const octave = Math.floor(defaultMidi / 12) - 1;
+        this.extraNotes.push({ note: NOTES[pc], octave });
+        this.seqTouched = true; // le motif doit garder cette voix (voir syncSeqPatternForCurrentChord)
+        this.renderSequencer();
+        this.refreshPreview();
+        // Focus + sélection immédiate du champ fraîchement créé : la valeur par défaut n'a aucun sens
+        // musical, autant la remplacer tout de suite sans avoir à cliquer.
+        const input = document.querySelector(`.seq-label-input[data-extra-index="${this.extraNotes.length - 1}"]`);
+        if (input) { input.focus(); input.select(); }
+    }
+
+    // Valide (ou annule) la saisie d'une note libre (voir addSequencerNote) : texte vide -> supprime
+    // cette voix ; hauteur reconnue (ex. "E3") -> si elle complète EXACTEMENT une autre qualité déjà
+    // reconnue (ex. 7e ajoutée sur un accord majeur), absorbe la note dans la qualité de l'accord
+    // (elle n'est alors plus "libre" : cf. constructeur de Chord) ; sinon la garde comme note
+    // "étrangère" (souvent une note de passage vers l'accord suivant, sans rapport avec celui-ci —
+    // affichée en violet comme les autres degrés hors 1-3-5-7, voir _computeVoices).
+    commitExtraNoteLabel(extraIndex, text) {
+        const trimmed = text.trim();
+        if (!trimmed) {
+            this.extraNotes.splice(extraIndex, 1);
+            this.renderSequencer();
+            this.refreshPreview();
+            return;
+        }
+        const parsed = parseNoteNameOctave(trimmed);
+        if (!parsed) {
+            this.flashHint('Note non reconnue (ex. E3, F#4, Bb2)');
+            this.renderSequencer(); // revient à l'ancienne valeur (le rendu relit this.extraNotes)
+            return;
+        }
+
+        const qualitySelect = document.getElementById('quality');
+        const rootPc = NOTES.indexOf(document.getElementById('root').value);
+        const newPc = NOTES.indexOf(parsed.note);
+        const relPc = ((newPc - rootPc) % 12 + 12) % 12;
+        const currentSet = pitchClassSetForQuality(qualitySelect.value);
+        const unionSet = new Set([...currentSet, relPc]);
+        const matched = findQualityMatchingPitchClasses(unionSet);
+
+        if (matched && matched !== qualitySelect.value) {
+            // Révéler d'ABORD (peut reconstruire la liste d'options du <select>, voir
+            // activateMoreOptions/toggleSelectOptions) : régler la valeur avant l'effacerait, la
+            // qualité visée n'existant pas encore dans les options tant que le mode courant reste
+            // masqué (même ordre qu'editChord, qui a le même piège avec la basse différente).
+            this.revealComplexQualityIfNeeded(matched);
+            qualitySelect.value = matched;
+            this.extraNotes.splice(extraIndex, 1);
+            const label = QUALITY_LABEL[matched] || '';
+            this.flashHint(`Accord complété : ${document.getElementById('root').value}${label}`);
+        } else {
+            this.extraNotes[extraIndex] = { note: parsed.note, octave: parsed.octave };
+        }
+        this.seqTouched = true;
+        this.renderSequencer();
+        this.refreshPreview();
     }
 
     // Déplace le curseur de lecture (petite ligne verticale) du séquenceur au pas `step` en cours ;
@@ -6489,7 +6668,7 @@ class HarmoHubApp {
         const data = sections[section] && sections[section].chords[index];
         if (!data) return;
 
-        const chord = new Chord(data.root, data.quality, beatsFromData(data), data.inversion, data.drop, octaveFromData(data), data.bass);
+        const chord = new Chord(data.root, data.quality, beatsFromData(data), data.inversion, data.drop, octaveFromData(data), data.bass, null, data.extraNotes);
         const notes = chord.getSeqNotes();
         const midis = chord.getSeqMidiNotes();
         const roleMap = chord.getRoleMap();

@@ -1831,6 +1831,25 @@ button:active { transform: translateY(1px); }
     white-space: nowrap;
 }
 
+/* Étiquette d'une note libre (voir addSequencerNote/commitExtraNoteLabel) : champ éditable au lieu
+   d'un simple texte, teinté comme les extensions "Autres" (même violet que .dot-ext) pour se
+   reconnaître au premier coup d'œil — bordure en pointillés plutôt qu'un cadre plein, discrète tant
+   qu'on n'y touche pas. */
+.seq-label-extra { padding-right: 0; }
+.seq-label-input {
+    width: 3.4em;
+    max-width: 100%;
+    background: transparent;
+    border: none;
+    border-bottom: 1px dashed var(--border);
+    color: #dba8ee;
+    font: inherit;
+    font-size: var(--fs-xs);
+    text-align: right;
+    padding: 0 2px;
+}
+.seq-label-input:focus { outline: none; border-bottom-color: #dba8ee; }
+
 /* Numéro de temps sous la grille (recommence à 1 à chaque mesure) : repère discret, aligné sur le
    début du temps plutôt que posé au milieu — même esprit que .row-measure dans la grille d'accords. */
 .seq-beat-label {
