@@ -1190,6 +1190,7 @@ button:active { transform: translateY(1px); }
     border: 1px dashed #444;
     border-radius: 8px;
 }
+.guitar-lock-btn { margin-top: 6px; }
 .guitar-nav {
     display: flex;
     align-items: center;

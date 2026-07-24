@@ -440,7 +440,16 @@ function octaveFromData(data) {
 // `semitones`, sans changer la classe de hauteur obtenue.
 function transposeChordData(data, semitones) {
     const shift = (pc) => NOTES[(NOTES.indexOf(pc) + semitones + 1200) % 12];
-    return { ...data, root: shift(data.root), bass: data.bass ? shift(data.bass) : data.bass };
+    // Un doigté verrouillé (voir toggleGuitarLock) transpose comme une vraie forme de guitare : les
+    // mêmes cases décalées du même nombre de cases (barré qui monte/descend le manche) — sauf si ça
+    // sort de la portée jouable (case négative), auquel cas mieux vaut relâcher le verrou que garder
+    // une forme qui ne correspond plus aux bonnes notes.
+    let guitarLock = data.guitarLock;
+    if (guitarLock) {
+        const shifted = guitarLock.map(f => (f == null ? null : f + semitones));
+        guitarLock = shifted.some(f => f != null && (f < 0 || f > GUITAR_MAX_FRET)) ? null : shifted;
+    }
+    return { ...data, root: shift(data.root), bass: data.bass ? shift(data.bass) : data.bass, guitarLock };
 }
 
 // ---------- Sections de la progression (couplet, refrain, etc.) ----------
@@ -720,7 +729,7 @@ function diatonicNumeralFor(diff, keyMode) {
 }
 
 class Chord {
-    constructor(root, quality, beats, inversion, drop, octave = 3, bass = null) {
+    constructor(root, quality, beats, inversion, drop, octave = 3, bass = null, guitarLock = null) {
         this.root = root;
         this.quality = quality;
         this.beats = parseInt(beats); // durée en temps
@@ -728,6 +737,9 @@ class Chord {
         this.inversion = parseInt(inversion);
         this.drop = drop;
         this.bass = bass || null; // note de basse différente de la fondamentale (ex. "D" sur un Cmaj7/D), ou null
+        // Doigté guitare verrouillé par l'utilisateur (case par corde, `null` = corde étouffée), ou
+        // null si laissé au choix automatique — voir guitarFingeringsForChord/toggleGuitarLock.
+        this.guitarLock = guitarLock || null;
     }
 
     getIntervals() {
@@ -1121,19 +1133,36 @@ function shapeToByString(shape, root, quality) {
     });
 }
 
+// Clé de comparaison d'un doigté (case par corde, sous forme { fret } ou null) — sert à repérer si
+// le doigté verrouillé (voir toggleGuitarLock) figure déjà dans la liste automatique, pour ne pas le
+// lister deux fois.
+function fingeringShapeKey(fingering) {
+    return fingering.map(f => f ? f.fret : 'x').join(',');
+}
+
 // Point d'entrée unique pour la vue live et l'export PDF : privilégie les formes communément
 // enseignées quand elles existent ET que l'accord est en position simple (fondamentale, sans drop
 // ni basse différente) — dès que l'utilisateur a personnalisé le voicing (renversement/drop/basse),
 // cette personnalisation est délibérée et doit rester fidèle, donc on retombe sur le solveur exact.
-function guitarFingeringsForChord(chord) {
+// `lockedShape` (case par corde, voir toggleGuitarLock) passe en tête de liste s'il est fourni —
+// par défaut celui mémorisé sur l'accord lui-même (chord.guitarLock, restauré depuis les données
+// enregistrées), mais la vue live le passe explicitement (this.guitarLock) puisque son Chord est
+// reconstruit à chaque frappe depuis les contrôles du panneau, sans jamais porter ce champ-là.
+function guitarFingeringsForChord(chord, lockedShape = chord.guitarLock) {
     // '#drop' vaut littéralement "none" par défaut (pas "" ni null) quand aucun drop n'est choisi.
     const hasDrop = chord.drop === 'drop2' || chord.drop === 'drop3';
     const isPlainVoicing = chord.getEffectiveInversion() === 0 && !hasDrop && !chord.bass;
+    let list;
     if (isPlainVoicing) {
         const common = commonGuitarShapes(chord.root, chord.quality);
-        if (common.length) return common.map(shape => shapeToByString(shape, chord.root, chord.quality));
+        list = common.length ? common.map(shape => shapeToByString(shape, chord.root, chord.quality)) : solveGuitarFingerings(chord.getVoiced());
+    } else {
+        list = solveGuitarFingerings(chord.getVoiced());
     }
-    return solveGuitarFingerings(chord.getVoiced());
+    if (!lockedShape) return list;
+    const lockedFingering = shapeToByString(lockedShape, chord.root, chord.quality);
+    const lockedKey = fingeringShapeKey(lockedFingering);
+    return [lockedFingering, ...list.filter(f => fingeringShapeKey(f) !== lockedKey)];
 }
 
 // ---------- Banques de sons ----------
@@ -1466,6 +1495,8 @@ class HarmoHubApp {
         this.guitarKey = null;     // signature (midis triés) du dernier accord affiché à la guitare
         this.guitarFingerings = []; // doigtés jouables pour l'accord courant (voir solveGuitarFingerings)
         this.guitarFingeringIndex = 0; // doigté actuellement affiché parmi guitarFingerings
+        this.guitarLock = null;    // doigté verrouillé en attente pour l'accord en cours d'édition (voir toggleGuitarLock)
+        this._keepGuitarLockOnce = false; // laisse passer guitarLock au PROCHAIN recalcul (voir ensureGuitarDiagram)
         this._lastTap = null;      // pour le double-tap (suppression mobile)
         this.tapTimes = [];        // horodatages du tap tempo (voir handleTapTempo)
         this.isPlaying = false;    // une lecture (accord/progression) est-elle en cours ?
@@ -1873,6 +1904,7 @@ class HarmoHubApp {
         };
         document.getElementById('guitar-prev').onclick = () => this.cycleGuitarFingering(-1);
         document.getElementById('guitar-next').onclick = () => this.cycleGuitarFingering(1);
+        document.getElementById('guitar-lock-btn').onclick = () => this.toggleGuitarLock();
         this.applyVizVisibility();
     }
 
@@ -2100,7 +2132,13 @@ class HarmoHubApp {
         const key = `${chord.root}:${chord.quality}:${chord.getMidiNotes().join(',')}`;
         if (this.guitarKey === key) return;
         this.guitarKey = key;
-        this.guitarFingerings = guitarFingeringsForChord(chord);
+        // Un changement RÉEL d'accord (racine/qualité/voicing) invalide un verrou existant : la forme
+        // mémorisée (case par corde) ne correspondrait plus aux bonnes notes. Seuls editChord (restaure
+        // le verrou déjà enregistré) et toggleGuitarLock (vient justement de le poser/lever) doivent
+        // survivre à ce recalcul, via ce drapeau à usage unique.
+        if (!this._keepGuitarLockOnce) this.guitarLock = null;
+        this._keepGuitarLockOnce = false;
+        this.guitarFingerings = guitarFingeringsForChord(chord, this.guitarLock);
         this.guitarFingeringIndex = 0;
         this.renderGuitarDiagram();
     }
@@ -2113,6 +2151,7 @@ class HarmoHubApp {
         if (!fingerings.length) {
             viz.innerHTML = `<div class="guitar-unplayable">Non jouable à la guitare</div>`;
             if (nav) nav.style.display = 'none';
+            this.updateGuitarLockButton();
             return;
         }
         const idx = Math.min(this.guitarFingeringIndex, fingerings.length - 1);
@@ -2123,6 +2162,24 @@ class HarmoHubApp {
             const label = document.getElementById('guitar-nav-label');
             if (label) label.textContent = `${idx + 1}/${fingerings.length}`;
         }
+        this.updateGuitarLockButton();
+    }
+
+    // Reflète l'état verrouillé/libre sur le bouton cadenas : cadenas fermé + surligné si CET accord
+    // a un doigté verrouillé, ouvert sinon — indépendant du doigté actuellement PRÉVISUALISÉ (on peut
+    // naviguer parmi les autres sans perdre le verrou, voir cycleGuitarFingering/toggleGuitarLock).
+    updateGuitarLockButton() {
+        const btn = document.getElementById('guitar-lock-btn');
+        if (!btn) return;
+        btn.style.display = this.guitarFingerings.length ? '' : 'none';
+        const locked = !!this.guitarLock;
+        btn.classList.toggle('active', locked);
+        btn.setAttribute('aria-pressed', locked);
+        btn.title = locked ? 'Doigté verrouillé pour cet accord (cliquer pour libérer)' : 'Verrouiller ce doigté pour cet accord';
+        btn.setAttribute('aria-label', btn.title);
+        btn.innerHTML = locked
+            ? `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>`
+            : `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>`;
     }
 
     cycleGuitarFingering(delta) {
@@ -2132,14 +2189,36 @@ class HarmoHubApp {
         this.renderGuitarDiagram();
     }
 
+    // Verrouille/libère le doigté actuellement affiché pour l'accord en cours (voir
+    // guitarFingeringsForChord) : verrouillé, il passe en tête de liste et devient celui utilisé par
+    // défaut dans la grille et le PDF, jusqu'à ce qu'on le libère ou qu'on change réellement l'accord
+    // (racine/qualité/voicing). Ne persiste dans la grille qu'au prochain Enregistrer/Ajouter (voir
+    // saveCurrent), comme tout autre réglage du panneau.
+    toggleGuitarLock() {
+        const fingerings = this.guitarFingerings;
+        if (!fingerings.length) return;
+        if (this.guitarLock) {
+            this.guitarLock = null;
+        } else {
+            const current = fingerings[this.guitarFingeringIndex];
+            this.guitarLock = current.map(f => f ? f.fret : null);
+        }
+        this._keepGuitarLockOnce = true;
+        this.guitarKey = null; // force le recalcul de la liste (racine/qualité inchangées, sinon ignoré)
+        this.ensureGuitarDiagram(this.readChord());
+    }
+
     clearGuitarViz() {
         this.guitarKey = null;
         this.guitarFingerings = [];
         this.guitarFingeringIndex = 0;
+        this.guitarLock = null;
         const viz = document.getElementById('guitar-viz');
         if (viz) viz.innerHTML = '';
         const nav = document.getElementById('guitar-nav');
         if (nav) nav.style.display = 'none';
+        const lockBtn = document.getElementById('guitar-lock-btn');
+        if (lockBtn) lockBtn.style.display = 'none';
     }
 
     // Préférences d'affichage piano/guitare (persistées) : indépendantes l'une de l'autre, les deux
@@ -2550,7 +2629,8 @@ class HarmoHubApp {
             playStyle: document.getElementById('playStyle').value,
             instrument: document.getElementById('instrument').value,
             arpPattern: document.getElementById('arpPattern').value,
-            seqEdited: true
+            seqEdited: true,
+            guitarLock: this.guitarLock || null
         };
         const sections = loadProgressionSections();
         this.pushUndo(sections);
@@ -2589,6 +2669,7 @@ class HarmoHubApp {
             instrument,
             arpPattern: serializeSeqPattern(pattern, tie),
             seqEdited: false,
+            guitarLock: null,
         };
     }
 
@@ -2928,7 +3009,7 @@ class HarmoHubApp {
         this.syncPlayStylePicker(); // reflète la nouvelle valeur sur le bouton/menu d'icônes (voir setupPlayStylePicker)
         document.getElementById('instrument').value = d.instrument || 'piano';
 
-        const chord = new Chord(d.root, d.quality, beatsFromData(d), d.inversion, d.drop, octaveFromData(d), d.bass);
+        const chord = new Chord(d.root, d.quality, beatsFromData(d), d.inversion, d.drop, octaveFromData(d), d.bass, d.guitarLock);
         this.seqTouched = true; // le motif résolu ci-dessous fait autorité, on ne le régénère plus tant qu'on ne touche pas un réglage
         this.seqSelections = [];
         this.seqPage = 0; // nouvel accord chargé pour édition : on repart de sa première mesure
@@ -2941,6 +3022,12 @@ class HarmoHubApp {
         document.getElementById('cancel-edit').hidden = false;
         this.updateEditActionsDocking();
 
+        // Restaure le doigté guitare verrouillé de CET accord (voir toggleGuitarLock) — la vue live
+        // reconstruit son propre Chord à chaque frappe (readChord(), qui ne porte jamais ce champ),
+        // donc ensureGuitarDiagram doit être explicitement autorisé à le garder pour CE recalcul-ci
+        // (sinon il l'effacerait, croyant passer à un accord différent — voir keepGuitarLockOnce).
+        this.guitarLock = d.guitarLock || null;
+        this._keepGuitarLockOnce = true;
         this.refreshPreview();
         this.renderSequencer();
         this.loadProgression();     // met en évidence la case en édition
@@ -4549,7 +4636,7 @@ class HarmoHubApp {
                 page1 += `<div class="print-chord-row">`;
                 cells.filter(c => c.row === r).forEach(s => {
                     const data = sec.chords[s.index];
-                    const chord = new Chord(data.root, data.quality, beatsFromData(data), data.inversion, data.drop, octaveFromData(data), data.bass);
+                    const chord = new Chord(data.root, data.quality, beatsFromData(data), data.inversion, data.drop, octaveFromData(data), data.bass, data.guitarLock);
                     const chordUseFlats = useFlatsForChordRoot(NOTES.indexOf(data.root), NOTES.indexOf(gRoot), gMode, useFlats);
                     const sym = chord.getBareLabel(chordUseFlats) + ((s.split && !s.isFirst) ? ' ↩' : '');
                     const roman = (s.isFirst && this.showRomanNumerals) ? this.getRomanNumeral(gRoot, gMode, data.root, data.quality) : '';
@@ -6760,6 +6847,12 @@ class HarmoHubApp {
         }
         this.pushUndo(sections);
         data.octave = next;
+        // Un doigté verrouillé (voir toggleGuitarLock) peut dépendre de l'octave (voicing personnalisé
+        // envoyé au solveur exact) ou pas du tout (forme communément enseignée, indépendante de
+        // l'octave) — impossible de savoir laquelle sans refaire tout le calcul ici. Plus sûr de
+        // relâcher le verrou : le choix automatique retombera de toute façon sur la même forme pour un
+        // accord standard, et sur une forme cohérente avec la nouvelle octave sinon.
+        data.guitarLock = null;
         saveProgressionSections(sections);
         hasUnsavedChanges = true;
         if (this.editingIndex === index && this.activeSection === section) this.editChord(section, index);

@@ -6,13 +6,13 @@
     <title>HarmoHub</title>
     <!-- Logo « grille en dégradé » (4 barres, une seule teinte, intensité croissante) : voir aussi
          .logo-mark dans style.css (même dessin, en ligne) et /icons/ pour les sources. -->
-    <link rel="icon" type="image/svg+xml" href="icons/favicon.svg?v=202607245000">
-    <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=202607245000">
-    <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png?v=202607245000">
-    <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?v=202607245000">
-    <link rel="manifest" href="manifest.json?v=202607245000">
+    <link rel="icon" type="image/svg+xml" href="icons/favicon.svg?v=202607246000">
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=202607246000">
+    <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png?v=202607246000">
+    <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?v=202607246000">
+    <link rel="manifest" href="manifest.json?v=202607246000">
     <meta name="theme-color" content="#0a0a0a">
-    <link rel="stylesheet" href="style.css?v=202607245000">
+    <link rel="stylesheet" href="style.css?v=202607246000">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
 </head>
@@ -478,6 +478,12 @@
                                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
                             </button>
                         </div>
+                        <!-- Verrouille le doigté affiché (voir toggleGuitarLock dans script.js) : reste
+                             visible même à doigté unique (pas caché avec #guitar-nav), rempli/positionné
+                             dynamiquement par updateGuitarLockButton. -->
+                        <button type="button" id="guitar-lock-btn" class="icon-btn guitar-lock-btn" title="Verrouiller ce doigté pour cet accord" aria-label="Verrouiller ce doigté pour cet accord" aria-pressed="false" style="display:none">
+                            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>
+                        </button>
                     </div>
                 </div>
                 <div class="piano-legend">
@@ -512,6 +518,6 @@
          script.js) — vendu en local plutôt qu'hébergé sur un CDN. Projet LAME (lame.sourceforge.net),
          licence LGPL. -->
     <script src="lame.min.js"></script>
-    <script src="script.js?v=202607245000"></script>
+    <script src="script.js?v=202607246000"></script>
 </body>
 </html>
