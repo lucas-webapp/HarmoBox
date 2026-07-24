@@ -1079,16 +1079,15 @@ button:active { transform: translateY(1px); }
 .key.white.active { transform: translateY(2px); }
 .key.black.active { transform: translateY(1px); }
 
-/* Code couleur par fonction dans l'accord — dégradé 3 tons (clair -> teinte -> foncé) + reflet/ombre
-   internes façon perle/bouton verni, plutôt qu'un aplat plat, pour une touche plus "jolie" au repos
-   comme enfoncée. Le rôle reste identifiable à la teinte (même famille de couleur qu'avant). */
-.key.active.role-root    { background: linear-gradient(180deg, #7dffc2 0%, #00e676 45%, #00a855 100%); }
-.key.active.role-third   { background: linear-gradient(180deg, #7fb2ff 0%, #2f81f7 45%, #1f5fc0 100%); }
-.key.active.role-fifth   { background: linear-gradient(180deg, #ff8f87 0%, #ff3b30 45%, #d42a20 100%); }
-.key.active.role-seventh { background: linear-gradient(180deg, #ffd166 0%, #ffb300 45%, #cc8f00 100%); }
-.key.active.role-ext     { background: linear-gradient(180deg, #f0d4ff 0%, #e0b0ff 45%, #c48ce6 100%); }
+/* Code couleur par fonction dans l'accord — satin mat (dégradé 2 tons à peine perceptible, sans
+   reflet ni brillant), même famille de teinte que .dot-* et ROLE_GRADIENT_STOPS (script.js). */
+.key.active.role-root    { background: linear-gradient(180deg, #3fe3a0 0%, #00a855 100%); }
+.key.active.role-third   { background: linear-gradient(180deg, #5b98f0 0%, #1f5fc0 100%); }
+.key.active.role-fifth   { background: linear-gradient(180deg, #ff6f66 0%, #d42a20 100%); }
+.key.active.role-seventh { background: linear-gradient(180deg, #ffc247 0%, #cc8f00 100%); }
+.key.active.role-ext     { background: linear-gradient(180deg, #dba8ee 0%, #c48ce6 100%); }
 .key.active {
-    box-shadow: inset 0 2px 3px rgba(255,255,255,0.5), inset 0 -4px 6px rgba(0,0,0,0.25), 0 2px 5px rgba(0,0,0,0.4);
+    box-shadow: inset 0 -3px 5px rgba(0,0,0,0.18), 0 2px 5px rgba(0,0,0,0.4);
 }
 
 /* Légende du code couleur sous le clavier */
@@ -1111,14 +1110,14 @@ button:active { transform: translateY(1px); }
     height: 11px;
     border-radius: 3px;
     display: inline-block;
-    box-shadow: inset 0 1px 1px rgba(255,255,255,0.45), 0 1px 1px rgba(0,0,0,0.3);
+    box-shadow: 0 1px 1px rgba(0,0,0,0.3);
 }
-/* Même dégradé perlé que les touches actives (voir .key.active.role-*), en miniature */
-.dot-root    { background: radial-gradient(circle at 32% 28%, #7dffc2, #00e676 55%, #00a855); }
-.dot-third   { background: radial-gradient(circle at 32% 28%, #7fb2ff, #2f81f7 55%, #1f5fc0); }
-.dot-fifth   { background: radial-gradient(circle at 32% 28%, #ff8f87, #ff3b30 55%, #d42a20); }
-.dot-seventh { background: radial-gradient(circle at 32% 28%, #ffd166, #ffb300 55%, #cc8f00); }
-.dot-ext     { background: radial-gradient(circle at 32% 28%, #f0d4ff, #e0b0ff 55%, #c48ce6); }
+/* Même satin mat que les touches actives (voir .key.active.role-*), en miniature */
+.dot-root    { background: linear-gradient(180deg, #3fe3a0, #00a855); }
+.dot-third   { background: linear-gradient(180deg, #5b98f0, #1f5fc0); }
+.dot-fifth   { background: linear-gradient(180deg, #ff6f66, #d42a20); }
+.dot-seventh { background: linear-gradient(180deg, #ffc247, #cc8f00); }
+.dot-ext     { background: linear-gradient(180deg, #dba8ee, #c48ce6); }
 
 /* Ligne diagrammes + bascule piano/guitare (icônes empilées à droite) */
 .viz-row {

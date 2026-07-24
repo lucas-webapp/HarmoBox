@@ -4095,10 +4095,10 @@ class HarmoHubApp {
 
         let svg = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">`;
 
-        // Dégradés des points de doigté (voir ROLE_GRADIENT_STOPS) : uniquement en direct, jamais à
-        // l'impression (encre en aplat, plus fiable sur papier). uid distingue les <radialGradient>
-        // de ce schéma de ceux d'un autre schéma affiché en même temps ailleurs dans la page (ids
-        // HTML censés être uniques document-wide).
+        // Lueur "verre rétroéclairé" des points de doigté (voir ROLE_GRADIENT_STOPS) : uniquement en
+        // direct, jamais à l'impression (encre en aplat, plus fiable sur papier). uid distingue les
+        // <radialGradient> de ce schéma de ceux d'un autre schéma affiché en même temps ailleurs dans
+        // la page (ids HTML censés être uniques document-wide).
         const uid = forPrint ? null : ++guitarSvgIdSeq;
         if (!forPrint) {
             // N'émettre que les dégradés des rôles réellement présents dans ce doigté (au plus 5,
@@ -4106,11 +4106,11 @@ class HarmoHubApp {
             const usedRoles = new Set(fretted.map(e => ROLE_GRADIENT_STOPS[e.role] ? e.role : 'ext'));
             svg += '<defs>';
             usedRoles.forEach(role => {
-                const [light, mid, dark] = ROLE_GRADIENT_STOPS[role];
-                svg += `<radialGradient id="gdot-${role}-${uid}" cx="32%" cy="28%" r="75%">` +
-                    `<stop offset="0%" stop-color="${light}"/>` +
-                    `<stop offset="55%" stop-color="${mid}"/>` +
-                    `<stop offset="100%" stop-color="${dark}"/>` +
+                const [light, mid] = ROLE_GRADIENT_STOPS[role];
+                svg += `<radialGradient id="gglow-${role}-${uid}" cx="50%" cy="50%" r="70%">` +
+                    `<stop offset="0%" stop-color="${light}" stop-opacity=".95"/>` +
+                    `<stop offset="55%" stop-color="${mid}" stop-opacity=".55"/>` +
+                    `<stop offset="100%" stop-color="${mid}" stop-opacity="0"/>` +
                     `</radialGradient>`;
             });
             svg += '</defs>';
@@ -4174,8 +4174,15 @@ class HarmoHubApp {
             const x = MARGIN_LEFT + (col - 0.5) * FRET_GAP;
             const y = stringY(s);
             const role = ROLE_GRADIENT_STOPS[e.role] ? e.role : 'ext';
-            const fill = forPrint ? (ROLE_COLOR[role] || ROLE_COLOR.ext) : `url(#gdot-${role}-${uid})`;
-            svg += `<circle cx="${x}" cy="${y}" r="6" fill="${fill}" stroke="#000" stroke-width="0.5"/>`;
+            if (forPrint) {
+                svg += `<circle cx="${x}" cy="${y}" r="6" fill="${ROLE_COLOR[role] || ROLE_COLOR.ext}" stroke="#000" stroke-width="0.5"/>`;
+            } else {
+                // Verre rétroéclairé : une lueur large et diffuse (voir gglow-*, défini plus haut)
+                // derrière un petit cœur plein bien net — plutôt qu'un disque uni.
+                const mid = ROLE_GRADIENT_STOPS[role][1];
+                svg += `<circle cx="${x}" cy="${y}" r="11" fill="url(#gglow-${role}-${uid})"/>`;
+                svg += `<circle cx="${x}" cy="${y}" r="3.4" fill="${mid}"/>`;
+            }
         });
         svg += `</svg>`;
         return svg;
