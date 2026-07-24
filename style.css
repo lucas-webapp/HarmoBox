@@ -1294,14 +1294,14 @@ button:active { transform: translateY(1px); }
     border-color: var(--btn-blue-border-hover);
 }
 
-/* Popover d'aide de l'ajout rapide (voir #quick-add-help-btn) : même habillage que .context-menu
-   mais avec du texte au lieu de boutons — plus large, lecture confortable. */
+/* Popover d'aide de l'ajout rapide (voir #quick-add-help-btn) : même habillage que .context-menu,
+   liste très courte plutôt que des phrases — au plus court, pas une notice à lire. */
 .quick-add-help {
-    max-width: 320px;
-    gap: 10px;
+    max-width: 250px;
     cursor: default;
 }
-.quick-add-help p { margin: 0; font-size: var(--fs-sm); font-weight: 400; line-height: 1.5; color: var(--text-main); }
+.quick-add-help ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 7px; }
+.quick-add-help li { font-size: var(--fs-sm); font-weight: 400; line-height: 1.4; color: var(--text-main); }
 .quick-add-help code {
     background: #1c1e24;
     border: 1px solid var(--border);

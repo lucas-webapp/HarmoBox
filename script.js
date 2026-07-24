@@ -1551,8 +1551,9 @@ class HarmoHubApp {
         document.getElementById('save-insert').onclick = () => this.saveCurrent(this.selectedIndex);
         document.getElementById('quick-add-btn').onclick = () => this.addQuickChord();
         // Entrée = saut de ligne normal (comportement par défaut du <textarea>, donc pas de
-        // preventDefault) : plusieurs lignes remplissent plusieurs parties d'un coup (voir
-        // commitMultilineQuickAdd). Ctrl/Cmd+Entrée valide tout de suite, comme le bouton "+".
+        // preventDefault) : les lignes d'un même bloc rejoignent une seule partie, il faut sauter
+        // une ligne pour en démarrer une nouvelle (voir splitQuickAddBlocks/addQuickChord).
+        // Ctrl/Cmd+Entrée valide tout de suite, comme le bouton "+".
         document.getElementById('quick-add-input').addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); this.addQuickChord(); }
         });
@@ -2676,70 +2677,135 @@ class HarmoHubApp {
             : this.addChordFromSymbol(section, value);
     }
 
-    // Ajout rapide (barre au-dessus de la grille), maintenant un <textarea> multi-lignes (voir
-    // autoResizeQuickAdd) : une seule ligne remplie reprend le comportement historique — s'il n'y a
-    // qu'une seule partie, ajoute directement dedans ; dès qu'il y en a plusieurs, demande d'abord où
-    // insérer (openSectionPicker), ambigu sinon. Plusieurs lignes remplies basculent sur l'ajout en
-    // lot multi-parties (voir commitMultilineQuickAdd) : une ligne = une partie, dans l'ordre.
+    // Découpe la saisie en blocs séparés par une ligne VIDE (voir #quick-add-help) : une simple
+    // Entrée garde les lignes dans le MÊME bloc (donc la même partie, voir addQuickChord) — il faut
+    // sauter une ligne pour en démarrer une nouvelle, plus délibéré qu'une simple Entrée (qui sert
+    // surtout à lister plusieurs accords l'un sous l'autre pour UNE même partie).
+    splitQuickAddBlocks(text) {
+        const blocks = [];
+        let current = [];
+        text.split('\n').forEach(line => {
+            if (line.trim() === '') { if (current.length) { blocks.push(current); current = []; } }
+            else current.push(line.trim());
+        });
+        if (current.length) blocks.push(current);
+        return blocks;
+    }
+
+    // Parse toutes les lignes d'un bloc (voir splitQuickAddBlocks) en une liste plate d'accords,
+    // chacun gardant si sa ligne d'origine était une liste "/" (un accord par mesure) ou un accord
+    // seul (durée réglée dans le panneau) — voir commitBlockItems/commitMultilineQuickAdd. Tout ou
+    // rien : la première ligne invalide annule tout le bloc (déjà signalée via flashHint).
+    parseBlockLines(blockLines) {
+        const items = [];
+        for (const line of blockLines) {
+            if (line.includes('/')) {
+                const list = this.parseChordSymbolList(line);
+                if (!list) return null;
+                list.forEach(p => items.push({ parsed: p, isBatch: true }));
+            } else {
+                const parsed = parseChordSymbol(line);
+                if (!parsed) { this.flashHint(`Accord non reconnu : « ${line} »`); return null; }
+                items.push({ parsed, isBatch: false });
+            }
+        }
+        return items;
+    }
+
+    // Insère une liste d'accords déjà validée (voir parseBlockLines) dans UNE section — plusieurs
+    // lignes d'un même bloc rejoignent ainsi la même partie, chacune gardant sa propre durée (accord
+    // seul : durée réglée dans le panneau ; ligne "/" : un accord par mesure). `section` peut valoir
+    // 'new' pour en créer une à la volée (voir openSectionPicker).
+    commitBlockItems(section, items) {
+        const sections = loadProgressionSections();
+        this.pushUndo(sections);
+        if (section === 'new') { sections.push({ title: '', chords: [] }); section = sections.length - 1; }
+        const barBeats = this.beatsPerBar();
+        const singleBeats = parseInt(document.getElementById('duration').value) || 4;
+        const playStyle = document.getElementById('playStyle').value;
+        const instrument = document.getElementById('instrument').value;
+        items.forEach(({ parsed, isBatch }) => {
+            sections[section].chords.push(this.buildChordData(parsed, isBatch ? barBeats : singleBeats, playStyle, instrument));
+        });
+        saveProgressionSections(sections);
+        this.activeSection = section;
+        this.loadProgression();
+        this.flashHint(`${items.length} accord${items.length > 1 ? 's' : ''} ajoutés`);
+    }
+
+    // Ajout rapide (barre au-dessus de la grille), un <textarea> multi-lignes (voir
+    // autoResizeQuickAdd) découpé en blocs séparés par une ligne vide (voir splitQuickAddBlocks) :
+    // - un seul bloc d'une seule ligne : comportement historique inchangé (ajout direct, ou choix de
+    //   la partie s'il y en a plusieurs) ;
+    // - un seul bloc de plusieurs lignes : toutes ces lignes rejoignent la MÊME partie (active, ou
+    //   choisie s'il y en a plusieurs) ;
+    // - plusieurs blocs : ajout en lot, CHAQUE bloc devient une partie TOUTE NEUVE, jamais une partie
+    //   existante même vide (voir commitMultilineQuickAdd) — pour ne jamais se greffer sur ce qui est
+    //   déjà écrit dans la grille.
     addQuickChord() {
         const input = document.getElementById('quick-add-input');
-        const rawLines = input.value.split('\n');
-        const filledLines = [];
-        rawLines.forEach((line, idx) => { if (line.trim().length > 0) filledLines.push(idx); });
-        if (filledLines.length === 0) return;
+        const blocks = this.splitQuickAddBlocks(input.value);
+        if (blocks.length === 0) return;
 
-        if (filledLines.length > 1) { this.commitMultilineQuickAdd(rawLines, filledLines); return; }
+        if (blocks.length > 1) { this.commitMultilineQuickAdd(blocks); return; }
 
-        const value = rawLines[filledLines[0]].trim();
+        const block = blocks[0];
         const sections = loadProgressionSections();
 
-        if (!value.includes('/')) {
-            if (!parseChordSymbol(value)) { this.flashHint('Accord non reconnu (ex. Cm7, F#dim, Bbadd9)'); return; }
+        if (block.length === 1) {
+            const value = block[0];
+            if (!value.includes('/')) {
+                if (!parseChordSymbol(value)) { this.flashHint('Accord non reconnu (ex. Cm7, F#dim, Bbadd9)'); return; }
+                if (sections.length <= 1) {
+                    if (this.addChordFromSymbol(0, value)) this.resetQuickAddInput();
+                    return;
+                }
+                this.openSectionPicker(input, (section) => {
+                    this.activeSection = section;
+                    if (this.addChordFromSymbol(section, value)) this.resetQuickAddInput();
+                });
+                return;
+            }
+
+            const parsedList = this.parseChordSymbolList(value);
+            if (!parsedList) return;
             if (sections.length <= 1) {
-                if (this.addChordFromSymbol(0, value)) this.resetQuickAddInput();
+                this.commitChordList(0, parsedList);
+                this.resetQuickAddInput();
                 return;
             }
             this.openSectionPicker(input, (section) => {
-                this.activeSection = section;
-                if (this.addChordFromSymbol(section, value)) this.resetQuickAddInput();
+                this.commitChordList(section, parsedList);
+                this.resetQuickAddInput();
             });
             return;
         }
 
-        const parsedList = this.parseChordSymbolList(value);
-        if (!parsedList) return;
-
+        const items = this.parseBlockLines(block);
+        if (!items) return;
         if (sections.length <= 1) {
-            this.commitChordList(0, parsedList);
+            this.commitBlockItems(0, items);
             this.resetQuickAddInput();
             return;
         }
         this.openSectionPicker(input, (section) => {
-            this.commitChordList(section, parsedList);
+            this.commitBlockItems(section, items);
             this.resetQuickAddInput();
         });
     }
 
-    // Ajout en lot depuis l'ajout rapide agrandi (plusieurs lignes remplies) : la ligne d'indice i
-    // remplit la partie d'indice i, dans l'ordre — les parties manquantes au-delà du nombre de
-    // parties existantes sont créées à la volée (comme le "Nouvelle partie" d'openSectionPicker).
-    // Tout ou rien : si une seule ligne contient un symbole invalide, RIEN n'est ajouté (comme pour
-    // un ajout "/" simple) — un ajout partiel serait déroutant à corriger après coup, surtout sur
-    // plusieurs parties d'un coup.
-    commitMultilineQuickAdd(rawLines, filledLines) {
-        const perLine = [];
-        for (const idx of filledLines) {
-            const line = rawLines[idx].trim();
-            let list;
-            if (line.includes('/')) {
-                list = this.parseChordSymbolList(line); // affiche déjà son propre indice si invalide
-            } else {
-                const parsed = parseChordSymbol(line);
-                if (!parsed) { this.flashHint(`Accord non reconnu (ligne ${idx + 1}) : « ${line} »`); list = null; }
-                else list = [parsed];
-            }
-            if (!list) return;
-            perLine.push({ idx, list, isBatch: line.includes('/') });
+    // Ajout en lot depuis l'ajout rapide agrandi (au moins une ligne vide sépare deux blocs, voir
+    // splitQuickAddBlocks) : CHAQUE bloc devient une partie TOUTE NEUVE, ajoutée à la fin — jamais
+    // une partie existante, même vide (retour utilisateur : l'ajout doit se faire dans de nouvelles
+    // parties si la grille contient déjà quelque chose). Tout ou rien : si une seule ligne contient
+    // un symbole invalide, RIEN n'est ajouté — un ajout partiel serait déroutant à corriger après
+    // coup, surtout sur plusieurs parties d'un coup.
+    commitMultilineQuickAdd(blocks) {
+        const parsedBlocks = [];
+        for (const block of blocks) {
+            const items = this.parseBlockLines(block);
+            if (!items) return;
+            parsedBlocks.push(items);
         }
 
         const sections = loadProgressionSections();
@@ -2750,19 +2816,19 @@ class HarmoHubApp {
         const instrument = document.getElementById('instrument').value;
 
         let totalChords = 0;
-        let lastSection = this.activeSection;
-        perLine.forEach(({ idx, list, isBatch }) => {
-            while (idx >= sections.length) sections.push({ title: '', chords: [] });
-            const beats = isBatch ? barBeats : singleBeats;
-            list.forEach(parsed => sections[idx].chords.push(this.buildChordData(parsed, beats, playStyle, instrument)));
-            totalChords += list.length;
-            lastSection = idx;
+        parsedBlocks.forEach(items => {
+            const sec = { title: '', chords: [] };
+            items.forEach(({ parsed, isBatch }) => {
+                sec.chords.push(this.buildChordData(parsed, isBatch ? barBeats : singleBeats, playStyle, instrument));
+            });
+            sections.push(sec);
+            totalChords += items.length;
         });
 
         saveProgressionSections(sections);
-        this.activeSection = lastSection;
+        this.activeSection = sections.length - 1;
         this.loadProgression();
-        this.flashHint(`${totalChords} accord${totalChords > 1 ? 's' : ''} ajoutés sur ${perLine.length} partie${perLine.length > 1 ? 's' : ''}`);
+        this.flashHint(`${totalChords} accord${totalChords > 1 ? 's' : ''} ajoutés sur ${parsedBlocks.length} nouvelle${parsedBlocks.length > 1 ? 's' : ''} partie${parsedBlocks.length > 1 ? 's' : ''}`);
         this.resetQuickAddInput();
     }
 

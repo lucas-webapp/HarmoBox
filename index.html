@@ -6,13 +6,13 @@
     <title>HarmoHub</title>
     <!-- Logo « grille en dégradé » (4 barres, une seule teinte, intensité croissante) : voir aussi
          .logo-mark dans style.css (même dessin, en ligne) et /icons/ pour les sources. -->
-    <link rel="icon" type="image/svg+xml" href="icons/favicon.svg?v=202607243000">
-    <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=202607243000">
-    <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png?v=202607243000">
-    <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?v=202607243000">
-    <link rel="manifest" href="manifest.json?v=202607243000">
+    <link rel="icon" type="image/svg+xml" href="icons/favicon.svg?v=202607244000">
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=202607244000">
+    <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png?v=202607244000">
+    <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?v=202607244000">
+    <link rel="manifest" href="manifest.json?v=202607244000">
     <meta name="theme-color" content="#0a0a0a">
-    <link rel="stylesheet" href="style.css?v=202607243000">
+    <link rel="stylesheet" href="style.css?v=202607244000">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
 </head>
@@ -430,15 +430,17 @@
                     </div>
                 </div>
                 <div id="quick-add-help" class="context-menu quick-add-help" hidden>
-                    <p><strong>Un accord seul</strong> (ex. <code>Cm7</code>, <code>F#dim</code>) : Ctrl+Entrée ou « + » l'ajoute à la partie active, à la durée réglée dans le panneau Lecture.</p>
-                    <p><strong>Basse différente</strong> : <code>_</code> (ex. <code>C_E</code> = do avec mi à la basse).</p>
-                    <p><strong>Plusieurs accords à la suite</strong> : séparés par <code>/</code> (ex. <code>C/Am/F/G</code>) — un accord par mesure.</p>
-                    <p><strong>Plusieurs parties d'un coup</strong> : Entrée passe à la ligne (le champ s'agrandit) — chaque ligne remplit une partie différente, dans l'ordre ; les parties manquantes sont créées automatiquement. Ctrl+Entrée ou « + » valide toutes les lignes en une fois.</p>
-                    <p>S'il y a plusieurs parties et une seule ligne remplie, on te demande dans laquelle l'ajouter.</p>
+                    <ul>
+                        <li><code>Cm7</code> : accord seul</li>
+                        <li><code>C_E</code> : basse différente</li>
+                        <li><code>C/Am/F/G</code> : plusieurs accords, 1/mesure</li>
+                        <li>Entrée : ligne — ligne vide : nouvelle partie</li>
+                        <li>Ctrl+Entrée ou « + » : valider</li>
+                    </ul>
                 </div>
                 <div class="quick-add-row">
-                    <textarea id="quick-add-input" class="quick-add-input" rows="1" placeholder="Ajout rapide" autocomplete="off" autocapitalize="off" spellcheck="false" title="Un accord seul (ex. Cm7), avec une basse via « _ » (ex. C_E = do avec mi à la basse), plusieurs accords séparés par « / » (un par mesure), ou plusieurs lignes pour remplir plusieurs parties d'un coup — voir l'ampoule d'aide"></textarea>
-                    <button type="button" id="quick-add-btn" class="icon-btn" title="Ajouter à la grille (Ctrl+Entrée) — « _ » pour une basse (C_E), « / » pour plusieurs accords à la suite (C/Am/F/G), plusieurs lignes pour plusieurs parties" aria-label="Ajouter à la grille">
+                    <textarea id="quick-add-input" class="quick-add-input" rows="1" placeholder="Ajout rapide" autocomplete="off" autocapitalize="off" spellcheck="false" title="Un accord seul (ex. Cm7), une basse différente via « _ » (C_E), plusieurs accords séparés par « / » (un par mesure), ou une ligne vide pour démarrer une nouvelle partie — voir l'ampoule d'aide"></textarea>
+                    <button type="button" id="quick-add-btn" class="icon-btn" title="Ajouter à la grille (Ctrl+Entrée) — « _ » pour une basse (C_E), « / » pour plusieurs accords à la suite (C/Am/F/G), ligne vide pour une nouvelle partie" aria-label="Ajouter à la grille">
                         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
                     </button>
                 </div>
@@ -510,6 +512,6 @@
          script.js) — vendu en local plutôt qu'hébergé sur un CDN. Projet LAME (lame.sourceforge.net),
          licence LGPL. -->
     <script src="lame.min.js"></script>
-    <script src="script.js?v=202607243000"></script>
+    <script src="script.js?v=202607244000"></script>
 </body>
 </html>
