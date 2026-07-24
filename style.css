@@ -214,6 +214,43 @@ button, .icon-btn, .prog-section-del, .seq-presets button, .seq-delete-btn {
     overflow: hidden;
 }
 
+/* Fenêtre agrandie du séquenceur (voir #seq-zoom-overlay/openSeqZoom) : même habillage que
+   .settings-modal, mais bien plus large/haute — tout l'intérêt est de donner beaucoup plus de place
+   à chaque case pour modifier vite, y compris avec de nombreuses mesures à parcourir. */
+.seq-zoom-modal {
+    width: 100%;
+    max-width: 1100px;
+    max-height: 90vh; /* hauteur au contenu (peu de mesures/voix -> fenêtre compacte), plafonnée pour
+                          les accords qui en ont beaucoup (.seq-zoom-host défile alors en interne) */
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.seq-zoom-host {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 18px 20px;
+}
+/* #arp-sequencer n'a normalement pas besoin de sa propre marge/bordure supérieure une fois déplacé
+   ici (déjà dans un panneau dédié, .settings-header joue ce rôle de séparation) — évite un double
+   filet visuel juste sous l'en-tête de la fenêtre. */
+.seq-zoom-host .arp-seq { margin-top: 0; padding-top: 0; border-top: none; }
+
+/* Cases nettement plus grandes une fois dans la fenêtre agrandie — l'intérêt même de cet outil.
+   Sélecteur à 2 classes (spécificité 0,2,0) : l'emporte sur .seq-cell seul, y compris la variante
+   desktop plus bas (.seq-cell { height:30px } à 900px, spécificité 0,1,0), quel que soit l'ordre
+   dans la feuille. */
+.seq-zoomed .seq-cell { height: 52px; }
+.seq-zoomed .seq-label { font-size: var(--fs-md); padding-right: 8px; }
+.seq-zoomed .seq-beat-label { font-size: var(--fs-sm); }
+.seq-zoomed .seq-note-head { width: 6px; }
+.seq-zoomed .seq-grid { gap: 6px 0; }
+
 .settings-header {
     display: flex;
     align-items: center;

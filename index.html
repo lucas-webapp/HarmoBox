@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>HarmoHub</title>
-    <link rel="stylesheet" href="style.css?v=202607242000">
+    <link rel="stylesheet" href="style.css?v=202607243000">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
 </head>
@@ -104,6 +104,22 @@
         </div>
     </div>
 
+    <!-- Vue agrandie du séquenceur (voir openSeqZoom/closeSeqZoom dans script.js) : #arp-sequencer
+         est DÉPLACÉ ici (jamais dupliqué) le temps que la fenêtre est ouverte, puis remis à sa place
+         d'origine (juste après #arpPattern) à la fermeture — toutes ses interactions (glisser,
+         étirer, sélectionner...) restent donc celles du vrai séquenceur, sans rien recâbler. -->
+    <div id="seq-zoom-overlay" class="settings-overlay" hidden>
+        <div class="seq-zoom-modal" role="dialog" aria-modal="true" aria-labelledby="seq-zoom-title">
+            <div class="settings-header">
+                <h2 id="seq-zoom-title">Séquenceur</h2>
+                <button type="button" id="seq-zoom-close" class="icon-btn" title="Fermer" aria-label="Fermer">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <div id="seq-zoom-host" class="seq-zoom-host"></div>
+        </div>
+    </div>
+
     <main>
         <div class="col-left">
             <div class="panel-controls">
@@ -184,6 +200,13 @@
                         <div class="card-head-actions">
                             <button type="button" id="toggle-sequencer" class="icon-btn" title="Séquenceur" aria-label="Séquenceur">
                                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v9M12 4v9M17 4v9"/></svg>
+                            </button>
+                            <!-- N'a de sens que séquenceur ouvert : masqué par défaut, révélé/masqué avec lui
+                                 (voir toggleSequencer/openSequencerFor). Déplace #arp-sequencer dans une
+                                 fenêtre plus grande (voir openSeqZoom) plutôt que de le dupliquer, pour
+                                 garder telles quelles toutes ses interactions (glisser, étirer...). -->
+                            <button type="button" id="seq-zoom" class="icon-btn" hidden title="Agrandir le séquenceur" aria-label="Agrandir le séquenceur">
+                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/><path d="M11 8v6M8 11h6"/></svg>
                             </button>
                         </div>
                     </div>
@@ -421,6 +444,6 @@
          script.js) — vendu en local plutôt qu'hébergé sur un CDN. Projet LAME (lame.sourceforge.net),
          licence LGPL. -->
     <script src="lame.min.js"></script>
-    <script src="script.js?v=202607242000"></script>
+    <script src="script.js?v=202607243000"></script>
 </body>
 </html>

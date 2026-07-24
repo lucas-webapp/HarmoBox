@@ -1448,6 +1448,7 @@ class HarmoHubApp {
         this.tapTimes = [];        // horodatages du tap tempo (voir handleTapTempo)
         this.isPlaying = false;    // une lecture (accord/progression) est-elle en cours ?
         this.seqOpen = false;      // panneau séquenceur ouvert ou non (indépendant du style de lecture)
+        this.seqZoomOpen = false;  // fenêtre agrandie du séquenceur ouverte ou non (voir openSeqZoom)
         this.seqTouched = false;   // l'utilisateur a-t-il personnalisé le motif pour l'accord en cours ?
         this.seqSelections = []; // notes du séquenceur sélectionnées : [{ voice, start, end }, ...]
         this.seqDrag = null;       // état de glisser en cours sur le séquenceur
@@ -1714,6 +1715,14 @@ class HarmoHubApp {
         document.getElementById('settings-close').onclick = () => this.closeSettings();
         document.getElementById('settings-overlay').addEventListener('click', (e) => {
             if (e.target.id === 'settings-overlay') this.closeSettings(); // clic sur le fond, pas la fenêtre
+        });
+
+        // Vue agrandie du séquenceur (voir openSeqZoom/closeSeqZoom) : ne fait que déplacer
+        // #arp-sequencer dans une fenêtre plus grande, jamais le dupliquer.
+        document.getElementById('seq-zoom').onclick = () => this.openSeqZoom();
+        document.getElementById('seq-zoom-close').onclick = () => this.closeSeqZoom();
+        document.getElementById('seq-zoom-overlay').addEventListener('click', (e) => {
+            if (e.target.id === 'seq-zoom-overlay') this.closeSeqZoom(); // clic sur le fond, pas la fenêtre
         });
 
         // Menu contextuel (clic droit / appui long) : Renommer/Modifier, Dupliquer (accords
@@ -5599,10 +5608,38 @@ class HarmoHubApp {
     // Bouton dédié dans le volet Lecture : ouvre/ferme le panneau, indépendamment du style choisi
     toggleSequencer() {
         this.seqOpen = !this.seqOpen;
-        if (!this.seqOpen) this.seqSelections = [];
+        if (!this.seqOpen) {
+            this.seqSelections = [];
+            this.closeSeqZoom(); // rien à agrandir une fois le panneau lui-même refermé
+        }
         document.getElementById('toggle-sequencer').classList.toggle('active', this.seqOpen);
+        document.getElementById('seq-zoom').hidden = !this.seqOpen;
         this.renderSequencer();
         this.updateGlobalUndoRedoButtons(); // le bouton unique repointe vers l'historique du séquenceur
+    }
+
+    // Déplace #arp-sequencer (jamais ne le duplique) dans la fenêtre agrandie : toutes ses
+    // interactions (glisser, étirer, sélectionner...) restent celles du vrai séquenceur, attachées
+    // une fois pour toutes dans setupSequencerInteractions — un simple changement de parent ne les
+    // perd pas. .seq-zoomed pilote uniquement la taille des cases/libellés (voir style.css).
+    openSeqZoom() {
+        if (!this.seqOpen) return;
+        this.seqZoomOpen = true;
+        const host = document.getElementById('arp-sequencer');
+        document.getElementById('seq-zoom-host').appendChild(host);
+        host.classList.add('seq-zoomed');
+        document.getElementById('seq-zoom-overlay').hidden = false;
+    }
+
+    // Remet #arp-sequencer à sa place d'origine dans le volet Lecture (juste après #arpPattern,
+    // voir index.html) — sans effet si la fenêtre agrandie n'était pas ouverte.
+    closeSeqZoom() {
+        if (!this.seqZoomOpen) return;
+        this.seqZoomOpen = false;
+        document.getElementById('seq-zoom-overlay').hidden = true;
+        const host = document.getElementById('arp-sequencer');
+        host.classList.remove('seq-zoomed');
+        document.getElementById('arpPattern').insertAdjacentElement('afterend', host);
     }
 
     // Menu contextuel d'un accord de la grille (« Séquenceur ») : le charge dans le panneau Accord
@@ -5612,6 +5649,7 @@ class HarmoHubApp {
         this.editChord(section, index);
         this.seqOpen = true;
         document.getElementById('toggle-sequencer').classList.add('active');
+        document.getElementById('seq-zoom').hidden = false;
         this.renderSequencer();
         this.updateGlobalUndoRedoButtons();
         document.getElementById('arp-sequencer').scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -6077,6 +6115,7 @@ class HarmoHubApp {
             if (e.key === 'Escape' && !document.getElementById('duration-dd-menu').hidden) { this.closeDurationMenu(); return; }
             if (e.key === 'Escape' && !document.getElementById('playstyle-dd-menu').hidden) { this.closePlayStyleMenu(); return; }
             if (e.key === 'Escape' && this.settingsOpen) { this.closeSettings(); return; }
+            if (e.key === 'Escape' && this.seqZoomOpen) { this.closeSeqZoom(); return; }
 
             // Barre d'espace : joue/stoppe l'accord courant si le séquenceur est ouvert (pour
             // itérer vite dessus sans la souris), sinon la progression entière. Volontairement PAS
