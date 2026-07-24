@@ -494,15 +494,14 @@ main {
     font-size: var(--fs-base);
 }
 
-/* Ordre : réglages → grille → bascule piano/guitare → indicateur (accord/notes) → piano →
-   (pied ancré : édition + lecture). La bascule est un enfant DIRECT de .col-right (pas de .viz-wrap)
-   pour pouvoir s'intercaler ici, juste sous "Ajouter une partie" — voir index.html. */
+/* Ordre : réglages → grille → titre d'accord + bascule piano/guitare (même ligne) → piano →
+   (pied ancré : édition + lecture). .chord-header-row est un enfant DIRECT de .col-right (pas de
+   .viz-wrap) pour pouvoir s'intercaler ici, juste sous "Ajouter une partie" — voir index.html. */
 .panel-controls { order: 1; }
 .history-section { order: 2; }
-.viz-toggle { order: 3; }
-#current-chord-display { order: 4; }
-.viz-wrap { order: 5; }
-.dock { order: 6; }
+.chord-header-row { order: 3; }
+.viz-wrap { order: 4; }
+.dock { order: 5; }
 
 /* Pied de colonne collant : contient la barre de lecture, et .edit-actions quand on édite un accord
    (voir commentaire ci-dessus). Colonne verticale pour empiler les deux rangées de boutons. */
@@ -538,11 +537,21 @@ main {
     padding: 0;
 }
 
+/* Titre d'accord + bascule piano/guitare sur la même ligne (voir retour utilisateur : la bascule en
+   pleine largeur prenait trop de place) — bascule calée à droite, hauteur au contenu. */
+.chord-header-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
 #current-chord-display {
+    flex: 1;
+    min-width: 0;
     text-align: center;
     font-size: var(--fs-2xl);
     font-weight: 700;
-    color: var(--accent);
     margin-bottom: 0;
     min-height: 48px;
     display: flex;
@@ -551,6 +560,9 @@ main {
     justify-content: center;
     gap: 4px;
 }
+/* Gris clair homogène avec le reste de l'appli (même ton que le texte courant) plutôt que l'accent
+   vert, qui accaparait trop l'attention pour un simple nom d'accord — voir retour utilisateur. */
+.chord-title { color: var(--text-main); }
 
 /* Chaque note est son propre "chip" : l'espace généreux (gap) ne sépare QUE les notes entre elles,
    jamais les caractères à l'intérieur d'une même note (le ♭ doit rester collé à sa lettre) — d'où
@@ -562,9 +574,15 @@ main {
     gap: 4px 14px;
     font-size: var(--fs-md);
     font-weight: 400;
-    color: var(--text-muted);
 }
 .chord-note { white-space: nowrap; }
+/* Même code couleur que le clavier/la légende (voir .key.active.role-*/.dot-*), en pâle pour rester
+   discret à cette taille de texte plutôt que reprendre les teintes vives du clavier. */
+.chord-note.role-root    { color: #8fd6b8; }
+.chord-note.role-third   { color: #9fb8e0; }
+.chord-note.role-fifth   { color: #e0a19b; }
+.chord-note.role-seventh { color: #e0c48a; }
+.chord-note.role-ext     { color: #d3b8dc; }
 
 /* Le glyphe ♭ a une chasse large dans cette police (espace « intégré » au caractère, pas un
    espacement CSS) : même un rapprochement de boîte ne suffit pas seul, il faut resserrer franchement
@@ -1159,21 +1177,22 @@ button:active { transform: translateY(1px); }
 }
 .viz-diagrams .piano-container { flex: 1 1 auto; }
 
-/* Boutons de bascule piano/guitare : en ligne, juste sous "Ajouter une partie" — très utilisés, donc
-   volontairement plus grands que les icon-btn habituels (icon-btn pour le style visuel, .active =
-   même surbrillance verte que les autres boutons à bascule de l'appli). */
+/* Boutons de bascule piano/guitare : calés à droite du titre d'accord (voir .chord-header-row),
+   compacts (largeur réduite) plutôt qu'en pleine largeur — très utilisés, donc un peu plus grands
+   que les icon-btn habituels quand même (icon-btn pour le style visuel, .active = même surbrillance
+   verte que les autres boutons à bascule de l'appli). */
 .viz-toggle {
     display: flex;
     flex-direction: row;
-    gap: 8px;
-    margin-bottom: 14px;
+    flex: none;
+    gap: 6px;
 }
 .viz-toggle-btn {
-    flex: 1 1 0;
-    width: auto;
-    height: 44px;
+    flex: none;
+    width: 36px;
+    height: 36px;
 }
-.viz-toggle-btn svg { width: 20px; height: 20px; }
+.viz-toggle-btn svg { width: 18px; height: 18px; }
 
 /* ---------- Guitare ---------- */
 .guitar-viz-wrap {
@@ -2153,8 +2172,7 @@ select.song-select-narrow {
         min-height: 0;
         gap: 16px;
     }
-    .viz-toggle { flex: none; }
-    #current-chord-display { flex: none; }
+    .chord-header-row { flex: none; }
     .viz-wrap { flex: none; }
     .history-section {
         flex: 1;

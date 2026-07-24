@@ -528,8 +528,14 @@ function escapeHtml(str) {
 // Récapitulatif des notes d'un accord au-dessus du piano : sans octave (peu utile à ce niveau),
 // une note = un « chip » séparé pour un espacement propre entre notes sans écarter les caractères
 // à l'intérieur d'une même note (ex. le ♭ doit rester collé à sa lettre, voir .chord-note en CSS).
+// Chaque note reprend la couleur de son rôle (fondamentale/tierce/quinte/7e/extension), en pâle —
+// même code que le clavier/la légende (.dot-*), voir .chord-note.role-* en CSS.
 function chordNotesHtml(chord, useFlats) {
-    return chord.getDisplayNotes(useFlats, false).map(n => `<span class="chord-note">${flatTight(n)}</span>`).join('');
+    const rootPc = NOTES.indexOf(chord.root);
+    return chord.getVoiced().map(v => {
+        const text = spellChordTone(rootPc, useFlats, v.degree, v.midi, false);
+        return `<span class="chord-note role-${v.role}">${flatTight(text)}</span>`;
+    }).join('');
 }
 
 // Le ♭ a une chasse large dans la police de l'appli et paraît détaché de sa lettre, surtout au
