@@ -6,13 +6,13 @@
     <title>HarmoHub</title>
     <!-- Logo « grille en dégradé » (4 barres, une seule teinte, intensité croissante) : voir aussi
          .logo-mark dans style.css (même dessin, en ligne) et /icons/ pour les sources. -->
-    <link rel="icon" type="image/svg+xml" href="icons/favicon.svg?v=202607249000">
-    <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=202607249000">
-    <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png?v=202607249000">
-    <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?v=202607249000">
-    <link rel="manifest" href="manifest.json?v=202607249000">
+    <link rel="icon" type="image/svg+xml" href="icons/favicon.svg?v=202607250000">
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=202607250000">
+    <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png?v=202607250000">
+    <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?v=202607250000">
+    <link rel="manifest" href="manifest.json?v=202607250000">
     <meta name="theme-color" content="#0a0a0a">
-    <link rel="stylesheet" href="style.css?v=202607249000">
+    <link rel="stylesheet" href="style.css?v=202607250000">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
 </head>
@@ -157,11 +157,43 @@
         <div class="seq-zoom-modal" role="dialog" aria-modal="true" aria-labelledby="seq-zoom-title">
             <div class="settings-header">
                 <h2 id="seq-zoom-title">Séquenceur</h2>
-                <button type="button" id="seq-zoom-close" class="icon-btn" title="Fermer" aria-label="Fermer">
-                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
-                </button>
+                <div class="zoom-header-actions">
+                    <button type="button" id="seq-zoom-out" class="icon-btn" title="Réduire le zoom" aria-label="Réduire le zoom">
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/><path d="M8 11h6"/></svg>
+                    </button>
+                    <button type="button" id="seq-zoom-in" class="icon-btn" title="Agrandir le zoom" aria-label="Agrandir le zoom">
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/><path d="M11 8v6M8 11h6"/></svg>
+                    </button>
+                    <button type="button" id="seq-zoom-close" class="icon-btn" title="Fermer" aria-label="Fermer">
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+                    </button>
+                </div>
             </div>
             <div id="seq-zoom-host" class="seq-zoom-host"></div>
+        </div>
+    </div>
+
+    <!-- Vue agrandie de la grille d'accords (voir openGridZoom/closeGridZoom dans script.js) : même
+         principe que la vue agrandie du séquenceur ci-dessus — #progression-sections et le bouton
+         "Ajouter une partie" sont DÉPLACÉS ici (jamais dupliqués) le temps que la fenêtre est
+         ouverte, puis remis à leur place d'origine à la fermeture. -->
+    <div id="grid-zoom-overlay" class="settings-overlay" hidden>
+        <div class="seq-zoom-modal grid-zoom-modal" role="dialog" aria-modal="true" aria-labelledby="grid-zoom-title">
+            <div class="settings-header">
+                <h2 id="grid-zoom-title">Grille d'accords</h2>
+                <div class="zoom-header-actions">
+                    <button type="button" id="grid-zoom-out" class="icon-btn" title="Réduire le zoom" aria-label="Réduire le zoom">
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/><path d="M8 11h6"/></svg>
+                    </button>
+                    <button type="button" id="grid-zoom-in" class="icon-btn" title="Agrandir le zoom" aria-label="Agrandir le zoom">
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/><path d="M11 8v6M8 11h6"/></svg>
+                    </button>
+                    <button type="button" id="grid-zoom-close" class="icon-btn" title="Fermer" aria-label="Fermer">
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+                    </button>
+                </div>
+            </div>
+            <div id="grid-zoom-host" class="seq-zoom-host grid-zoom-host"></div>
         </div>
     </div>
 
@@ -422,6 +454,9 @@
                 <div class="card-head">
                     <h2>Grille d'accords</h2>
                     <div class="card-head-actions">
+                        <button type="button" id="grid-zoom" class="icon-btn" title="Agrandir la grille d'accords" aria-label="Agrandir la grille d'accords">
+                            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/><path d="M11 8v6M8 11h6"/></svg>
+                        </button>
                         <button type="button" id="quick-add-help-btn" class="icon-btn" title="Comment utiliser l'ajout rapide" aria-label="Comment utiliser l'ajout rapide" aria-expanded="false">
                             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.2 1 2.05V17h6v-2.25c0-.85.4-1.55 1-2.05A7 7 0 0 0 12 2Z"/></svg>
                         </button>
@@ -522,6 +557,6 @@
          script.js) — vendu en local plutôt qu'hébergé sur un CDN. Projet LAME (lame.sourceforge.net),
          licence LGPL. -->
     <script src="lame.min.js"></script>
-    <script src="script.js?v=202607249000"></script>
+    <script src="script.js?v=202607250000"></script>
 </body>
 </html>

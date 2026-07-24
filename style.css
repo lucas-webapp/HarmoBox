@@ -265,6 +265,18 @@ button, .icon-btn, .prog-section-del, .seq-presets button, .seq-delete-btn {
 .seq-zoomed .seq-note-head { width: 6px; }
 .seq-zoomed .seq-grid { gap: 6px 0; }
 
+/* Fenêtre agrandie de la grille d'accords (voir #grid-zoom-overlay/openGridZoom) : même habillage
+   que .seq-zoom-modal (classe partagée dans le HTML), juste plus large (les parties peuvent avoir
+   beaucoup d'accords par ligne). */
+.grid-zoom-modal { max-width: 1400px; }
+
+/* Niveau de zoom réglable (boutons loupe+/loupe- ou Ctrl+molette, voir adjustZoom dans script.js) :
+   piloté par la propriété `zoom` (recalcule vraiment la mise en page, contrairement à
+   transform:scale qui aurait demandé de recalculer soi-même les dimensions/le défilement). Valeur
+   posée en style inline par applyZoomLevel ; overflow:auto (au lieu du overflow-y seul plus haut)
+   pour aussi défiler horizontalement une fois la grille agrandie au-delà de la largeur disponible. */
+.seq-zoom-host, .grid-zoom-host { overflow: auto; }
+
 .settings-header {
     display: flex;
     align-items: center;
@@ -274,6 +286,11 @@ button, .icon-btn, .prog-section-del, .seq-presets button, .seq-delete-btn {
     flex: none;
 }
 .settings-header h2 { margin: 0; font-size: var(--fs-lg); }
+
+/* Boutons loupe+/loupe-/fermer groupés à droite de l'en-tête (voir seq-zoom-overlay et
+   grid-zoom-overlay) : un seul groupe pour que .settings-header garde son simple titre/actions
+   de part et d'autre (justify-content: space-between), quel que soit le nombre de boutons. */
+.zoom-header-actions { display: flex; align-items: center; gap: 6px; flex: none; }
 
 .settings-body {
     display: flex;
@@ -1371,7 +1388,7 @@ button:active { transform: translateY(1px); }
     white-space: nowrap;
 }
 
-.prog-section-del {
+.prog-section-tool, .prog-section-del {
     flex: none;
     width: 26px;
     min-width: 0;
@@ -1384,7 +1401,13 @@ button:active { transform: translateY(1px); }
     line-height: 1;
     cursor: pointer;
 }
-.prog-section-del .icon { width: 13px; height: 13px; }
+.prog-section-tool .icon, .prog-section-del .icon { width: 13px; height: 13px; }
+.prog-section-tool:hover {
+    color: var(--text-main);
+    border-color: var(--border);
+    background: rgba(255, 255, 255, 0.06);
+}
+.prog-section-tool:disabled { opacity: 0.3; cursor: not-allowed; }
 .prog-section-del:hover {
     color: #ff7a6e;
     border-color: rgba(255, 90, 80, 0.4);
@@ -1829,7 +1852,9 @@ button:active { transform: translateY(1px); }
     text-align: right;
     padding-right: 4px;
     white-space: nowrap;
+    cursor: pointer; /* clic = écouter cette hauteur, voir previewSeqNote dans script.js */
 }
+.seq-label:hover { color: var(--text-main); }
 
 /* Étiquette d'une note libre (voir addSequencerNote/commitExtraNoteLabel) : champ éditable au lieu
    d'un simple texte, teinté comme les extensions "Autres" (même violet que .dot-ext) pour se

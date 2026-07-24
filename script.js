@@ -10,6 +10,7 @@ const ICONS = {
     trash: '<path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>',
     up: '<path d="M12 19V5"/><path d="m5 12 7-7 7 7"/>',
     down: '<path d="M12 5v14"/><path d="m5 12 7 7 7-7"/>',
+    reverse: '<path d="M3 7h13"/><path d="m13 3 4 4-4 4"/><path d="M21 17H8"/><path d="m11 21-4-4 4-4"/>',
     'chevron-left': '<path d="m15 18-6-6 6-6"/>',
     'chevron-right': '<path d="m9 18 6-6-6-6"/>',
     loop: '<path d="M17 2 21 6 17 10"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22 3 18 7 14"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>',
@@ -1363,6 +1364,11 @@ const SHOW_ROMAN_KEY = 'harmoboxShowRomanNumerals';
 const SHOW_STYLE_LABEL_KEY = 'harmoboxShowStyleLabel';
 const SHOW_VOICING_PDF_KEY = 'harmoboxShowVoicingPdf';
 const SHOW_DIRECTION_PDF_KEY = 'harmoboxShowDirectionPdf';
+const SEQ_ZOOM_LEVEL_KEY = 'harmoboxSeqZoomLevel';
+const GRID_ZOOM_LEVEL_KEY = 'harmoboxGridZoomLevel';
+const ZOOM_LEVEL_MIN = 0.7;
+const ZOOM_LEVEL_MAX = 2;
+const ZOOM_LEVEL_STEP = 0.1;
 
 // Curseurs de volume (0-100, plus intuitif qu'une valeur en décibels) : 0 = silence, 100 = 0 dB
 // (plein volume « normal »), avec un plancher à -40 dB pour que même « presque muet » reste audible
@@ -1614,6 +1620,12 @@ class HarmoHubApp {
         this.isPlaying = false;    // une lecture (accord/progression) est-elle en cours ?
         this.seqOpen = false;      // panneau séquenceur ouvert ou non (indépendant du style de lecture)
         this.seqZoomOpen = false;  // fenêtre agrandie du séquenceur ouverte ou non (voir openSeqZoom)
+        this.gridZoomOpen = false; // fenêtre agrandie de la grille d'accords ouverte ou non (voir openGridZoom)
+        // Niveau de zoom (1 = taille normale) des deux fenêtres agrandies ci-dessus, réglable une fois
+        // ouvertes via les boutons loupe+/loupe- ou Ctrl+molette (voir adjustZoom) — mémorisé d'une
+        // session à l'autre comme les autres préférences d'affichage.
+        this.seqZoomLevel = parseFloat(localStorage.getItem(SEQ_ZOOM_LEVEL_KEY)) || 1;
+        this.gridZoomLevel = parseFloat(localStorage.getItem(GRID_ZOOM_LEVEL_KEY)) || 1;
         this.seqTouched = false;   // l'utilisateur a-t-il personnalisé le motif pour l'accord en cours ?
         this.seqSelections = []; // notes du séquenceur sélectionnées : [{ voice, start, end }, ...]
         this.seqDrag = null;       // état de glisser en cours sur le séquenceur
@@ -1912,6 +1924,31 @@ class HarmoHubApp {
         document.getElementById('seq-zoom-overlay').addEventListener('click', (e) => {
             if (e.target.id === 'seq-zoom-overlay') this.closeSeqZoom(); // clic sur le fond, pas la fenêtre
         });
+        document.getElementById('seq-zoom-in').onclick = () => this.adjustZoom('seq', ZOOM_LEVEL_STEP);
+        document.getElementById('seq-zoom-out').onclick = () => this.adjustZoom('seq', -ZOOM_LEVEL_STEP);
+        // Ctrl+molette : ne zoome qu'une fois la fenêtre agrandie déjà ouverte (elle seule reçoit
+        // l'évènement, cachée sinon) — jamais sur le séquenceur "en place" dans le panneau Lecture.
+        // preventDefault (écouteur non-passive) : sans lui, le navigateur zoomerait la PAGE entière.
+        document.getElementById('seq-zoom-host').addEventListener('wheel', (e) => {
+            if (!e.ctrlKey) return;
+            e.preventDefault();
+            this.adjustZoom('seq', e.deltaY < 0 ? ZOOM_LEVEL_STEP : -ZOOM_LEVEL_STEP);
+        }, { passive: false });
+
+        // Vue agrandie de la grille d'accords (voir openGridZoom/closeGridZoom) : même principe,
+        // déplace #progression-sections + le bouton "Ajouter une partie" plutôt que de les dupliquer.
+        document.getElementById('grid-zoom').onclick = () => this.openGridZoom();
+        document.getElementById('grid-zoom-close').onclick = () => this.closeGridZoom();
+        document.getElementById('grid-zoom-overlay').addEventListener('click', (e) => {
+            if (e.target.id === 'grid-zoom-overlay') this.closeGridZoom();
+        });
+        document.getElementById('grid-zoom-in').onclick = () => this.adjustZoom('grid', ZOOM_LEVEL_STEP);
+        document.getElementById('grid-zoom-out').onclick = () => this.adjustZoom('grid', -ZOOM_LEVEL_STEP);
+        document.getElementById('grid-zoom-host').addEventListener('wheel', (e) => {
+            if (!e.ctrlKey) return;
+            e.preventDefault();
+            this.adjustZoom('grid', e.deltaY < 0 ? ZOOM_LEVEL_STEP : -ZOOM_LEVEL_STEP);
+        }, { passive: false });
 
         // Menu contextuel (clic droit / appui long) : Renommer/Modifier, Dupliquer (accords
         // uniquement), Supprimer — réutilisé pour les morceaux, les dossiers ET les accords de la
@@ -2381,6 +2418,23 @@ class HarmoHubApp {
             this.instrumentCache.set(key, inst);
         }
         return inst;
+    }
+
+    // Écoute rapide d'une seule voix du séquenceur (clic sur son étiquette à gauche) : ne coupe pas
+    // une lecture en cours (contrairement à playCurrent/playSavedChord, pas de stopAll ici) — juste
+    // une note isolée, pour vérifier une hauteur à l'oreille sans interrompre le reste.
+    async previewSeqNote(voiceIndex) {
+        await Tone.start();
+        const chord = this.readChord();
+        const note = chord.getSeqNotes()[voiceIndex];
+        if (!note) return;
+        const instrumentKey = document.getElementById('instrument').value;
+        const inst = this.getInstrument(instrumentKey);
+        try {
+            inst.triggerAttackRelease(note, 0.5, Tone.now(), 0.85);
+        } catch (e) {
+            console.warn('Aperçu de note ignoré (instrument pas encore prêt) :', e.message);
+        }
     }
 
     // Joue un motif de séquenceur (résolution croche) : regroupe les cases actives contiguës d'une
@@ -3392,12 +3446,18 @@ class HarmoHubApp {
 
             const titleVal = (sec.title || '').replace(/"/g, '&quot;');
             const canDelete = sections.length > 1;
+            const canMoveUp = si > 0;
+            const canMoveDown = si < sections.length - 1;
+            const canReverse = history.length > 1;
             const measureCountEl = history.length > 0 ? `<span class="prog-section-measures">${sectionMeasureCount(sec, beatsPerBar)} mes.</span>` : '';
             return `
             <div class="prog-section">
                 <div class="prog-section-head">
                     <input type="text" class="prog-title" data-section="${si}" placeholder="Section" value="${titleVal}">
                     ${measureCountEl}
+                    ${canMoveUp ? `<button type="button" class="prog-section-tool prog-section-move-up" data-section="${si}" title="Monter cette partie" aria-label="Monter cette partie">${svgIcon('up')}</button>` : ''}
+                    ${canMoveDown ? `<button type="button" class="prog-section-tool prog-section-move-down" data-section="${si}" title="Descendre cette partie" aria-label="Descendre cette partie">${svgIcon('down')}</button>` : ''}
+                    ${canReverse ? `<button type="button" class="prog-section-tool prog-section-reverse" data-section="${si}" title="Inverser l'ordre des accords de cette partie" aria-label="Inverser l'ordre des accords de cette partie">${svgIcon('reverse')}</button>` : ''}
                     <button type="button" class="icon-btn prog-section-duplicate" data-section="${si}" title="Dupliquer cette partie" aria-label="Dupliquer cette partie">${svgIcon('duplicate')}</button>
                     ${canDelete ? `<button type="button" class="prog-section-del" data-section="${si}" title="Supprimer cette partie" aria-label="Supprimer cette partie">${svgIcon('trash')}</button>` : ''}
                 </div>
@@ -3409,6 +3469,15 @@ class HarmoHubApp {
             input.addEventListener('focus', () => this.setActiveSection(+input.dataset.section));
             input.addEventListener('change', () => this.renameSection(+input.dataset.section, input.value));
             input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); });
+        });
+        host.querySelectorAll('.prog-section-move-up').forEach(btn => {
+            btn.onclick = (e) => { e.stopPropagation(); this.moveSection(+btn.dataset.section, -1); };
+        });
+        host.querySelectorAll('.prog-section-move-down').forEach(btn => {
+            btn.onclick = (e) => { e.stopPropagation(); this.moveSection(+btn.dataset.section, 1); };
+        });
+        host.querySelectorAll('.prog-section-reverse').forEach(btn => {
+            btn.onclick = (e) => { e.stopPropagation(); this.reverseSectionChords(+btn.dataset.section); };
         });
         host.querySelectorAll('.prog-section-del').forEach(btn => {
             btn.onclick = (e) => { e.stopPropagation(); this.deleteSection(+btn.dataset.section); };
@@ -3527,6 +3596,45 @@ class HarmoHubApp {
         this.selectedIndex = null;
         // Une partie insérée décale les index des suivantes : plus sûr de redéfinir la plage à boucler
         // (si elle existe) que de tenter de la remapper.
+        if (this.loopRange) this.loopRange = null;
+        this.loadProgression();
+    }
+
+    // Échange une partie entière avec sa voisine immédiate (haut/bas selon delta = -1/+1) — l'ordre
+    // DANS chaque partie ne change pas, seul l'ordre des parties elles-mêmes est affecté.
+    moveSection(s, delta) {
+        const sections = loadProgressionSections();
+        const t = s + delta;
+        if (t < 0 || t >= sections.length) return;
+        this.pushUndo(sections);
+        [sections[s], sections[t]] = [sections[t], sections[s]];
+        saveProgressionSections(sections);
+        if (this.editingIndex != null && (this.activeSection === s || this.activeSection === t)) this.exitEditMode();
+        if (this.activeSection === s) this.activeSection = t;
+        else if (this.activeSection === t) this.activeSection = s;
+        this.selectedIndex = null;
+        // Comme pour supprimer/dupliquer une partie : plus sûr de redéfinir la plage à boucler (si
+        // elle existe) que de tenter de la remapper après cet échange.
+        if (this.loopRange) this.loopRange = null;
+        this.loadProgression();
+    }
+
+    // Inverse l'ordre des accords D'UNE SEULE partie (ex. pour essayer une progression à l'envers) —
+    // ne touche ni son titre, ni les autres parties.
+    reverseSectionChords(s) {
+        const sections = loadProgressionSections();
+        const sec = sections[s];
+        if (!sec || sec.chords.length < 2) return;
+        this.pushUndo(sections);
+        sec.chords.reverse();
+        saveProgressionSections(sections);
+        if (this.activeSection === s) {
+            if (this.editingIndex != null) this.exitEditMode();
+            this.selectedIndex = null;
+        }
+        // Chaque accord garde ses données mais change d'index : une plage à boucler ou une sélection
+        // dans cette partie pointerait sur le mauvais accord après coup — même parti pris que pour
+        // déplacer/supprimer une partie.
         if (this.loopRange) this.loopRange = null;
         this.loadProgression();
     }
@@ -6338,6 +6446,7 @@ class HarmoHubApp {
         document.getElementById('seq-zoom-host').appendChild(host);
         host.classList.add('seq-zoomed');
         document.getElementById('seq-zoom-overlay').hidden = false;
+        this.applyZoomLevel('seq');
     }
 
     // Remet #arp-sequencer à sa place d'origine dans le volet Lecture (juste après #arpPattern,
@@ -6349,6 +6458,55 @@ class HarmoHubApp {
         const host = document.getElementById('arp-sequencer');
         host.classList.remove('seq-zoomed');
         document.getElementById('arpPattern').insertAdjacentElement('afterend', host);
+    }
+
+    // Même principe qu'openSeqZoom/closeSeqZoom, pour la grille d'accords cette fois : déplace
+    // #progression-sections + le bouton "Ajouter une partie" dans la fenêtre agrandie (jamais ne les
+    // duplique), toutes leurs interactions (glisser-déposer, étirement, menu contextuel...) restant
+    // celles déjà câblées sur les vrais éléments.
+    openGridZoom() {
+        this.gridZoomOpen = true;
+        const grid = document.getElementById('progression-sections');
+        const addBtn = document.getElementById('add-section');
+        const dest = document.getElementById('grid-zoom-host');
+        dest.appendChild(grid);
+        dest.appendChild(addBtn);
+        document.getElementById('grid-zoom-overlay').hidden = false;
+        this.applyZoomLevel('grid');
+    }
+
+    // Remet #progression-sections et #add-section à leur place d'origine (juste après la rangée
+    // d'ajout rapide, voir index.html) — sans effet si la fenêtre agrandie n'était pas ouverte.
+    closeGridZoom() {
+        if (!this.gridZoomOpen) return;
+        this.gridZoomOpen = false;
+        document.getElementById('grid-zoom-overlay').hidden = true;
+        const grid = document.getElementById('progression-sections');
+        const addBtn = document.getElementById('add-section');
+        const anchor = document.querySelector('.quick-add-row');
+        anchor.insertAdjacentElement('afterend', grid);
+        grid.insertAdjacentElement('afterend', addBtn);
+    }
+
+    // Règle le niveau de zoom (indépendant pour le séquenceur et la grille) d'un cran, une fois la
+    // fenêtre agrandie correspondante déjà ouverte (boutons loupe+/loupe- ou Ctrl+molette dans cette
+    // fenêtre, voir les écouteurs "wheel" plus haut) — mémorisé d'une session à l'autre.
+    adjustZoom(kind, delta) {
+        const levelKey = kind === 'seq' ? 'seqZoomLevel' : 'gridZoomLevel';
+        const storageKey = kind === 'seq' ? SEQ_ZOOM_LEVEL_KEY : GRID_ZOOM_LEVEL_KEY;
+        const next = Math.round(Math.max(ZOOM_LEVEL_MIN, Math.min(ZOOM_LEVEL_MAX, this[levelKey] + delta)) * 100) / 100;
+        this[levelKey] = next;
+        localStorage.setItem(storageKey, String(next));
+        this.applyZoomLevel(kind);
+    }
+
+    // `zoom` (propriété CSS) plutôt que `transform: scale` : recalcule vraiment la mise en page (et
+    // donc le défilement) à la nouvelle taille, sans avoir à corriger soi-même les dimensions/le
+    // scroll comme l'aurait exigé un simple agrandissement visuel par transformation.
+    applyZoomLevel(kind) {
+        const hostId = kind === 'seq' ? 'seq-zoom-host' : 'grid-zoom-host';
+        const host = document.getElementById(hostId);
+        if (host) host.style.zoom = String(this[kind === 'seq' ? 'seqZoomLevel' : 'gridZoomLevel']);
     }
 
     // Menu contextuel d'un accord de la grille (« Séquenceur ») : le charge dans le panneau Accord
@@ -6439,10 +6597,10 @@ class HarmoHubApp {
             if (r >= extraStart && r < extraEnd) {
                 const extraIdx = r - extraStart;
                 html += `<div class="seq-label seq-label-extra" style="grid-row:${rowIndex}; grid-column:1;">
-                    <input type="text" class="seq-label-input" data-extra-index="${extraIdx}" value="${escapeHtml(noteNames[r])}" title="Note libre : tape une hauteur (ex. E3), ou vide pour la supprimer" autocomplete="off" autocapitalize="off" spellcheck="false">
+                    <input type="text" class="seq-label-input" data-extra-index="${extraIdx}" data-voice="${r}" value="${escapeHtml(noteNames[r])}" title="Note libre : tape une hauteur (ex. E3), ou vide pour la supprimer" autocomplete="off" autocapitalize="off" spellcheck="false">
                 </div>`;
             } else {
-                html += `<div class="seq-label" style="grid-row:${rowIndex}; grid-column:1;">${noteNames[r]}</div>`;
+                html += `<div class="seq-label" data-voice="${r}" title="Cliquer pour écouter cette note" style="grid-row:${rowIndex}; grid-column:1;">${noteNames[r]}</div>`;
             }
             for (let s = pageStart; s < pageEnd; s++) {
                 const col = s - pageStart;
@@ -6569,6 +6727,15 @@ class HarmoHubApp {
                 else if (e.key === 'Escape') { e.preventDefault(); input.value = input.defaultValue; input.blur(); }
             });
             input.addEventListener('blur', () => this.commitExtraNoteLabel(extraIdx, input.value));
+            // Écouter la hauteur au clic, comme les étiquettes normales ci-dessous : n'empêche pas le
+            // focus/l'édition du texte qui suit ce même clic (pas de preventDefault ici).
+            input.addEventListener('click', () => this.previewSeqNote(+input.dataset.voice));
+        });
+
+        // Étiquette normale (hauteur non modifiable) : clic = écouter cette voix, pratique pour
+        // vérifier une note à l'oreille sans avoir à lancer toute la lecture de l'accord.
+        host.querySelectorAll('.seq-label[data-voice]').forEach(label => {
+            label.addEventListener('click', () => this.previewSeqNote(+label.dataset.voice));
         });
 
         // Bouton « X tout » (remplace tout le motif par du silence) : ciblé via [data-preset] pour
@@ -6955,6 +7122,7 @@ class HarmoHubApp {
             if (e.key === 'Escape' && !document.getElementById('playstyle-dd-menu').hidden) { this.closePlayStyleMenu(); return; }
             if (e.key === 'Escape' && this.settingsOpen) { this.closeSettings(); return; }
             if (e.key === 'Escape' && this.seqZoomOpen) { this.closeSeqZoom(); return; }
+            if (e.key === 'Escape' && this.gridZoomOpen) { this.closeGridZoom(); return; }
 
             // Barre d'espace : joue/stoppe l'accord courant si le séquenceur est ouvert (pour
             // itérer vite dessus sans la souris), sinon la progression entière. Volontairement PAS
