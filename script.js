@@ -4103,13 +4103,16 @@ class HarmoHubApp {
         if (!forPrint) {
             // N'émettre que les dégradés des rôles réellement présents dans ce doigté (au plus 5,
             // souvent 2-3) plutôt que les 5 systématiquement : évite du SVG mort dans chaque diagramme.
-            const usedRoles = new Set(fretted.map(e => ROLE_GRADIENT_STOPS[e.role] ? e.role : 'ext'));
+            // Cordes à vide comprises (elles aussi reçoivent une pastille, voir plus bas).
+            const usedRoles = new Set(byString.filter(e => e).map(e => ROLE_GRADIENT_STOPS[e.role] ? e.role : 'ext'));
             svg += '<defs>';
             usedRoles.forEach(role => {
                 const [light, mid] = ROLE_GRADIENT_STOPS[role];
-                svg += `<radialGradient id="gglow-${role}-${uid}" cx="50%" cy="50%" r="70%">` +
+                // r="50%" (plutôt que 70%) : la lueur s'éteint avant d'atteindre le bord du cercle qui
+                // la porte, pour une diffusion plus resserrée sans changer le diamètre du cercle lui-même.
+                svg += `<radialGradient id="gglow-${role}-${uid}" cx="50%" cy="50%" r="50%">` +
                     `<stop offset="0%" stop-color="${light}" stop-opacity=".95"/>` +
-                    `<stop offset="55%" stop-color="${mid}" stop-opacity=".55"/>` +
+                    `<stop offset="55%" stop-color="${mid}" stop-opacity=".6"/>` +
                     `<stop offset="100%" stop-color="${mid}" stop-opacity="0"/>` +
                     `</radialGradient>`;
             });
@@ -4165,8 +4168,22 @@ class HarmoHubApp {
         });
         byString.forEach((e, s) => {
             const y = stringY(s) + 3;
-            if (!e) svg += `<text x="${MARGIN_LEFT - 9}" y="${y}" font-size="9" fill="#e53922" text-anchor="middle">X</text>`;
-            else if (e.fret === 0) svg += `<text x="${MARGIN_LEFT - 9}" y="${y}" font-size="9" fill="${openColor}" text-anchor="middle">O</text>`;
+            const ox = MARGIN_LEFT - 9;
+            if (!e) { svg += `<text x="${ox}" y="${y}" font-size="9" fill="#e53922" text-anchor="middle">X</text>`; return; }
+            if (e.fret !== 0) return;
+            // Corde à vide jouée : même pastille de rôle que les cases frettées, en plus petit (hors
+            // manche) — le "O" reste lisible par-dessus grâce à son propre contour sombre (paint-order),
+            // quelle que soit la couleur de rôle en dessous.
+            const role = ROLE_GRADIENT_STOPS[e.role] ? e.role : 'ext';
+            const oy = stringY(s);
+            if (forPrint) {
+                svg += `<circle cx="${ox}" cy="${oy}" r="4" fill="${ROLE_COLOR[role] || ROLE_COLOR.ext}" stroke="#000" stroke-width="0.5"/>`;
+            } else {
+                const mid = ROLE_GRADIENT_STOPS[role][1];
+                svg += `<circle cx="${ox}" cy="${oy}" r="7" fill="url(#gglow-${role}-${uid})"/>`;
+                svg += `<circle cx="${ox}" cy="${oy}" r="2.4" fill="${mid}"/>`;
+            }
+            svg += `<text x="${ox}" y="${y}" font-size="9" fill="${openColor}" stroke="#000" stroke-width="0.6" paint-order="stroke" text-anchor="middle">O</text>`;
         });
         byString.forEach((e, s) => {
             if (!e || e.fret === 0) return;
@@ -4177,11 +4194,11 @@ class HarmoHubApp {
             if (forPrint) {
                 svg += `<circle cx="${x}" cy="${y}" r="6" fill="${ROLE_COLOR[role] || ROLE_COLOR.ext}" stroke="#000" stroke-width="0.5"/>`;
             } else {
-                // Verre rétroéclairé : une lueur large et diffuse (voir gglow-*, défini plus haut)
-                // derrière un petit cœur plein bien net — plutôt qu'un disque uni.
+                // Verre rétroéclairé : une lueur resserrée (voir gglow-*, défini plus haut) derrière un
+                // cœur plein un peu plus large — moins de diffusion, même diamètre global qu'avant.
                 const mid = ROLE_GRADIENT_STOPS[role][1];
                 svg += `<circle cx="${x}" cy="${y}" r="11" fill="url(#gglow-${role}-${uid})"/>`;
-                svg += `<circle cx="${x}" cy="${y}" r="3.4" fill="${mid}"/>`;
+                svg += `<circle cx="${x}" cy="${y}" r="4.6" fill="${mid}"/>`;
             }
         });
         svg += `</svg>`;
