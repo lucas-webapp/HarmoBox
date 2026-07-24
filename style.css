@@ -2086,6 +2086,12 @@ select.song-select-narrow {
 .print-export { display: none; }
 
 @media print {
+    /* body garde son propre fond sombre (var(--bg)) même une fois ses ENFANTS masqués par
+       visibility:hidden ci-dessous — visibility n'affecte que la peinture des éléments, pas celle
+       de leurs ancêtres. Sans cette ligne, ce fond sombre reste visible partout où le contenu
+       imprimé (position:absolute, ne pousse donc pas la mise en page) ne le recouvre pas :
+       notamment toute la fin d'une page dont le contenu réel est plus court qu'une page complète. */
+    html, body { background: #fff; }
     body * { visibility: hidden; }
     .print-export, .print-export * { visibility: visible; }
     .print-export {
@@ -2129,13 +2135,44 @@ select.song-select-narrow {
 .print-chord-row {
     display: flex;
     flex-wrap: wrap;
+    align-items: flex-end; /* les cases bordées s'alignent en bas, quelle que soit la hauteur de leur bandeau au-dessus (voir .print-chord-above) */
     gap: 6px;
     margin-bottom: 6px;
 }
-.print-chord-cell {
-    position: relative;
+/* Englobe le bandeau degré/sens mélodique ET la case bordée : les deux empilés dans une même
+   colonne, le bandeau restant AU-DESSUS de la case (jamais superposé à son contenu, contrairement
+   à avant) — voir buildPrintExportHtml. flex-grow/flex-basis migrés ici depuis .print-chord-cell,
+   pour que le bandeau suive la même largeur que la case en dessous. */
+.print-chord-wrap {
+    display: flex;
+    flex-direction: column;
     flex-grow: 1;
     flex-basis: 60px;
+}
+/* Degré (chiffrage romain) + sens mélodique (▲/▼, réglages Affichage), toujours réservé (même vide)
+   pour que toutes les cases bordées d'une même ligne démarrent à la même hauteur. */
+.print-chord-above {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-height: 13px;
+    margin-bottom: 2px;
+}
+.print-chord-roman {
+    font-size: var(--fs-2xs);
+    color: #00913f;
+    font-weight: 700;
+}
+.print-chord-direction {
+    font-size: var(--fs-2xs);
+    font-weight: 700;
+}
+.print-chord-direction.up { color: #1a7a3c; }
+.print-chord-direction.down { color: #b23b2e; }
+
+.print-chord-cell {
+    position: relative;
     border: 1px solid #999;
     border-radius: 6px;
     padding: 6px 8px;
@@ -2149,13 +2186,6 @@ select.song-select-narrow {
     font-size: var(--fs-2xs);
     font-weight: 700;
     color: #888;
-}
-.print-chord-roman {
-    display: block;
-    font-size: var(--fs-2xs);
-    color: #00913f;
-    font-weight: 700;
-    margin-bottom: 2px;
 }
 .print-chord-sym {
     display: block;
@@ -2171,17 +2201,6 @@ select.song-select-narrow {
     color: #777;
     margin-top: 2px;
 }
-/* Sens mélodique (▲ plus aigu / ▼ plus grave que l'accord précédent, réglage Affichage > Sens
-   mélodique PDF) : coin haut-gauche, symétrique du numéro de mesure en haut-droite. */
-.print-chord-direction {
-    position: absolute;
-    top: 2px;
-    left: 5px;
-    font-size: var(--fs-2xs);
-    font-weight: 700;
-}
-.print-chord-direction.up { color: #1a7a3c; }
-.print-chord-direction.down { color: #b23b2e; }
 
 .print-piano-grid {
     display: grid;

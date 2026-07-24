@@ -4195,12 +4195,17 @@ class HarmoHubApp {
                     }
                     if (s.isFirst) prevChord = chord;
                     const measureEl = s.barStart ? `<span class="print-chord-measure">${s.barNumber}</span>` : '';
-                    page1 += `<div class="print-chord-cell" style="flex-grow:${s.span};">
-                        ${measureEl}
-                        ${directionEl}
-                        <span class="print-chord-roman">${roman}</span>
-                        <span class="print-chord-sym">${escapeHtml(sym)}</span>
-                        ${voicingEl}
+                    const romanEl = roman ? `<span class="print-chord-roman">${roman}</span>` : '';
+                    // Bandeau degré/sens mélodique AU-DESSUS de la case bordée (jamais dedans, voir
+                    // .print-chord-above) — toujours présent, même vide, pour que toutes les cases
+                    // d'une même ligne démarrent à la même hauteur.
+                    page1 += `<div class="print-chord-wrap" style="flex-grow:${s.span};">
+                        <div class="print-chord-above">${directionEl}${romanEl}</div>
+                        <div class="print-chord-cell">
+                            ${measureEl}
+                            <span class="print-chord-sym">${escapeHtml(sym)}</span>
+                            ${voicingEl}
+                        </div>
                     </div>`;
                     if (s.isFirst) allChords.push({ chord, sym });
                 });
