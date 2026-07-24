@@ -3143,11 +3143,17 @@ class HarmoHubApp {
                         ? s.innerBars.map(ib => `<span class="cell-tick" style="left: ${(ib.offset / s.span) * 100}%;"></span>`).join('')
                         : '';
                     // Poignées d'étirement (durée) : bord droit sur le DERNIER segment (change la fin
-                    // de l'accord), bord gauche sur le PREMIER segment s'il existe un accord précédent
-                    // dans la même partie (change son début, en empruntant/rendant des temps à ce
-                    // précédent — voir onResizeStart) ; absentes pendant un glisser-déposer.
+                    // de l'accord) — mais AUSSI sur tout segment coupé de ligne qui n'est pas le
+                    // dernier (s.split && !s.isLast) : son bord droit tombe alors pile en fin de ligne
+                    // (voir layoutProgression, qui étale chaque segment intermédiaire jusqu'à
+                    // beatsPerRow), un bord tout aussi réel de CE MÊME accord (même s.index) — sans ça,
+                    // un accord qui déborde sur la ligne suivante ne peut plus être raccourci depuis la
+                    // ligne où il commence, seulement depuis celle où il se termine. Bord gauche sur le
+                    // PREMIER segment s'il existe un accord précédent dans la même partie (change son
+                    // début, en empruntant/rendant des temps à ce précédent — voir onResizeStart) ;
+                    // ni l'un ni l'autre pendant un glisser-déposer.
                     const notDragging = !cls.includes('drag-placeholder');
-                    const resizeRightEl = (s.isLast && notDragging)
+                    const resizeRightEl = ((s.isLast || s.split) && notDragging)
                         ? `<div class="cell-resize cell-resize-right" data-section="${si}" data-index="${s.index}" data-edge="right" title="Glisser pour changer la durée"></div>` : '';
                     const resizeLeftEl = (s.isFirst && s.index > 0 && notDragging)
                         ? `<div class="cell-resize cell-resize-left" data-section="${si}" data-index="${s.index}" data-edge="left" title="Glisser pour changer la durée"></div>` : '';
