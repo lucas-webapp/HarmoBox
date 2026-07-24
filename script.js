@@ -1550,9 +1550,20 @@ class HarmoHubApp {
         document.getElementById('save').onclick = () => this.saveCurrent();
         document.getElementById('save-insert').onclick = () => this.saveCurrent(this.selectedIndex);
         document.getElementById('quick-add-btn').onclick = () => this.addQuickChord();
+        // Entrée = saut de ligne normal (comportement par défaut du <textarea>, donc pas de
+        // preventDefault) : plusieurs lignes remplissent plusieurs parties d'un coup (voir
+        // commitMultilineQuickAdd). Ctrl/Cmd+Entrée valide tout de suite, comme le bouton "+".
         document.getElementById('quick-add-input').addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') { e.preventDefault(); this.addQuickChord(); }
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); this.addQuickChord(); }
         });
+        document.getElementById('quick-add-input').addEventListener('input', () => this.autoResizeQuickAdd());
+
+        // Ampoule d'aide (voir #quick-add-help) : même logique ouverture/fermeture que les autres
+        // popovers (openBackupScopeMenu...) — clic sur le bouton bascule, clic ailleurs ou Échap ferme.
+        document.getElementById('quick-add-help-btn').onclick = (e) => {
+            const help = document.getElementById('quick-add-help');
+            if (help.hidden) this.openQuickAddHelp(e.currentTarget); else this.closeQuickAddHelp();
+        };
         document.getElementById('play-prog').onclick = () => this.playProgression();
         document.getElementById('stop').onclick = () => this.stopAll();
 
@@ -1814,6 +1825,13 @@ class HarmoHubApp {
         document.addEventListener('pointerdown', (e) => {
             const menu = document.getElementById('backup-scope-menu');
             if (!menu.hidden && !menu.contains(e.target)) this.closeBackupScopeMenu();
+        });
+        // Clic en dehors du popover d'aide de l'ajout rapide (voir openQuickAddHelp) — sauf sur le
+        // bouton ampoule lui-même, qui gère déjà son propre bascule ouverture/fermeture.
+        document.addEventListener('pointerdown', (e) => {
+            const help = document.getElementById('quick-add-help');
+            const btn = document.getElementById('quick-add-help-btn');
+            if (!help.hidden && !help.contains(e.target) && !btn.contains(e.target)) this.closeQuickAddHelp();
         });
 
         // Désélectionne l'accord de la grille dès qu'on clique en dehors de la grille et du menu
@@ -2658,24 +2676,32 @@ class HarmoHubApp {
             : this.addChordFromSymbol(section, value);
     }
 
-    // Ajout rapide (barre au-dessus de la grille) : s'il n'y a qu'une seule partie, ajoute directement
-    // dedans. Dès qu'il y en a plusieurs — un symbole seul ou plusieurs séparés par "/" — demande
-    // d'abord où insérer (openSectionPicker) : ambigu sinon, contrairement à la case "+" qui vise déjà
-    // sans équivoque la partie où elle apparaît.
+    // Ajout rapide (barre au-dessus de la grille), maintenant un <textarea> multi-lignes (voir
+    // autoResizeQuickAdd) : une seule ligne remplie reprend le comportement historique — s'il n'y a
+    // qu'une seule partie, ajoute directement dedans ; dès qu'il y en a plusieurs, demande d'abord où
+    // insérer (openSectionPicker), ambigu sinon. Plusieurs lignes remplies basculent sur l'ajout en
+    // lot multi-parties (voir commitMultilineQuickAdd) : une ligne = une partie, dans l'ordre.
     addQuickChord() {
         const input = document.getElementById('quick-add-input');
-        const value = input.value;
+        const rawLines = input.value.split('\n');
+        const filledLines = [];
+        rawLines.forEach((line, idx) => { if (line.trim().length > 0) filledLines.push(idx); });
+        if (filledLines.length === 0) return;
+
+        if (filledLines.length > 1) { this.commitMultilineQuickAdd(rawLines, filledLines); return; }
+
+        const value = rawLines[filledLines[0]].trim();
         const sections = loadProgressionSections();
 
         if (!value.includes('/')) {
             if (!parseChordSymbol(value)) { this.flashHint('Accord non reconnu (ex. Cm7, F#dim, Bbadd9)'); return; }
             if (sections.length <= 1) {
-                if (this.addChordFromSymbol(0, value)) { input.value = ''; input.focus(); }
+                if (this.addChordFromSymbol(0, value)) this.resetQuickAddInput();
                 return;
             }
             this.openSectionPicker(input, (section) => {
                 this.activeSection = section;
-                if (this.addChordFromSymbol(section, value)) { input.value = ''; input.focus(); }
+                if (this.addChordFromSymbol(section, value)) this.resetQuickAddInput();
             });
             return;
         }
@@ -2685,15 +2711,98 @@ class HarmoHubApp {
 
         if (sections.length <= 1) {
             this.commitChordList(0, parsedList);
-            input.value = '';
-            input.focus();
+            this.resetQuickAddInput();
             return;
         }
         this.openSectionPicker(input, (section) => {
             this.commitChordList(section, parsedList);
-            input.value = '';
-            input.focus();
+            this.resetQuickAddInput();
         });
+    }
+
+    // Ajout en lot depuis l'ajout rapide agrandi (plusieurs lignes remplies) : la ligne d'indice i
+    // remplit la partie d'indice i, dans l'ordre — les parties manquantes au-delà du nombre de
+    // parties existantes sont créées à la volée (comme le "Nouvelle partie" d'openSectionPicker).
+    // Tout ou rien : si une seule ligne contient un symbole invalide, RIEN n'est ajouté (comme pour
+    // un ajout "/" simple) — un ajout partiel serait déroutant à corriger après coup, surtout sur
+    // plusieurs parties d'un coup.
+    commitMultilineQuickAdd(rawLines, filledLines) {
+        const perLine = [];
+        for (const idx of filledLines) {
+            const line = rawLines[idx].trim();
+            let list;
+            if (line.includes('/')) {
+                list = this.parseChordSymbolList(line); // affiche déjà son propre indice si invalide
+            } else {
+                const parsed = parseChordSymbol(line);
+                if (!parsed) { this.flashHint(`Accord non reconnu (ligne ${idx + 1}) : « ${line} »`); list = null; }
+                else list = [parsed];
+            }
+            if (!list) return;
+            perLine.push({ idx, list, isBatch: line.includes('/') });
+        }
+
+        const sections = loadProgressionSections();
+        this.pushUndo(sections);
+        const barBeats = this.beatsPerBar();
+        const singleBeats = parseInt(document.getElementById('duration').value) || 4;
+        const playStyle = document.getElementById('playStyle').value;
+        const instrument = document.getElementById('instrument').value;
+
+        let totalChords = 0;
+        let lastSection = this.activeSection;
+        perLine.forEach(({ idx, list, isBatch }) => {
+            while (idx >= sections.length) sections.push({ title: '', chords: [] });
+            const beats = isBatch ? barBeats : singleBeats;
+            list.forEach(parsed => sections[idx].chords.push(this.buildChordData(parsed, beats, playStyle, instrument)));
+            totalChords += list.length;
+            lastSection = idx;
+        });
+
+        saveProgressionSections(sections);
+        this.activeSection = lastSection;
+        this.loadProgression();
+        this.flashHint(`${totalChords} accord${totalChords > 1 ? 's' : ''} ajoutés sur ${perLine.length} partie${perLine.length > 1 ? 's' : ''}`);
+        this.resetQuickAddInput();
+    }
+
+    // Vide et rétrécit le champ d'ajout rapide après un ajout réussi (voir addQuickChord).
+    resetQuickAddInput() {
+        const input = document.getElementById('quick-add-input');
+        input.value = '';
+        this.autoResizeQuickAdd();
+        input.focus();
+    }
+
+    // Agrandit le <textarea> d'ajout rapide pour qu'il épouse son contenu (jusqu'à la limite CSS
+    // max-height, au-delà de laquelle il défile en interne — voir .quick-add-input) : permet de
+    // taper plusieurs lignes (une par partie, voir commitMultilineQuickAdd) sans perdre de vue ce
+    // qu'on a déjà tapé plus haut.
+    autoResizeQuickAdd() {
+        const input = document.getElementById('quick-add-input');
+        input.style.height = 'auto';
+        input.style.height = `${input.scrollHeight}px`;
+    }
+
+    // Ampoule d'aide de l'ajout rapide (voir #quick-add-help dans index.html) : popover explicatif,
+    // même positionnement que les autres popovers (openBackupScopeMenu...).
+    openQuickAddHelp(anchorEl) {
+        const help = document.getElementById('quick-add-help');
+        help.hidden = false;
+        anchorEl.setAttribute('aria-expanded', 'true');
+        const rect = anchorEl.getBoundingClientRect();
+        const pad = 8;
+        const left = Math.min(rect.left, window.innerWidth - help.offsetWidth - pad);
+        const top = Math.min(rect.bottom + 4, window.innerHeight - help.offsetHeight - pad);
+        help.style.left = `${Math.max(pad, left)}px`;
+        help.style.top = `${Math.max(pad, top)}px`;
+    }
+
+    closeQuickAddHelp() {
+        const help = document.getElementById('quick-add-help');
+        if (help.hidden) return;
+        help.hidden = true;
+        document.getElementById('quick-add-help-btn').setAttribute('aria-expanded', 'false');
     }
 
     // Popup léger (même style que le menu contextuel) demandant dans quelle partie insérer un ajout
@@ -6430,6 +6539,7 @@ class HarmoHubApp {
             if (e.key === 'Escape' && !document.getElementById('context-menu').hidden) { this.closeContextMenu(); return; }
             if (e.key === 'Escape' && !document.getElementById('section-picker-menu').hidden) { this.closeSectionPicker(); return; }
             if (e.key === 'Escape' && !document.getElementById('backup-scope-menu').hidden) { this.closeBackupScopeMenu(); return; }
+            if (e.key === 'Escape' && !document.getElementById('quick-add-help').hidden) { this.closeQuickAddHelp(); return; }
             if (e.key === 'Escape' && !document.getElementById('unsaved-modal').hidden) { if (this._unsavedModalCancel) this._unsavedModalCancel(); return; }
             if (e.key === 'Escape' && !document.getElementById('duration-dd-menu').hidden) { this.closeDurationMenu(); return; }
             if (e.key === 'Escape' && !document.getElementById('playstyle-dd-menu').hidden) { this.closePlayStyleMenu(); return; }

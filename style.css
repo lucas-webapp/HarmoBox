@@ -1248,20 +1248,29 @@ button:active { transform: translateY(1px); }
      margin-bottom: 15px;
 }
 /* Saisie rapide : ajoute un accord tapé (ex. "Cm7") directement en fin de partie, sans passer par
-   les menus déroulants (voir parseChordSymbol/addQuickChord). */
+   les menus déroulants (voir parseChordSymbol/addQuickChord). C'est un <textarea> (pas un <input>) :
+   Entrée y saute juste une ligne (voir autoResizeQuickAdd/setupQuickAdd dans script.js) — plusieurs
+   lignes remplissent plusieurs parties d'un coup, d'où align-items:flex-start ci-dessous : le bouton
+   "+" doit rester ancré en haut, pas s'étirer sur toute la hauteur au fil des lignes tapées. */
 .quick-add-row {
     display: flex;
+    align-items: flex-start;
     gap: 8px;
     margin-bottom: 16px;
 }
 .quick-add-input {
     flex: 1;
     min-width: 0;
+    min-height: 44px;
+    max-height: 220px;
+    resize: none;
+    overflow-y: auto;
     background: #1c1e24;
     border: 1px solid var(--border);
     border-radius: 8px;
     color: var(--text-main);
     font: inherit;
+    line-height: 1.4;
     /* >= 16px : sous ce seuil, Safari iOS zoome toute la page au focus (voir .cell-sym-input) */
     font-size: max(16px, var(--fs-sm));
     padding: 10px 12px;
@@ -1269,13 +1278,12 @@ button:active { transform: translateY(1px); }
 .quick-add-input:focus { outline: none; border-color: var(--accent); }
 .quick-add-input::placeholder { color: var(--text-muted); }
 
-/* Bouton d'ajout rapide : même hauteur que le champ juste à côté (étirement flex, .quick-add-row
-   n'impose pas align-items donc s'étire par défaut) et bleu comme le bouton "Ajouter" classique
-   (voir .btn-blue) — pour qu'il se voie comme LE bouton d'action de cette rangée, pas une simple
-   icône secondaire parmi d'autres. */
+/* Bouton d'ajout rapide : hauteur fixe ancrée en haut de la rangée (voir .quick-add-row), et bleu
+   comme le bouton "Ajouter" classique (voir .btn-blue) — pour qu'il se voie comme LE bouton d'action
+   de cette rangée, pas une simple icône secondaire parmi d'autres. */
 #quick-add-btn {
-    height: auto;
-    align-self: stretch;
+    height: 44px;
+    align-self: flex-start;
     width: 44px;
     background-image: radial-gradient(120% 160% at 20% 0%, rgba(255,255,255,0.10), transparent 55%), linear-gradient(160deg, var(--btn-blue-1), var(--btn-blue-2) 70%);
     color: var(--btn-text);
@@ -1284,6 +1292,22 @@ button:active { transform: translateY(1px); }
 #quick-add-btn:hover {
     background-image: radial-gradient(120% 160% at 20% 0%, rgba(255,255,255,0.16), transparent 55%), linear-gradient(160deg, #2d4570, #1e304e 70%);
     border-color: var(--btn-blue-border-hover);
+}
+
+/* Popover d'aide de l'ajout rapide (voir #quick-add-help-btn) : même habillage que .context-menu
+   mais avec du texte au lieu de boutons — plus large, lecture confortable. */
+.quick-add-help {
+    max-width: 320px;
+    gap: 10px;
+    cursor: default;
+}
+.quick-add-help p { margin: 0; font-size: var(--fs-sm); font-weight: 400; line-height: 1.5; color: var(--text-main); }
+.quick-add-help code {
+    background: #1c1e24;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-size: 0.9em;
 }
 
 /* Une partie de la chanson (couplet, refrain, ...) : titre éditable + sa propre grille. */
