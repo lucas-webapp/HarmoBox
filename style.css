@@ -121,11 +121,11 @@ button, .icon-btn, .prog-section-del, .seq-presets button, .seq-delete-btn {
     width: 22px;
     height: 22px;
     border-radius: 7px;
-    background: var(--accent);
-    color: #000;
+    background: var(--bg);
+    color: var(--accent);
     line-height: 1;
 }
-.logo-mark .icon { width: 13px; height: 13px; vertical-align: 0; }
+.logo-mark .icon { width: 15px; height: 15px; vertical-align: 0; }
 .logo-text { color: var(--text-main); font-weight: 800; }
 
 /* ============================================================

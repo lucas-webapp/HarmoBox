@@ -4,7 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>HarmoHub</title>
-    <link rel="stylesheet" href="style.css?v=202607244500">
+    <!-- Logo « grille en dégradé » (4 barres, une seule teinte, intensité croissante) : voir aussi
+         .logo-mark dans style.css (même dessin, en ligne) et /icons/ pour les sources. -->
+    <link rel="icon" type="image/svg+xml" href="icons/favicon.svg?v=202607250100">
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=202607250100">
+    <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png?v=202607250100">
+    <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?v=202607250100">
+    <link rel="manifest" href="manifest.json?v=202607250100">
+    <meta name="theme-color" content="#0a0a0a">
+    <link rel="stylesheet" href="style.css?v=202607250100">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
 </head>
@@ -27,8 +35,11 @@
         </button>
         <a class="logo" href="#" onclick="return false" title="HarmoHub" aria-label="HarmoHub">
             <span class="logo-mark">
-                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>
+                <svg class="icon" viewBox="0 0 48 48" aria-hidden="true">
+                    <rect x="5" y="6" width="8" height="36" rx="3" fill="currentColor" opacity=".25"/>
+                    <rect x="15" y="6" width="8" height="36" rx="3" fill="currentColor" opacity=".5"/>
+                    <rect x="25" y="6" width="8" height="36" rx="3" fill="currentColor" opacity=".75"/>
+                    <rect x="35" y="6" width="8" height="36" rx="3" fill="currentColor"/>
                 </svg>
             </span>
             <span class="logo-text">HarmoHub</span>
@@ -444,6 +455,6 @@
          script.js) — vendu en local plutôt qu'hébergé sur un CDN. Projet LAME (lame.sourceforge.net),
          licence LGPL. -->
     <script src="lame.min.js"></script>
-    <script src="script.js?v=202607244500"></script>
+    <script src="script.js?v=202607250100"></script>
 </body>
 </html>
