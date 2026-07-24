@@ -6,13 +6,13 @@
     <title>HarmoHub</title>
     <!-- Logo « grille en dégradé » (4 barres, une seule teinte, intensité croissante) : voir aussi
          .logo-mark dans style.css (même dessin, en ligne) et /icons/ pour les sources. -->
-    <link rel="icon" type="image/svg+xml" href="icons/favicon.svg?v=202607250000">
-    <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=202607250000">
-    <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png?v=202607250000">
-    <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?v=202607250000">
-    <link rel="manifest" href="manifest.json?v=202607250000">
+    <link rel="icon" type="image/svg+xml" href="icons/favicon.svg?v=202607251000">
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=202607251000">
+    <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png?v=202607251000">
+    <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?v=202607251000">
+    <link rel="manifest" href="manifest.json?v=202607251000">
     <meta name="theme-color" content="#0a0a0a">
-    <link rel="stylesheet" href="style.css?v=202607250000">
+    <link rel="stylesheet" href="style.css?v=202607251000">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
 </head>
@@ -276,7 +276,21 @@
                         </select>
                         <div class="card-head-actions">
                             <button type="button" id="toggle-sequencer" class="icon-btn" title="Séquenceur" aria-label="Séquenceur">
-                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v9M12 4v9M17 4v9"/></svg>
+                                <!-- Grille de pas façon piano-roll (3 colonnes x 3 rangées, quelques pas "actifs"
+                                     en escalier) plutôt qu'un clavier stylisé : trop proche du bouton piano
+                                     juste à côté (voir #toggle-viz-piano) et confondu avec lui (retour
+                                     utilisateur). Ce dessin se reconnaît comme un séquenceur/pas, pas un clavier. -->
+                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <rect x="3" y="4" width="4" height="4" rx="1"/>
+                                    <rect x="10" y="4" width="4" height="4" rx="1"/>
+                                    <rect x="17" y="4" width="4" height="4" rx="1" fill="currentColor" stroke="none"/>
+                                    <rect x="3" y="10" width="4" height="4" rx="1"/>
+                                    <rect x="10" y="10" width="4" height="4" rx="1" fill="currentColor" stroke="none"/>
+                                    <rect x="17" y="10" width="4" height="4" rx="1"/>
+                                    <rect x="3" y="16" width="4" height="4" rx="1" fill="currentColor" stroke="none"/>
+                                    <rect x="10" y="16" width="4" height="4" rx="1"/>
+                                    <rect x="17" y="16" width="4" height="4" rx="1"/>
+                                </svg>
                             </button>
                             <!-- N'a de sens que séquenceur ouvert : masqué par défaut, révélé/masqué avec lui
                                  (voir toggleSequencer/openSequencerFor). Déplace #arp-sequencer dans une
@@ -557,6 +571,6 @@
          script.js) — vendu en local plutôt qu'hébergé sur un CDN. Projet LAME (lame.sourceforge.net),
          licence LGPL. -->
     <script src="lame.min.js"></script>
-    <script src="script.js?v=202607250000"></script>
+    <script src="script.js?v=202607251000"></script>
 </body>
 </html>
