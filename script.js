@@ -1,3 +1,19 @@
+// ---------- Migration ancien nom (HarmoBox -> HarmoHub) ----------
+// Une seule fois : recopie les clés localStorage de l'ancien préfixe vers 'harmohub*'
+// pour ne pas perdre les données des utilisateurs qui avaient l'app sous l'ancien nom.
+(function migrateHarmoboxKeys() {
+    const OLD_PREFIX = 'harmo' + 'box'; // évite qu'un futur renommage global écrase ce littéral
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+        const oldKey = localStorage.key(i);
+        if (!oldKey || !oldKey.startsWith(OLD_PREFIX)) continue;
+        const newKey = 'harmohub' + oldKey.slice(OLD_PREFIX.length);
+        if (localStorage.getItem(newKey) === null) {
+            localStorage.setItem(newKey, localStorage.getItem(oldKey));
+        }
+        localStorage.removeItem(oldKey);
+    }
+})();
+
 // ---------- Icônes ----------
 // Un seul jeu d'icônes (traits arrondis, currentColor) pour tous les boutons générés dynamiquement,
 // cohérent avec celles écrites en dur dans index.html (même style : viewBox 24, trait 2, coins ronds).
@@ -528,14 +544,14 @@ function saveProgressionSections(sections, markDirty = true) {
 // PLUS recopié automatiquement dans le morceau enregistré à chaque modification (voir
 // hasUnsavedChanges ci-dessus) : il faut explicitement Enregistrer (bouton dédié ou Ctrl+S, voir
 // saveCurrentSong) pour que les changements soient vraiment sauvegardés.
-const SONG_ID_KEY = 'harmoboxCurrentSongId';
+const SONG_ID_KEY = 'harmohubCurrentSongId';
 
 function loadSongs() {
-    try { return JSON.parse(localStorage.getItem('harmoboxSongs')) || []; } catch (e) { return []; }
+    try { return JSON.parse(localStorage.getItem('harmohubSongs')) || []; } catch (e) { return []; }
 }
 
 function saveSongs(songs) {
-    localStorage.setItem('harmoboxSongs', JSON.stringify(songs));
+    localStorage.setItem('harmohubSongs', JSON.stringify(songs));
 }
 
 function getCurrentSongId() {
@@ -551,10 +567,10 @@ function setCurrentSongId(id) {
 // pour qu'un dossier puisse exister vide (créé à l'avance) plutôt que d'être uniquement déduit des
 // morceaux qui s'y trouvent.
 function loadFolders() {
-    try { return JSON.parse(localStorage.getItem('harmoboxFolders')) || []; } catch (e) { return []; }
+    try { return JSON.parse(localStorage.getItem('harmohubFolders')) || []; } catch (e) { return []; }
 }
 function saveFolders(folders) {
-    localStorage.setItem('harmoboxFolders', JSON.stringify(folders));
+    localStorage.setItem('harmohubFolders', JSON.stringify(folders));
 }
 
 // Recopie les champs donnés dans le morceau actuellement ouvert (aucun effet si aucun n'est ouvert)
@@ -1352,26 +1368,26 @@ function waitForAudioReady(timeoutMs = 4000) {
     ]);
 }
 
-const INSTRUMENT_KEY = 'harmoboxInstrument';
-const METRONOME_KEY = 'harmoboxMetronomeDuringPlayback';
-const METRONOME_VOLUME_KEY = 'harmoboxMetronomeVolume';
-const METRONOME_SOUND_KEY = 'harmoboxMetronomeSound';
-const GENERAL_VOLUME_KEY = 'harmoboxGeneralVolume';
-const AUTOPLAY_SELECT_KEY = 'harmoboxAutoplaySelect';
-const METRONOME_COUNTIN_KEY = 'harmoboxMetronomeCountIn';
-const METRONOME_SUBDIVISION_KEY = 'harmoboxMetronomeSubdivision';
-const SONG_CARD_COLLAPSED_KEY = 'harmoboxSongCardCollapsed';
-const SHOW_ROMAN_KEY = 'harmoboxShowRomanNumerals';
-const SHOW_STYLE_LABEL_KEY = 'harmoboxShowStyleLabel';
-const SHOW_VOICING_PDF_KEY = 'harmoboxShowVoicingPdf';
-const SHOW_DIRECTION_PDF_KEY = 'harmoboxShowDirectionPdf';
-const SEQ_ZOOM_LEVEL_KEY = 'harmoboxSeqZoomLevel';
-const GRID_ZOOM_LEVEL_KEY = 'harmoboxGridZoomLevel';
+const INSTRUMENT_KEY = 'harmohubInstrument';
+const METRONOME_KEY = 'harmohubMetronomeDuringPlayback';
+const METRONOME_VOLUME_KEY = 'harmohubMetronomeVolume';
+const METRONOME_SOUND_KEY = 'harmohubMetronomeSound';
+const GENERAL_VOLUME_KEY = 'harmohubGeneralVolume';
+const AUTOPLAY_SELECT_KEY = 'harmohubAutoplaySelect';
+const METRONOME_COUNTIN_KEY = 'harmohubMetronomeCountIn';
+const METRONOME_SUBDIVISION_KEY = 'harmohubMetronomeSubdivision';
+const SONG_CARD_COLLAPSED_KEY = 'harmohubSongCardCollapsed';
+const SHOW_ROMAN_KEY = 'harmohubShowRomanNumerals';
+const SHOW_STYLE_LABEL_KEY = 'harmohubShowStyleLabel';
+const SHOW_VOICING_PDF_KEY = 'harmohubShowVoicingPdf';
+const SHOW_DIRECTION_PDF_KEY = 'harmohubShowDirectionPdf';
+const SEQ_ZOOM_LEVEL_KEY = 'harmohubSeqZoomLevel';
+const GRID_ZOOM_LEVEL_KEY = 'harmohubGridZoomLevel';
 const ZOOM_LEVEL_MIN = 0.7;
 const ZOOM_LEVEL_MAX = 2;
 const ZOOM_LEVEL_STEP = 0.1;
-const GRID_ZOOM_SEQ_COLLAPSED_KEY = 'harmoboxGridZoomSeqCollapsed';
-const GRID_ZOOM_SEQ_HEIGHT_KEY = 'harmoboxGridZoomSeqHeight';
+const GRID_ZOOM_SEQ_COLLAPSED_KEY = 'harmohubGridZoomSeqCollapsed';
+const GRID_ZOOM_SEQ_HEIGHT_KEY = 'harmohubGridZoomSeqHeight';
 const GRID_ZOOM_SEQ_HEIGHT_DEFAULT = 240;
 const GRID_ZOOM_SEQ_HEIGHT_MIN = 140;
 
@@ -2063,12 +2079,12 @@ class HarmoHubApp {
 
         // Bascule piano/guitare : indépendantes, les deux peuvent s'afficher côte à côte ou aucune.
         document.getElementById('toggle-viz-piano').onclick = () => {
-            localStorage.setItem('harmoboxShowPiano', this.showPianoViz() ? '0' : '1');
+            localStorage.setItem('harmohubShowPiano', this.showPianoViz() ? '0' : '1');
             this.applyVizVisibility();
         };
         document.getElementById('toggle-viz-guitar').onclick = () => {
             const wasOn = this.showGuitarViz();
-            localStorage.setItem('harmoboxShowGuitar', wasOn ? '0' : '1');
+            localStorage.setItem('harmohubShowGuitar', wasOn ? '0' : '1');
             this.applyVizVisibility();
             if (!wasOn) this.refreshPreview(); // vient d'être activée : calcule le diagramme de l'accord courant
         };
@@ -2397,8 +2413,8 @@ class HarmoHubApp {
 
     // Préférences d'affichage piano/guitare (persistées) : indépendantes l'une de l'autre, les deux
     // peuvent être affichées côte à côte ou aucune des deux.
-    showPianoViz() { return localStorage.getItem('harmoboxShowPiano') !== '0'; }
-    showGuitarViz() { return localStorage.getItem('harmoboxShowGuitar') === '1'; }
+    showPianoViz() { return localStorage.getItem('harmohubShowPiano') !== '0'; }
+    showGuitarViz() { return localStorage.getItem('harmohubShowGuitar') === '1'; }
 
     applyVizVisibility() {
         const showPiano = this.showPianoViz(), showGuitar = this.showGuitarViz();
