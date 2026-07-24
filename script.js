@@ -1,3 +1,19 @@
+// ---------- Migration ancien nom (HarmoBox -> HarmoHub) ----------
+// Une seule fois : recopie les clés localStorage de l'ancien préfixe vers 'harmohub*'
+// pour ne pas perdre les données des utilisateurs qui avaient l'app sous l'ancien nom.
+(function migrateHarmoboxKeys() {
+    const OLD_PREFIX = 'harmo' + 'box'; // évite qu'un futur renommage global écrase ce littéral
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+        const oldKey = localStorage.key(i);
+        if (!oldKey || !oldKey.startsWith(OLD_PREFIX)) continue;
+        const newKey = 'harmohub' + oldKey.slice(OLD_PREFIX.length);
+        if (localStorage.getItem(newKey) === null) {
+            localStorage.setItem(newKey, localStorage.getItem(oldKey));
+        }
+        localStorage.removeItem(oldKey);
+    }
+})();
+
 // ---------- Icônes ----------
 // Un seul jeu d'icônes (traits arrondis, currentColor) pour tous les boutons générés dynamiquement,
 // cohérent avec celles écrites en dur dans index.html (même style : viewBox 24, trait 2, coins ronds).
@@ -10,6 +26,8 @@ const ICONS = {
     trash: '<path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>',
     up: '<path d="M12 19V5"/><path d="m5 12 7-7 7 7"/>',
     down: '<path d="M12 5v14"/><path d="m5 12 7 7 7-7"/>',
+    reverse: '<path d="M3 7h13"/><path d="m13 3 4 4-4 4"/><path d="M21 17H8"/><path d="m11 21-4-4 4-4"/>',
+    'chevron-down': '<path d="m6 9 6 6 6-6"/>',
     'chevron-left': '<path d="m15 18-6-6 6-6"/>',
     'chevron-right': '<path d="m9 18 6-6-6-6"/>',
     loop: '<path d="M17 2 21 6 17 10"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22 3 18 7 14"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>',
@@ -67,6 +85,42 @@ const CHORD_INTERVALS = {
     // dom13 : quinte et 11e omises (notes les moins essentielles de l'accord)
     dom13: [{ semi: 0, degree: 0, role: 'root' }, { semi: 4, degree: 2, role: 'third' }, { semi: 10, degree: 6, role: 'seventh' }, { semi: 14, degree: 1, role: 'ext' }, { semi: 21, degree: 5, role: 'ext' }]
 };
+
+// Ensemble de classes de hauteur (0-11, relatives à la fondamentale) d'une qualité — sert à repérer
+// si l'ajout d'une note libre au séquenceur complète exactement une AUTRE qualité déjà reconnue
+// (voir commitExtraNoteLabel/findQualityMatchingPitchClasses).
+function pitchClassSetForQuality(quality) {
+    const ivs = CHORD_INTERVALS[quality] || CHORD_INTERVALS.maj;
+    return new Set(ivs.map(iv => ((iv.semi % 12) + 12) % 12));
+}
+
+// Cherche, parmi toutes les qualités connues, celle dont l'ensemble de classes de hauteur est
+// EXACTEMENT `pcSet` (même taille, mêmes membres) — ou null si aucune ne correspond exactement.
+function findQualityMatchingPitchClasses(pcSet) {
+    for (const q of Object.keys(CHORD_INTERVALS)) {
+        const qSet = pitchClassSetForQuality(q);
+        if (qSet.size === pcSet.size && [...qSet].every(pc => pcSet.has(pc))) return q;
+    }
+    return null;
+}
+
+// Parse "E3", "F#4", "Bb2"... (lettre + dièse/bémol optionnel + chiffre d'octave, signé) en
+// { note, octave }, ou null si non reconnu — note libre ajoutée au séquenceur (voir
+// addSequencerNote/commitExtraNoteLabel), à la différence de parseChordSymbol qui lit un SYMBOLE
+// D'ACCORD entier (fondamentale + qualité, jamais d'octave).
+function parseNoteNameOctave(text) {
+    const m = (text || '').trim().match(/^([A-Ga-g])(#|b)?(-?\d+)$/);
+    if (!m) return null;
+    const [, letter, accidental, octaveStr] = m;
+    const BASE_PC = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+    let pc = BASE_PC[letter.toUpperCase()];
+    if (accidental === '#') pc += 1;
+    else if (accidental === 'b') pc -= 1;
+    pc = ((pc % 12) + 12) % 12;
+    const octave = parseInt(octaveStr, 10);
+    if (!Number.isFinite(octave)) return null;
+    return { note: NOTES[pc], octave };
+}
 
 // Symboles d'accord lisibles pour l'affichage
 const QUALITY_LABEL = {
@@ -440,7 +494,25 @@ function octaveFromData(data) {
 // `semitones`, sans changer la classe de hauteur obtenue.
 function transposeChordData(data, semitones) {
     const shift = (pc) => NOTES[(NOTES.indexOf(pc) + semitones + 1200) % 12];
-    return { ...data, root: shift(data.root), bass: data.bass ? shift(data.bass) : data.bass };
+    // Un doigté verrouillé (voir toggleGuitarLock) transpose comme une vraie forme de guitare : les
+    // mêmes cases décalées du même nombre de cases (barré qui monte/descend le manche) — sauf si ça
+    // sort de la portée jouable (case négative), auquel cas mieux vaut relâcher le verrou que garder
+    // une forme qui ne correspond plus aux bonnes notes.
+    let guitarLock = data.guitarLock;
+    if (guitarLock) {
+        const shifted = guitarLock.map(f => (f == null ? null : f + semitones));
+        guitarLock = shifted.some(f => f != null && (f < 0 || f > GUITAR_MAX_FRET)) ? null : shifted;
+    }
+    // Les notes libres (voir addSequencerNote) transposent en hauteur ABSOLUE, comme n'importe quelle
+    // autre voix de l'accord — recalculées via leur MIDI plutôt qu'un simple décalage de lettre (qui
+    // ne saurait pas quand faire déborder l'octave, ex. un Si transposé d'un demi-ton devient un Do
+    // à l'octave AU-DESSUS, pas le même octave).
+    const extraNotes = (data.extraNotes || []).map(x => {
+        const midi = NOTES.indexOf(x.note) + 12 * (x.octave + 1) + semitones;
+        const pc = ((midi % 12) + 12) % 12;
+        return { note: NOTES[pc], octave: Math.floor(midi / 12) - 1 };
+    });
+    return { ...data, root: shift(data.root), bass: data.bass ? shift(data.bass) : data.bass, guitarLock, extraNotes };
 }
 
 // ---------- Sections de la progression (couplet, refrain, etc.) ----------
@@ -472,14 +544,14 @@ function saveProgressionSections(sections, markDirty = true) {
 // PLUS recopié automatiquement dans le morceau enregistré à chaque modification (voir
 // hasUnsavedChanges ci-dessus) : il faut explicitement Enregistrer (bouton dédié ou Ctrl+S, voir
 // saveCurrentSong) pour que les changements soient vraiment sauvegardés.
-const SONG_ID_KEY = 'harmoboxCurrentSongId';
+const SONG_ID_KEY = 'harmohubCurrentSongId';
 
 function loadSongs() {
-    try { return JSON.parse(localStorage.getItem('harmoboxSongs')) || []; } catch (e) { return []; }
+    try { return JSON.parse(localStorage.getItem('harmohubSongs')) || []; } catch (e) { return []; }
 }
 
 function saveSongs(songs) {
-    localStorage.setItem('harmoboxSongs', JSON.stringify(songs));
+    localStorage.setItem('harmohubSongs', JSON.stringify(songs));
 }
 
 function getCurrentSongId() {
@@ -495,10 +567,10 @@ function setCurrentSongId(id) {
 // pour qu'un dossier puisse exister vide (créé à l'avance) plutôt que d'être uniquement déduit des
 // morceaux qui s'y trouvent.
 function loadFolders() {
-    try { return JSON.parse(localStorage.getItem('harmoboxFolders')) || []; } catch (e) { return []; }
+    try { return JSON.parse(localStorage.getItem('harmohubFolders')) || []; } catch (e) { return []; }
 }
 function saveFolders(folders) {
-    localStorage.setItem('harmoboxFolders', JSON.stringify(folders));
+    localStorage.setItem('harmohubFolders', JSON.stringify(folders));
 }
 
 // Recopie les champs donnés dans le morceau actuellement ouvert (aucun effet si aucun n'est ouvert)
@@ -519,8 +591,14 @@ function escapeHtml(str) {
 // Récapitulatif des notes d'un accord au-dessus du piano : sans octave (peu utile à ce niveau),
 // une note = un « chip » séparé pour un espacement propre entre notes sans écarter les caractères
 // à l'intérieur d'une même note (ex. le ♭ doit rester collé à sa lettre, voir .chord-note en CSS).
+// Chaque note reprend la couleur de son rôle (fondamentale/tierce/quinte/7e/extension), en pâle —
+// même code que le clavier/la légende (.dot-*), voir .chord-note.role-* en CSS.
 function chordNotesHtml(chord, useFlats) {
-    return chord.getDisplayNotes(useFlats, false).map(n => `<span class="chord-note">${flatTight(n)}</span>`).join('');
+    const rootPc = NOTES.indexOf(chord.root);
+    return chord.getVoiced().map(v => {
+        const text = spellChordTone(rootPc, useFlats, v.degree, v.midi, false);
+        return `<span class="chord-note role-${v.role}">${flatTight(text)}</span>`;
+    }).join('');
 }
 
 // Le ♭ a une chasse large dans la police de l'appli et paraît détaché de sa lettre, surtout au
@@ -538,6 +616,46 @@ function flatTight(text) {
 // seule la note posée par-dessus peut s'arrêter à la moitié d'un de ces rectangles pour simuler
 // une double-croche, sans multiplier le nombre de rectangles visibles.
 const SEQ_STEPS_PER_BEAT = 4;
+
+// ---------- Notes libres du séquenceur : seuils avant de renommer l'accord ----------
+// Une note libre (voir addSequencerNote) ne renomme l'accord (voir reevaluateExtraNoteUpgrades) que
+// si elle est réellement JOUÉE assez longtemps — une note de passage furtive ne doit jamais renommer
+// l'accord, même si sa hauteur complète pile une qualité reconnue. Deux façons de "compter", au
+// choix de la manière dont elle est jouée (voir seqVoiceCoverage) :
+// - tenue en continu (liée) au moins SEQ_HELD_MIN_STEPS cases d'affilée -> clairement une vraie voix
+//   soutenue de l'accord, peu importe le reste du motif ;
+// - à défaut, en détaché/staccato (plusieurs attaques courtes séparées) -> il en faut BEAUCOUP plus,
+//   couvrant au moins SEQ_STACCATO_MIN_COVERAGE de la durée totale de l'accord, pour distinguer un
+//   martèlement voulu (vraie voix) d'une simple broderie ponctuelle.
+// Réglages à affiner si besoin : 4 cases = 1 temps plein tenu ; 0.5 = la moitié de l'accord au moins.
+const SEQ_HELD_MIN_STEPS = SEQ_STEPS_PER_BEAT; // 1 temps plein tenu en continu
+const SEQ_STACCATO_MIN_COVERAGE = 0.5; // 50% de la durée totale, même en attaques séparées
+
+// Compte, pour une voix donnée, ses cases actives au total et sa plus longue série de cases LIÉES
+// consécutives (une même note tenue) — voir reevaluateExtraNoteUpgrades.
+function seqVoiceCoverage(pattern, tie, voiceIndex) {
+    let onSteps = 0, longestRun = 0, currentRun = 0;
+    for (let s = 0; s < pattern.length; s++) {
+        const isOn = pattern[s].includes(voiceIndex);
+        if (isOn) {
+            onSteps++;
+            const continuesPrev = s > 0 && pattern[s - 1].includes(voiceIndex) && tie[s].includes(voiceIndex);
+            currentRun = continuesPrev ? currentRun + 1 : 1;
+        } else {
+            currentRun = 0;
+        }
+        if (currentRun > longestRun) longestRun = currentRun;
+    }
+    return { onSteps, totalSteps: pattern.length, longestRun };
+}
+
+// Une voix est-elle jouée assez longtemps pour compter comme une vraie voix de l'accord (voir les
+// seuils ci-dessus) ? Tenue assez longtemps EN CONTINU, ou à défaut assez de couverture totale
+// (staccato).
+function seqCoverageQualifies(cov) {
+    if (cov.longestRun >= SEQ_HELD_MIN_STEPS) return true;
+    return cov.totalSteps > 0 && (cov.onSteps / cov.totalSteps) >= SEQ_STACCATO_MIN_COVERAGE;
+}
 
 // ---------- Groove (droit / shuffle / ternaire) ----------
 // La grille du séquenceur reste TOUJOURS affichée droite (comme dans la plupart des séquenceurs/DAW) :
@@ -720,7 +838,7 @@ function diatonicNumeralFor(diff, keyMode) {
 }
 
 class Chord {
-    constructor(root, quality, beats, inversion, drop, octave = 3, bass = null) {
+    constructor(root, quality, beats, inversion, drop, octave = 3, bass = null, guitarLock = null, extraNotes = null) {
         this.root = root;
         this.quality = quality;
         this.beats = parseInt(beats); // durée en temps
@@ -728,6 +846,15 @@ class Chord {
         this.inversion = parseInt(inversion);
         this.drop = drop;
         this.bass = bass || null; // note de basse différente de la fondamentale (ex. "D" sur un Cmaj7/D), ou null
+        // Doigté guitare verrouillé par l'utilisateur (case par corde, `null` = corde étouffée), ou
+        // null si laissé au choix automatique — voir guitarFingeringsForChord/toggleGuitarLock.
+        this.guitarLock = guitarLock || null;
+        // Notes ajoutées librement au séquenceur ({note, octave}), en plus des voix de la qualité —
+        // typiquement des notes de passage vers l'accord suivant, sans rapport avec l'accord joué
+        // (voir addSequencerNote/commitExtraNoteLabel). Si l'une d'elles complète exactement une
+        // AUTRE qualité reconnue, elle est absorbée dans `quality` au lieu de rester ici — voir
+        // commitExtraNoteLabel.
+        this.extraNotes = extraNotes || [];
     }
 
     getIntervals() {
@@ -786,6 +913,20 @@ class Chord {
 
         const rootMidi = NOTES.indexOf(this.root) + 12 * (this.octave + 1); // octave 3 -> C3 = 48
         const voiced = notes.map(n => ({ midi: rootMidi + n.semi, role: n.role, degree: n.degree }));
+
+        // Notes libres ajoutées au séquenceur (voir addSequencerNote) : hauteur ABSOLUE (note+octave
+        // tels que tapés, pas relatifs à rootMidi comme les voix ci-dessus) — ajoutées ICI, avant la
+        // basse, pour que leur index de voix reste stable même si la basse est activée/désactivée
+        // ensuite (voir getSeqVoices, même raisonnement que pour la basse juste en dessous). Rôle/
+        // degré empruntés à la voix de l'accord qui partage leur classe de hauteur, s'il y en a une
+        // (ex. doubler la tierce une octave plus haut reste bleu) — sinon note « étrangère » (violet,
+        // orthographe générique), typiquement une note de passage sans rapport avec l'accord joué.
+        this.extraNotes.forEach(x => {
+            const midi = NOTES.indexOf(x.note) + 12 * (x.octave + 1);
+            const relPc = ((NOTES.indexOf(x.note) - NOTES.indexOf(this.root)) % 12 + 12) % 12;
+            const match = notes.find(n => ((n.semi % 12) + 12) % 12 === relPc);
+            voiced.push({ midi, role: match ? match.role : 'ext', degree: match ? match.degree : null });
+        });
 
         // Basse différente (accord « sur » une note, ex. Cmaj7/D) : ajoutée SOUS la voix la plus
         // grave actuelle, sans toucher au reste du voicing (renversement/drop restent ceux définis
@@ -1121,19 +1262,36 @@ function shapeToByString(shape, root, quality) {
     });
 }
 
+// Clé de comparaison d'un doigté (case par corde, sous forme { fret } ou null) — sert à repérer si
+// le doigté verrouillé (voir toggleGuitarLock) figure déjà dans la liste automatique, pour ne pas le
+// lister deux fois.
+function fingeringShapeKey(fingering) {
+    return fingering.map(f => f ? f.fret : 'x').join(',');
+}
+
 // Point d'entrée unique pour la vue live et l'export PDF : privilégie les formes communément
 // enseignées quand elles existent ET que l'accord est en position simple (fondamentale, sans drop
 // ni basse différente) — dès que l'utilisateur a personnalisé le voicing (renversement/drop/basse),
 // cette personnalisation est délibérée et doit rester fidèle, donc on retombe sur le solveur exact.
-function guitarFingeringsForChord(chord) {
+// `lockedShape` (case par corde, voir toggleGuitarLock) passe en tête de liste s'il est fourni —
+// par défaut celui mémorisé sur l'accord lui-même (chord.guitarLock, restauré depuis les données
+// enregistrées), mais la vue live le passe explicitement (this.guitarLock) puisque son Chord est
+// reconstruit à chaque frappe depuis les contrôles du panneau, sans jamais porter ce champ-là.
+function guitarFingeringsForChord(chord, lockedShape = chord.guitarLock) {
     // '#drop' vaut littéralement "none" par défaut (pas "" ni null) quand aucun drop n'est choisi.
     const hasDrop = chord.drop === 'drop2' || chord.drop === 'drop3';
     const isPlainVoicing = chord.getEffectiveInversion() === 0 && !hasDrop && !chord.bass;
+    let list;
     if (isPlainVoicing) {
         const common = commonGuitarShapes(chord.root, chord.quality);
-        if (common.length) return common.map(shape => shapeToByString(shape, chord.root, chord.quality));
+        list = common.length ? common.map(shape => shapeToByString(shape, chord.root, chord.quality)) : solveGuitarFingerings(chord.getVoiced());
+    } else {
+        list = solveGuitarFingerings(chord.getVoiced());
     }
-    return solveGuitarFingerings(chord.getVoiced());
+    if (!lockedShape) return list;
+    const lockedFingering = shapeToByString(lockedShape, chord.root, chord.quality);
+    const lockedKey = fingeringShapeKey(lockedFingering);
+    return [lockedFingering, ...list.filter(f => fingeringShapeKey(f) !== lockedKey)];
 }
 
 // ---------- Banques de sons ----------
@@ -1210,19 +1368,28 @@ function waitForAudioReady(timeoutMs = 4000) {
     ]);
 }
 
-const INSTRUMENT_KEY = 'harmoboxInstrument';
-const METRONOME_KEY = 'harmoboxMetronomeDuringPlayback';
-const METRONOME_VOLUME_KEY = 'harmoboxMetronomeVolume';
-const METRONOME_SOUND_KEY = 'harmoboxMetronomeSound';
-const GENERAL_VOLUME_KEY = 'harmoboxGeneralVolume';
-const AUTOPLAY_SELECT_KEY = 'harmoboxAutoplaySelect';
-const METRONOME_COUNTIN_KEY = 'harmoboxMetronomeCountIn';
-const METRONOME_SUBDIVISION_KEY = 'harmoboxMetronomeSubdivision';
-const SONG_CARD_COLLAPSED_KEY = 'harmoboxSongCardCollapsed';
-const SHOW_ROMAN_KEY = 'harmoboxShowRomanNumerals';
-const SHOW_STYLE_LABEL_KEY = 'harmoboxShowStyleLabel';
-const SHOW_VOICING_PDF_KEY = 'harmoboxShowVoicingPdf';
-const SHOW_DIRECTION_PDF_KEY = 'harmoboxShowDirectionPdf';
+const INSTRUMENT_KEY = 'harmohubInstrument';
+const METRONOME_KEY = 'harmohubMetronomeDuringPlayback';
+const METRONOME_VOLUME_KEY = 'harmohubMetronomeVolume';
+const METRONOME_SOUND_KEY = 'harmohubMetronomeSound';
+const GENERAL_VOLUME_KEY = 'harmohubGeneralVolume';
+const AUTOPLAY_SELECT_KEY = 'harmohubAutoplaySelect';
+const METRONOME_COUNTIN_KEY = 'harmohubMetronomeCountIn';
+const METRONOME_SUBDIVISION_KEY = 'harmohubMetronomeSubdivision';
+const SONG_CARD_COLLAPSED_KEY = 'harmohubSongCardCollapsed';
+const SHOW_ROMAN_KEY = 'harmohubShowRomanNumerals';
+const SHOW_STYLE_LABEL_KEY = 'harmohubShowStyleLabel';
+const SHOW_VOICING_PDF_KEY = 'harmohubShowVoicingPdf';
+const SHOW_DIRECTION_PDF_KEY = 'harmohubShowDirectionPdf';
+const SEQ_ZOOM_LEVEL_KEY = 'harmohubSeqZoomLevel';
+const GRID_ZOOM_LEVEL_KEY = 'harmohubGridZoomLevel';
+const ZOOM_LEVEL_MIN = 0.7;
+const ZOOM_LEVEL_MAX = 2;
+const ZOOM_LEVEL_STEP = 0.1;
+const GRID_ZOOM_SEQ_COLLAPSED_KEY = 'harmohubGridZoomSeqCollapsed';
+const GRID_ZOOM_SEQ_HEIGHT_KEY = 'harmohubGridZoomSeqHeight';
+const GRID_ZOOM_SEQ_HEIGHT_DEFAULT = 240;
+const GRID_ZOOM_SEQ_HEIGHT_MIN = 140;
 
 // Curseurs de volume (0-100, plus intuitif qu'une valeur en décibels) : 0 = silence, 100 = 0 dB
 // (plein volume « normal »), avec un plancher à -40 dB pour que même « presque muet » reste audible
@@ -1466,11 +1633,23 @@ class HarmoHubApp {
         this.guitarKey = null;     // signature (midis triés) du dernier accord affiché à la guitare
         this.guitarFingerings = []; // doigtés jouables pour l'accord courant (voir solveGuitarFingerings)
         this.guitarFingeringIndex = 0; // doigté actuellement affiché parmi guitarFingerings
+        this.guitarLock = null;    // doigté verrouillé en attente pour l'accord en cours d'édition (voir toggleGuitarLock)
+        this._keepGuitarLockOnce = false; // laisse passer guitarLock au PROCHAIN recalcul (voir ensureGuitarDiagram)
+        this.extraNotes = [];      // notes libres en attente pour l'accord en cours d'édition (voir addSequencerNote)
         this._lastTap = null;      // pour le double-tap (suppression mobile)
         this.tapTimes = [];        // horodatages du tap tempo (voir handleTapTempo)
         this.isPlaying = false;    // une lecture (accord/progression) est-elle en cours ?
         this.seqOpen = false;      // panneau séquenceur ouvert ou non (indépendant du style de lecture)
         this.seqZoomOpen = false;  // fenêtre agrandie du séquenceur ouverte ou non (voir openSeqZoom)
+        this.gridZoomOpen = false; // fenêtre agrandie de la grille d'accords ouverte ou non (voir openGridZoom)
+        // Niveau de zoom (1 = taille normale) des deux fenêtres agrandies ci-dessus, réglable une fois
+        // ouvertes via les boutons loupe+/loupe- ou Ctrl+molette (voir adjustZoom) — mémorisé d'une
+        // session à l'autre comme les autres préférences d'affichage.
+        this.seqZoomLevel = parseFloat(localStorage.getItem(SEQ_ZOOM_LEVEL_KEY)) || 1;
+        this.gridZoomLevel = parseFloat(localStorage.getItem(GRID_ZOOM_LEVEL_KEY)) || 1;
+        // Séquenceur épinglé en bas de la loupe grille (voir openGridZoom/toggleGridZoomPinnedSeq) :
+        // replié ou non, mémorisé d'une session à l'autre comme le niveau de zoom ci-dessus.
+        this.gridZoomSeqCollapsed = localStorage.getItem(GRID_ZOOM_SEQ_COLLAPSED_KEY) === '1';
         this.seqTouched = false;   // l'utilisateur a-t-il personnalisé le motif pour l'accord en cours ?
         this.seqSelections = []; // notes du séquenceur sélectionnées : [{ voice, start, end }, ...]
         this.seqDrag = null;       // état de glisser en cours sur le séquenceur
@@ -1769,6 +1948,40 @@ class HarmoHubApp {
         document.getElementById('seq-zoom-overlay').addEventListener('click', (e) => {
             if (e.target.id === 'seq-zoom-overlay') this.closeSeqZoom(); // clic sur le fond, pas la fenêtre
         });
+        document.getElementById('seq-zoom-in').onclick = () => this.adjustZoom('seq', ZOOM_LEVEL_STEP);
+        document.getElementById('seq-zoom-out').onclick = () => this.adjustZoom('seq', -ZOOM_LEVEL_STEP);
+        // Ctrl+molette : ne zoome qu'une fois la fenêtre agrandie déjà ouverte (elle seule reçoit
+        // l'évènement, cachée sinon) — jamais sur le séquenceur "en place" dans le panneau Lecture.
+        // preventDefault (écouteur non-passive) : sans lui, le navigateur zoomerait la PAGE entière.
+        document.getElementById('seq-zoom-host').addEventListener('wheel', (e) => {
+            if (!e.ctrlKey) return;
+            e.preventDefault();
+            this.adjustZoom('seq', e.deltaY < 0 ? ZOOM_LEVEL_STEP : -ZOOM_LEVEL_STEP);
+        }, { passive: false });
+
+        // Vue agrandie de la grille d'accords (voir openGridZoom/closeGridZoom) : même principe,
+        // déplace #progression-sections + le bouton "Ajouter une partie" plutôt que de les dupliquer.
+        document.getElementById('grid-zoom').onclick = () => this.openGridZoom();
+        document.getElementById('grid-zoom-close').onclick = () => this.closeGridZoom();
+        document.getElementById('grid-zoom-overlay').addEventListener('click', (e) => {
+            if (e.target.id === 'grid-zoom-overlay') this.closeGridZoom();
+        });
+        document.getElementById('grid-zoom-in').onclick = () => this.adjustZoom('grid', ZOOM_LEVEL_STEP);
+        document.getElementById('grid-zoom-out').onclick = () => this.adjustZoom('grid', -ZOOM_LEVEL_STEP);
+        document.getElementById('grid-zoom-host').addEventListener('wheel', (e) => {
+            if (!e.ctrlKey) return;
+            e.preventDefault();
+            this.adjustZoom('grid', e.deltaY < 0 ? ZOOM_LEVEL_STEP : -ZOOM_LEVEL_STEP);
+        }, { passive: false });
+
+        // Séquenceur épinglé en bas de la loupe grille (voir editChordFromGridZoom/
+        // syncGridZoomPinnedSeq) : Enregistrer/Annuler réutilisent tels quels saveCurrent/cancelEdit
+        // (peu importe d'où vient le clic, ces méthodes ne lisent que les contrôles du panneau Accord,
+        // toujours dans le DOM même masqués derrière la loupe).
+        document.getElementById('grid-zoom-pinned-save').onclick = () => { this.saveCurrent(); this.syncGridZoomPinnedSeq(); };
+        document.getElementById('grid-zoom-pinned-cancel').onclick = () => { this.cancelEdit(); this.syncGridZoomPinnedSeq(); };
+        document.getElementById('grid-zoom-pinned-toggle').onclick = () => this.toggleGridZoomPinnedSeq();
+        this.setupGridZoomPinnedResize();
 
         // Menu contextuel (clic droit / appui long) : Renommer/Modifier, Dupliquer (accords
         // uniquement), Supprimer — réutilisé pour les morceaux, les dossiers ET les accords de la
@@ -1848,7 +2061,11 @@ class HarmoHubApp {
         document.addEventListener('click', (e) => {
             const inGrid = !!e.target.closest('.chord-grid');
             const inMenu = !!e.target.closest('#context-menu');
-            const inEditor = !!e.target.closest('.col-left');
+            // .grid-zoom-modal inclus : le séquenceur épinglé et ses boutons (Enregistrer/Annuler/
+            // replier, poignée de redimensionnement...) y vivent, hors de .chord-grid ET de .col-left —
+            // sans cet ajout, cliquer par exemple le bouton Fermer de la loupe (ni l'un ni l'autre)
+            // sortait silencieusement du mode édition juste avant que ce clic n'atteigne ce bouton.
+            const inEditor = !!e.target.closest('.col-left') || !!e.target.closest('.grid-zoom-modal');
             let changed = false;
             if (!inGrid && !inMenu && this.selectedIndex != null) { this.selectedIndex = null; changed = true; }
             if (!inGrid && !inMenu && !inEditor && this.editingIndex != null) { this.exitEditMode(); changed = true; }
@@ -1862,17 +2079,18 @@ class HarmoHubApp {
 
         // Bascule piano/guitare : indépendantes, les deux peuvent s'afficher côte à côte ou aucune.
         document.getElementById('toggle-viz-piano').onclick = () => {
-            localStorage.setItem('harmoboxShowPiano', this.showPianoViz() ? '0' : '1');
+            localStorage.setItem('harmohubShowPiano', this.showPianoViz() ? '0' : '1');
             this.applyVizVisibility();
         };
         document.getElementById('toggle-viz-guitar').onclick = () => {
             const wasOn = this.showGuitarViz();
-            localStorage.setItem('harmoboxShowGuitar', wasOn ? '0' : '1');
+            localStorage.setItem('harmohubShowGuitar', wasOn ? '0' : '1');
             this.applyVizVisibility();
             if (!wasOn) this.refreshPreview(); // vient d'être activée : calcule le diagramme de l'accord courant
         };
         document.getElementById('guitar-prev').onclick = () => this.cycleGuitarFingering(-1);
         document.getElementById('guitar-next').onclick = () => this.cycleGuitarFingering(1);
+        document.getElementById('guitar-lock-btn').onclick = () => this.toggleGuitarLock();
         this.applyVizVisibility();
     }
 
@@ -1933,7 +2151,9 @@ class HarmoHubApp {
         this.activateMoreOptions();
     }
 
-    // Lit les réglages de l'interface et renvoie un Chord
+    // Lit les réglages de l'interface et renvoie un Chord. Le doigté guitare verrouillé (voir
+    // toggleGuitarLock) n'est PAS passé ici : ensureGuitarDiagram le fournit explicitement à
+    // guitarFingeringsForChord (ce Chord est reconstruit à chaque frappe, il ne le porte jamais).
     readChord() {
         return new Chord(
             document.getElementById('root').value,
@@ -1942,7 +2162,9 @@ class HarmoHubApp {
             document.getElementById('inversion').value,
             document.getElementById('drop').value,
             document.getElementById('octave').value,
-            document.getElementById('bass').value || null
+            document.getElementById('bass').value || null,
+            null,
+            this.extraNotes
         );
     }
 
@@ -2100,7 +2322,13 @@ class HarmoHubApp {
         const key = `${chord.root}:${chord.quality}:${chord.getMidiNotes().join(',')}`;
         if (this.guitarKey === key) return;
         this.guitarKey = key;
-        this.guitarFingerings = guitarFingeringsForChord(chord);
+        // Un changement RÉEL d'accord (racine/qualité/voicing) invalide un verrou existant : la forme
+        // mémorisée (case par corde) ne correspondrait plus aux bonnes notes. Seuls editChord (restaure
+        // le verrou déjà enregistré) et toggleGuitarLock (vient justement de le poser/lever) doivent
+        // survivre à ce recalcul, via ce drapeau à usage unique.
+        if (!this._keepGuitarLockOnce) this.guitarLock = null;
+        this._keepGuitarLockOnce = false;
+        this.guitarFingerings = guitarFingeringsForChord(chord, this.guitarLock);
         this.guitarFingeringIndex = 0;
         this.renderGuitarDiagram();
     }
@@ -2113,6 +2341,7 @@ class HarmoHubApp {
         if (!fingerings.length) {
             viz.innerHTML = `<div class="guitar-unplayable">Non jouable à la guitare</div>`;
             if (nav) nav.style.display = 'none';
+            this.updateGuitarLockButton();
             return;
         }
         const idx = Math.min(this.guitarFingeringIndex, fingerings.length - 1);
@@ -2123,6 +2352,24 @@ class HarmoHubApp {
             const label = document.getElementById('guitar-nav-label');
             if (label) label.textContent = `${idx + 1}/${fingerings.length}`;
         }
+        this.updateGuitarLockButton();
+    }
+
+    // Reflète l'état verrouillé/libre sur le bouton cadenas : cadenas fermé + surligné si CET accord
+    // a un doigté verrouillé, ouvert sinon — indépendant du doigté actuellement PRÉVISUALISÉ (on peut
+    // naviguer parmi les autres sans perdre le verrou, voir cycleGuitarFingering/toggleGuitarLock).
+    updateGuitarLockButton() {
+        const btn = document.getElementById('guitar-lock-btn');
+        if (!btn) return;
+        btn.style.display = this.guitarFingerings.length ? '' : 'none';
+        const locked = !!this.guitarLock;
+        btn.classList.toggle('active', locked);
+        btn.setAttribute('aria-pressed', locked);
+        btn.title = locked ? 'Doigté verrouillé pour cet accord (cliquer pour libérer)' : 'Verrouiller ce doigté pour cet accord';
+        btn.setAttribute('aria-label', btn.title);
+        btn.innerHTML = locked
+            ? `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>`
+            : `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>`;
     }
 
     cycleGuitarFingering(delta) {
@@ -2132,20 +2379,42 @@ class HarmoHubApp {
         this.renderGuitarDiagram();
     }
 
+    // Verrouille/libère le doigté actuellement affiché pour l'accord en cours (voir
+    // guitarFingeringsForChord) : verrouillé, il passe en tête de liste et devient celui utilisé par
+    // défaut dans la grille et le PDF, jusqu'à ce qu'on le libère ou qu'on change réellement l'accord
+    // (racine/qualité/voicing). Ne persiste dans la grille qu'au prochain Enregistrer/Ajouter (voir
+    // saveCurrent), comme tout autre réglage du panneau.
+    toggleGuitarLock() {
+        const fingerings = this.guitarFingerings;
+        if (!fingerings.length) return;
+        if (this.guitarLock) {
+            this.guitarLock = null;
+        } else {
+            const current = fingerings[this.guitarFingeringIndex];
+            this.guitarLock = current.map(f => f ? f.fret : null);
+        }
+        this._keepGuitarLockOnce = true;
+        this.guitarKey = null; // force le recalcul de la liste (racine/qualité inchangées, sinon ignoré)
+        this.ensureGuitarDiagram(this.readChord());
+    }
+
     clearGuitarViz() {
         this.guitarKey = null;
         this.guitarFingerings = [];
         this.guitarFingeringIndex = 0;
+        this.guitarLock = null;
         const viz = document.getElementById('guitar-viz');
         if (viz) viz.innerHTML = '';
         const nav = document.getElementById('guitar-nav');
         if (nav) nav.style.display = 'none';
+        const lockBtn = document.getElementById('guitar-lock-btn');
+        if (lockBtn) lockBtn.style.display = 'none';
     }
 
     // Préférences d'affichage piano/guitare (persistées) : indépendantes l'une de l'autre, les deux
     // peuvent être affichées côte à côte ou aucune des deux.
-    showPianoViz() { return localStorage.getItem('harmoboxShowPiano') !== '0'; }
-    showGuitarViz() { return localStorage.getItem('harmoboxShowGuitar') === '1'; }
+    showPianoViz() { return localStorage.getItem('harmohubShowPiano') !== '0'; }
+    showGuitarViz() { return localStorage.getItem('harmohubShowGuitar') === '1'; }
 
     applyVizVisibility() {
         const showPiano = this.showPianoViz(), showGuitar = this.showGuitarViz();
@@ -2186,6 +2455,23 @@ class HarmoHubApp {
             this.instrumentCache.set(key, inst);
         }
         return inst;
+    }
+
+    // Écoute rapide d'une seule voix du séquenceur (clic sur son étiquette à gauche) : ne coupe pas
+    // une lecture en cours (contrairement à playCurrent/playSavedChord, pas de stopAll ici) — juste
+    // une note isolée, pour vérifier une hauteur à l'oreille sans interrompre le reste.
+    async previewSeqNote(voiceIndex) {
+        await Tone.start();
+        const chord = this.readChord();
+        const note = chord.getSeqNotes()[voiceIndex];
+        if (!note) return;
+        const instrumentKey = document.getElementById('instrument').value;
+        const inst = this.getInstrument(instrumentKey);
+        try {
+            inst.triggerAttackRelease(note, 0.5, Tone.now(), 0.85);
+        } catch (e) {
+            console.warn('Aperçu de note ignoré (instrument pas encore prêt) :', e.message);
+        }
     }
 
     // Joue un motif de séquenceur (résolution croche) : regroupe les cases actives contiguës d'une
@@ -2389,7 +2675,7 @@ class HarmoHubApp {
 
         flat.slice(startPos).forEach(({ section, index, data }) => {
             const beats = beatsFromData(data);
-            const chord = new Chord(data.root, data.quality, beats, data.inversion, data.drop, octaveFromData(data), data.bass);
+            const chord = new Chord(data.root, data.quality, beats, data.inversion, data.drop, octaveFromData(data), data.bass, null, data.extraNotes);
             const notes = chord.getSeqNotes();
             const { pattern: seqPattern, tie: seqTie } = this.resolveSeqPatternForData(chord, data);
             this.schedulePlayback(notes, chord.getSeqMidiNotes(), seqPattern, seqTie, secPerBeat, timeOffset, chord.getRoleMap(), data.instrument || 'piano', chord, false, { section, index });
@@ -2550,7 +2836,9 @@ class HarmoHubApp {
             playStyle: document.getElementById('playStyle').value,
             instrument: document.getElementById('instrument').value,
             arpPattern: document.getElementById('arpPattern').value,
-            seqEdited: true
+            seqEdited: true,
+            guitarLock: this.guitarLock || null,
+            extraNotes: this.extraNotes.map(x => ({ ...x }))
         };
         const sections = loadProgressionSections();
         this.pushUndo(sections);
@@ -2589,6 +2877,8 @@ class HarmoHubApp {
             instrument,
             arpPattern: serializeSeqPattern(pattern, tie),
             seqEdited: false,
+            guitarLock: null,
+            extraNotes: [],
         };
     }
 
@@ -2928,7 +3218,7 @@ class HarmoHubApp {
         this.syncPlayStylePicker(); // reflète la nouvelle valeur sur le bouton/menu d'icônes (voir setupPlayStylePicker)
         document.getElementById('instrument').value = d.instrument || 'piano';
 
-        const chord = new Chord(d.root, d.quality, beatsFromData(d), d.inversion, d.drop, octaveFromData(d), d.bass);
+        const chord = new Chord(d.root, d.quality, beatsFromData(d), d.inversion, d.drop, octaveFromData(d), d.bass, d.guitarLock, d.extraNotes);
         this.seqTouched = true; // le motif résolu ci-dessous fait autorité, on ne le régénère plus tant qu'on ne touche pas un réglage
         this.seqSelections = [];
         this.seqPage = 0; // nouvel accord chargé pour édition : on repart de sa première mesure
@@ -2941,6 +3231,15 @@ class HarmoHubApp {
         document.getElementById('cancel-edit').hidden = false;
         this.updateEditActionsDocking();
 
+        // Restaure le doigté guitare verrouillé de CET accord (voir toggleGuitarLock) — la vue live
+        // reconstruit son propre Chord à chaque frappe (readChord(), qui ne porte jamais ce champ),
+        // donc ensureGuitarDiagram doit être explicitement autorisé à le garder pour CE recalcul-ci
+        // (sinon il l'effacerait, croyant passer à un accord différent — voir keepGuitarLockOnce).
+        this.guitarLock = d.guitarLock || null;
+        this._keepGuitarLockOnce = true;
+        // Restaure les notes libres déjà enregistrées pour CET accord (voir addSequencerNote) — clonées
+        // pour ne jamais muter directement le tableau stocké dans sections[].chords[].
+        this.extraNotes = (d.extraNotes || []).map(x => ({ ...x }));
         this.refreshPreview();
         this.renderSequencer();
         this.loadProgression();     // met en évidence la case en édition
@@ -2958,6 +3257,9 @@ class HarmoHubApp {
         document.getElementById('save').innerHTML = svgIcon('plus') + ' Ajouter';
         document.getElementById('cancel-edit').hidden = true;
         this.updateEditActionsDocking();
+        // Les notes libres restaurées (voir editChord) étaient propres à CET accord — repartir sans,
+        // comme pour un tout nouvel accord, plutôt que les recopier malgré soi sur le suivant.
+        this.extraNotes = [];
     }
 
     // Déplace le bloc Ajouter/À la suite/Annuler entre sa place normale (juste au-dessus de la carte
@@ -3181,12 +3483,18 @@ class HarmoHubApp {
 
             const titleVal = (sec.title || '').replace(/"/g, '&quot;');
             const canDelete = sections.length > 1;
+            const canMoveUp = si > 0;
+            const canMoveDown = si < sections.length - 1;
+            const canReverse = history.length > 1;
             const measureCountEl = history.length > 0 ? `<span class="prog-section-measures">${sectionMeasureCount(sec, beatsPerBar)} mes.</span>` : '';
             return `
             <div class="prog-section">
                 <div class="prog-section-head">
                     <input type="text" class="prog-title" data-section="${si}" placeholder="Section" value="${titleVal}">
                     ${measureCountEl}
+                    ${canMoveUp ? `<button type="button" class="prog-section-tool prog-section-move-up" data-section="${si}" title="Monter cette partie" aria-label="Monter cette partie">${svgIcon('up')}</button>` : ''}
+                    ${canMoveDown ? `<button type="button" class="prog-section-tool prog-section-move-down" data-section="${si}" title="Descendre cette partie" aria-label="Descendre cette partie">${svgIcon('down')}</button>` : ''}
+                    ${canReverse ? `<button type="button" class="prog-section-tool prog-section-reverse" data-section="${si}" title="Inverser l'ordre des accords de cette partie" aria-label="Inverser l'ordre des accords de cette partie">${svgIcon('reverse')}</button>` : ''}
                     <button type="button" class="icon-btn prog-section-duplicate" data-section="${si}" title="Dupliquer cette partie" aria-label="Dupliquer cette partie">${svgIcon('duplicate')}</button>
                     ${canDelete ? `<button type="button" class="prog-section-del" data-section="${si}" title="Supprimer cette partie" aria-label="Supprimer cette partie">${svgIcon('trash')}</button>` : ''}
                 </div>
@@ -3198,6 +3506,15 @@ class HarmoHubApp {
             input.addEventListener('focus', () => this.setActiveSection(+input.dataset.section));
             input.addEventListener('change', () => this.renameSection(+input.dataset.section, input.value));
             input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); });
+        });
+        host.querySelectorAll('.prog-section-move-up').forEach(btn => {
+            btn.onclick = (e) => { e.stopPropagation(); this.moveSection(+btn.dataset.section, -1); };
+        });
+        host.querySelectorAll('.prog-section-move-down').forEach(btn => {
+            btn.onclick = (e) => { e.stopPropagation(); this.moveSection(+btn.dataset.section, 1); };
+        });
+        host.querySelectorAll('.prog-section-reverse').forEach(btn => {
+            btn.onclick = (e) => { e.stopPropagation(); this.reverseSectionChords(+btn.dataset.section); };
         });
         host.querySelectorAll('.prog-section-del').forEach(btn => {
             btn.onclick = (e) => { e.stopPropagation(); this.deleteSection(+btn.dataset.section); };
@@ -3316,6 +3633,45 @@ class HarmoHubApp {
         this.selectedIndex = null;
         // Une partie insérée décale les index des suivantes : plus sûr de redéfinir la plage à boucler
         // (si elle existe) que de tenter de la remapper.
+        if (this.loopRange) this.loopRange = null;
+        this.loadProgression();
+    }
+
+    // Échange une partie entière avec sa voisine immédiate (haut/bas selon delta = -1/+1) — l'ordre
+    // DANS chaque partie ne change pas, seul l'ordre des parties elles-mêmes est affecté.
+    moveSection(s, delta) {
+        const sections = loadProgressionSections();
+        const t = s + delta;
+        if (t < 0 || t >= sections.length) return;
+        this.pushUndo(sections);
+        [sections[s], sections[t]] = [sections[t], sections[s]];
+        saveProgressionSections(sections);
+        if (this.editingIndex != null && (this.activeSection === s || this.activeSection === t)) this.exitEditMode();
+        if (this.activeSection === s) this.activeSection = t;
+        else if (this.activeSection === t) this.activeSection = s;
+        this.selectedIndex = null;
+        // Comme pour supprimer/dupliquer une partie : plus sûr de redéfinir la plage à boucler (si
+        // elle existe) que de tenter de la remapper après cet échange.
+        if (this.loopRange) this.loopRange = null;
+        this.loadProgression();
+    }
+
+    // Inverse l'ordre des accords D'UNE SEULE partie (ex. pour essayer une progression à l'envers) —
+    // ne touche ni son titre, ni les autres parties.
+    reverseSectionChords(s) {
+        const sections = loadProgressionSections();
+        const sec = sections[s];
+        if (!sec || sec.chords.length < 2) return;
+        this.pushUndo(sections);
+        sec.chords.reverse();
+        saveProgressionSections(sections);
+        if (this.activeSection === s) {
+            if (this.editingIndex != null) this.exitEditMode();
+            this.selectedIndex = null;
+        }
+        // Chaque accord garde ses données mais change d'index : une plage à boucler ou une sélection
+        // dans cette partie pointerait sur le mauvais accord après coup — même parti pris que pour
+        // déplacer/supprimer une partie.
         if (this.loopRange) this.loopRange = null;
         this.loadProgression();
     }
@@ -4549,7 +4905,7 @@ class HarmoHubApp {
                 page1 += `<div class="print-chord-row">`;
                 cells.filter(c => c.row === r).forEach(s => {
                     const data = sec.chords[s.index];
-                    const chord = new Chord(data.root, data.quality, beatsFromData(data), data.inversion, data.drop, octaveFromData(data), data.bass);
+                    const chord = new Chord(data.root, data.quality, beatsFromData(data), data.inversion, data.drop, octaveFromData(data), data.bass, data.guitarLock, data.extraNotes);
                     const chordUseFlats = useFlatsForChordRoot(NOTES.indexOf(data.root), NOTES.indexOf(gRoot), gMode, useFlats);
                     const sym = chord.getBareLabel(chordUseFlats) + ((s.split && !s.isFirst) ? ' ↩' : '');
                     const roman = (s.isFirst && this.showRomanNumerals) ? this.getRomanNumeral(gRoot, gMode, data.root, data.quality) : '';
@@ -4679,7 +5035,7 @@ class HarmoHubApp {
             if (sec.title && sec.title.trim()) meta.push(tick, midiTextEvent(0x06, sec.title.trim()));
             sec.chords.forEach(data => {
                 const beats = beatsFromData(data);
-                const chord = new Chord(data.root, data.quality, beats, data.inversion, data.drop, octaveFromData(data), data.bass);
+                const chord = new Chord(data.root, data.quality, beats, data.inversion, data.drop, octaveFromData(data), data.bass, null, data.extraNotes);
                 const midis = chord.getSeqMidiNotes();
                 const { pattern, tie } = this.resolveSeqPatternForData(chord, data);
                 const steps = pattern.length;
@@ -4787,7 +5143,7 @@ class HarmoHubApp {
             sections.forEach(sec => {
                 sec.chords.forEach(data => {
                     const beats = beatsFromData(data);
-                    const chord = new Chord(data.root, data.quality, beats, data.inversion, data.drop, octaveFromData(data), data.bass);
+                    const chord = new Chord(data.root, data.quality, beats, data.inversion, data.drop, octaveFromData(data), data.bass, null, data.extraNotes);
                     const notes = chord.getSeqNotes();
                     const { pattern, tie } = this.resolveSeqPatternForData(chord, data);
                     const steps = pattern.length;
@@ -5216,6 +5572,16 @@ class HarmoHubApp {
         if (d.menuShown && !d.moved) return;
 
         if (!d.moved) {
+            // Dans la loupe grille (outil de modification rapide, voir editChordFromGridZoom) : un
+            // seul clic n'importe où sur la case — y compris pile sur le symbole, qui ouvrirait sinon
+            // son édition inline — charge directement l'accord pour édition, le séquenceur épinglé en
+            // bas devant suivre l'accord touché sans étape intermédiaire. Renommer le symbole se fait
+            // alors depuis le panneau Accord (root/qualité), rechargé du même coup.
+            if (this.gridZoomOpen) {
+                this._lastTap = null;
+                this.editChordFromGridZoom(d.section, d.index);
+                return;
+            }
             if (d.symTarget) {
                 // Tap/clic pile sur le texte de l'accord (voir onGridPointerDown) : édition inline
                 // immédiate, pas de sélection/écoute ni d'attente d'un éventuel second tap.
@@ -6127,6 +6493,7 @@ class HarmoHubApp {
         document.getElementById('seq-zoom-host').appendChild(host);
         host.classList.add('seq-zoomed');
         document.getElementById('seq-zoom-overlay').hidden = false;
+        this.applyZoomLevel('seq');
     }
 
     // Remet #arp-sequencer à sa place d'origine dans le volet Lecture (juste après #arpPattern,
@@ -6138,6 +6505,155 @@ class HarmoHubApp {
         const host = document.getElementById('arp-sequencer');
         host.classList.remove('seq-zoomed');
         document.getElementById('arpPattern').insertAdjacentElement('afterend', host);
+    }
+
+    // Même principe qu'openSeqZoom/closeSeqZoom, pour la grille d'accords cette fois : déplace
+    // #progression-sections + le bouton "Ajouter une partie" dans la fenêtre agrandie (jamais ne les
+    // duplique), toutes leurs interactions (glisser-déposer, étirement, menu contextuel...) restant
+    // celles déjà câblées sur les vrais éléments.
+    openGridZoom() {
+        this.gridZoomOpen = true;
+        const grid = document.getElementById('progression-sections');
+        const addBtn = document.getElementById('add-section');
+        const dest = document.getElementById('grid-zoom-host');
+        dest.appendChild(grid);
+        dest.appendChild(addBtn);
+        document.getElementById('grid-zoom-overlay').hidden = false;
+        this.applyZoomLevel('grid');
+
+        // Séquenceur épinglé : toujours affiché une fois la loupe ouverte (masquable ensuite via son
+        // propre chevron, voir toggleGridZoomPinnedSeq) — reflète tout de suite un accord déjà en
+        // édition (ex. double-clic fait avant d'ouvrir la loupe), sinon affiche le message d'attente.
+        document.getElementById('grid-zoom-pinned-seq').hidden = false;
+        document.getElementById('grid-zoom-pinned-body').style.height =
+            `${parseInt(localStorage.getItem(GRID_ZOOM_SEQ_HEIGHT_KEY)) || GRID_ZOOM_SEQ_HEIGHT_DEFAULT}px`;
+        this.applyGridZoomPinnedCollapsed();
+        if (this.editingIndex != null) this.pinSequencerHost();
+        this.syncGridZoomPinnedSeq();
+    }
+
+    // Remet #progression-sections et #add-section à leur place d'origine (juste après la rangée
+    // d'ajout rapide, voir index.html) — sans effet si la fenêtre agrandie n'était pas ouverte.
+    closeGridZoom() {
+        if (!this.gridZoomOpen) return;
+        this.gridZoomOpen = false;
+        document.getElementById('grid-zoom-overlay').hidden = true;
+        const grid = document.getElementById('progression-sections');
+        const addBtn = document.getElementById('add-section');
+        const anchor = document.querySelector('.quick-add-row');
+        anchor.insertAdjacentElement('afterend', grid);
+        grid.insertAdjacentElement('afterend', addBtn);
+
+        // Le séquenceur épinglé n'a de sens que DANS la loupe grille : remettre #arp-sequencer à sa
+        // place habituelle du volet Lecture (comme closeSeqZoom) — this.seqOpen n'est pas remis à
+        // false pour autant, il continue d'y apparaître normalement si toujours vrai.
+        document.getElementById('grid-zoom-pinned-seq').hidden = true;
+        const seqHost = document.getElementById('arp-sequencer');
+        if (document.getElementById('grid-zoom-pinned-body').contains(seqHost)) {
+            document.getElementById('arpPattern').insertAdjacentElement('afterend', seqHost);
+        }
+    }
+
+    // Clic sur un accord DANS la loupe grille (voir onGridPointerUp) : le charge directement pour
+    // édition — pas besoin d'un double-clic ici, l'intérêt même de cet outil de modification rapide
+    // — et pousse aussitôt son rythme dans le séquenceur épinglé en bas de la fenêtre.
+    editChordFromGridZoom(section, index) {
+        this.seqOpen = true;
+        document.getElementById('toggle-sequencer').classList.add('active');
+        this.pinSequencerHost();
+        this.editChord(section, index);
+        this.syncGridZoomPinnedSeq();
+    }
+
+    // Déplace #arp-sequencer dans #grid-zoom-pinned-body s'il n'y est pas déjà (jamais ne le
+    // duplique) — même principe qu'openSeqZoom, pour cet emplacement épinglé plutôt qu'une fenêtre
+    // séparée.
+    pinSequencerHost() {
+        const body = document.getElementById('grid-zoom-pinned-body');
+        const host = document.getElementById('arp-sequencer');
+        if (!body.contains(host)) body.appendChild(host);
+    }
+
+    // Reflète l'état courant (accord en édition ou non) dans l'en-tête/le corps du séquenceur
+    // épinglé — appelé après un chargement (editChordFromGridZoom), un Enregistrer/Annuler, ou
+    // l'ouverture de la loupe grille si un accord était déjà en édition avant coup.
+    syncGridZoomPinnedSeq() {
+        const editing = this.editingIndex != null;
+        const title = document.getElementById('grid-zoom-pinned-title');
+        title.textContent = editing
+            ? flatTight(this.readChord().getLabel(this.useFlatsForRoot(document.getElementById('root').value)))
+            : 'Séquenceur';
+        document.getElementById('grid-zoom-pinned-placeholder').hidden = editing;
+        document.getElementById('grid-zoom-pinned-body').hidden = !editing;
+        document.getElementById('grid-zoom-pinned-save').hidden = !editing;
+        document.getElementById('grid-zoom-pinned-cancel').hidden = !editing;
+    }
+
+    // Replie/déplie le séquenceur épinglé (chevron dans son en-tête) : masqué complètement (ne garde
+    // que l'en-tête, comme la carte Morceau — voir toggleSongCardCollapse) sans perdre le motif en
+    // cours, mémorisé d'une session à l'autre.
+    toggleGridZoomPinnedSeq() {
+        this.gridZoomSeqCollapsed = !this.gridZoomSeqCollapsed;
+        localStorage.setItem(GRID_ZOOM_SEQ_COLLAPSED_KEY, this.gridZoomSeqCollapsed ? '1' : '0');
+        this.applyGridZoomPinnedCollapsed();
+    }
+
+    applyGridZoomPinnedCollapsed() {
+        const el = document.getElementById('grid-zoom-pinned-seq');
+        el.classList.toggle('collapsed', this.gridZoomSeqCollapsed);
+        const btn = document.getElementById('grid-zoom-pinned-toggle');
+        btn.setAttribute('aria-pressed', String(!this.gridZoomSeqCollapsed));
+        const label = this.gridZoomSeqCollapsed ? 'Afficher le séquenceur' : 'Masquer le séquenceur';
+        btn.title = label;
+        btn.setAttribute('aria-label', label);
+    }
+
+    // Glisser la poignée du haut change la hauteur de #grid-zoom-pinned-body (pas celle du conteneur
+    // lui-même, voir le commentaire CSS de .grid-zoom-pinned-seq) — glisser VERS LE HAUT agrandit
+    // (la poignée est en haut du panneau, "la tirer vers le haut" l'agrandit vers le haut).
+    setupGridZoomPinnedResize() {
+        const handle = document.getElementById('grid-zoom-pinned-resize');
+        const body = document.getElementById('grid-zoom-pinned-body');
+        let startY = 0, startHeight = 0;
+        const onMove = (e) => {
+            const modal = document.querySelector('.grid-zoom-modal');
+            const maxHeight = Math.round(modal.getBoundingClientRect().height * 0.75);
+            const next = Math.max(GRID_ZOOM_SEQ_HEIGHT_MIN, Math.min(maxHeight, startHeight - (e.clientY - startY)));
+            body.style.height = `${next}px`;
+        };
+        const onUp = () => {
+            window.removeEventListener('pointermove', onMove);
+            window.removeEventListener('pointerup', onUp);
+            localStorage.setItem(GRID_ZOOM_SEQ_HEIGHT_KEY, String(parseInt(body.style.height)));
+        };
+        handle.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            startY = e.clientY;
+            startHeight = body.getBoundingClientRect().height;
+            window.addEventListener('pointermove', onMove);
+            window.addEventListener('pointerup', onUp, { once: true });
+        });
+    }
+
+    // Règle le niveau de zoom (indépendant pour le séquenceur et la grille) d'un cran, une fois la
+    // fenêtre agrandie correspondante déjà ouverte (boutons loupe+/loupe- ou Ctrl+molette dans cette
+    // fenêtre, voir les écouteurs "wheel" plus haut) — mémorisé d'une session à l'autre.
+    adjustZoom(kind, delta) {
+        const levelKey = kind === 'seq' ? 'seqZoomLevel' : 'gridZoomLevel';
+        const storageKey = kind === 'seq' ? SEQ_ZOOM_LEVEL_KEY : GRID_ZOOM_LEVEL_KEY;
+        const next = Math.round(Math.max(ZOOM_LEVEL_MIN, Math.min(ZOOM_LEVEL_MAX, this[levelKey] + delta)) * 100) / 100;
+        this[levelKey] = next;
+        localStorage.setItem(storageKey, String(next));
+        this.applyZoomLevel(kind);
+    }
+
+    // `zoom` (propriété CSS) plutôt que `transform: scale` : recalcule vraiment la mise en page (et
+    // donc le défilement) à la nouvelle taille, sans avoir à corriger soi-même les dimensions/le
+    // scroll comme l'aurait exigé un simple agrandissement visuel par transformation.
+    applyZoomLevel(kind) {
+        const hostId = kind === 'seq' ? 'seq-zoom-host' : 'grid-zoom-host';
+        const host = document.getElementById(hostId);
+        if (host) host.style.zoom = String(this[kind === 'seq' ? 'seqZoomLevel' : 'gridZoomLevel']);
     }
 
     // Menu contextuel d'un accord de la grille (« Séquenceur ») : le charge dans le panneau Accord
@@ -6154,11 +6670,15 @@ class HarmoHubApp {
     }
 
     renderSequencer() {
-        const chord = this.syncSeqPatternForCurrentChord();
         const host = document.getElementById('arp-sequencer');
         if (!host) return;
         host.hidden = !this.seqOpen;
         if (!this.seqOpen) return;
+        // Avant toute chose : une note libre jouée assez longtemps depuis le dernier rendu complète-
+        // t-elle désormais l'accord (voir reevaluateExtraNoteUpgrades) ? Peut changer la qualité/le
+        // nombre de voix, donc AVANT de (re)synchroniser le motif ci-dessous.
+        this.reevaluateExtraNoteUpgrades();
+        const chord = this.syncSeqPatternForCurrentChord();
 
         const midis = chord.getSeqMidiNotes();
         const noteNames = chord.getSeqDisplayNotes(this.useFlatsForRoot(chord.root));
@@ -6210,10 +6730,25 @@ class HarmoHubApp {
         // `data-step` garde l'indice ABSOLU (pas relatif à la page) : le glissé/étirement (voir
         // onSeqPointerDown et findSeqStepAt, qui ne connaissent que les cases réellement dans le
         // DOM, donc celles de la page affichée) continue de raisonner sur le motif complet.
+        // Les voix "notes libres" (voir addSequencerNote) occupent toujours les indices juste après
+        // les voix normales de la qualité, avant la basse éventuelle (voir _computeVoices) — leur
+        // étiquette devient un champ éditable au lieu d'un simple texte, seul endroit où renommer une
+        // note directement (voir commitExtraNoteLabel). `rowOrder` les replace déjà au bon endroit
+        // visuellement (tri par hauteur), sans rien à faire de spécial ici pour ça.
+        const extraStart = chord.getIntervals().length;
+        const extraEnd = extraStart + chord.extraNotes.length;
+
         let rowIndex = 0;
         for (const r of rowOrder) {
             rowIndex++;
-            html += `<div class="seq-label" style="grid-row:${rowIndex}; grid-column:1;">${noteNames[r]}</div>`;
+            if (r >= extraStart && r < extraEnd) {
+                const extraIdx = r - extraStart;
+                html += `<div class="seq-label seq-label-extra" style="grid-row:${rowIndex}; grid-column:1;">
+                    <input type="text" class="seq-label-input" data-extra-index="${extraIdx}" data-voice="${r}" value="${escapeHtml(noteNames[r])}" title="Note libre : tape une hauteur (ex. E3), ou vide pour la supprimer" autocomplete="off" autocapitalize="off" spellcheck="false">
+                </div>`;
+            } else {
+                html += `<div class="seq-label" data-voice="${r}" title="Cliquer pour écouter cette note" style="grid-row:${rowIndex}; grid-column:1;">${noteNames[r]}</div>`;
+            }
             for (let s = pageStart; s < pageEnd; s++) {
                 const col = s - pageStart;
                 const beatStart = (s % SEQ_STEPS_PER_BEAT === 0) ? ' beat-start' : '';
@@ -6320,12 +6855,35 @@ class HarmoHubApp {
             <button type="button" id="seq-play" class="btn-prog seq-icon-btn" title="Lecture" aria-label="Lecture">${svgIcon('play')}</button>
             <button type="button" id="seq-stop" class="btn-stop seq-icon-btn" title="Stop" aria-label="Stop">${svgIcon('stop')}</button>
             <button type="button" id="seq-loop-play" class="icon-btn seq-icon-btn${this.seqLoopPlay ? ' active' : ''}" title="Rejouer en boucle" aria-label="Rejouer en boucle">${svgIcon('loop')}</button>
+            <button type="button" id="seq-add-note" class="icon-btn seq-icon-btn" title="Ajouter une note libre (ex. note de passage)" aria-label="Ajouter une note libre">${svgIcon('plus')}</button>
             <button type="button" data-preset="clear" class="seq-delete-btn">${svgIcon('trash')} tout</button>
             <button type="button" id="seq-delete-selection" class="seq-delete-btn" ${hasSelection ? '' : 'disabled'}>${svgIcon('trash')}
                 <span class="lbl-full">sélection${countSuffix}</span><span class="lbl-short">Sélect.${countSuffix}</span>
             </button>
         </div>`;
         host.innerHTML = html;
+
+        // Étiquette éditable d'une note libre (voir addSequencerNote) : Entrée valide (déclenche le
+        // blur ci-dessous), Échap annule sans valider — même schéma que les autres renommages en
+        // ligne de l'appli (morceau, dossier...).
+        host.querySelectorAll('.seq-label-input').forEach(input => {
+            const extraIdx = parseInt(input.dataset.extraIndex);
+            input.addEventListener('keydown', (e) => {
+                e.stopPropagation();
+                if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+                else if (e.key === 'Escape') { e.preventDefault(); input.value = input.defaultValue; input.blur(); }
+            });
+            input.addEventListener('blur', () => this.commitExtraNoteLabel(extraIdx, input.value));
+            // Écouter la hauteur au clic, comme les étiquettes normales ci-dessous : n'empêche pas le
+            // focus/l'édition du texte qui suit ce même clic (pas de preventDefault ici).
+            input.addEventListener('click', () => this.previewSeqNote(+input.dataset.voice));
+        });
+
+        // Étiquette normale (hauteur non modifiable) : clic = écouter cette voix, pratique pour
+        // vérifier une note à l'oreille sans avoir à lancer toute la lecture de l'accord.
+        host.querySelectorAll('.seq-label[data-voice]').forEach(label => {
+            label.addEventListener('click', () => this.previewSeqNote(+label.dataset.voice));
+        });
 
         // Bouton « X tout » (remplace tout le motif par du silence) : ciblé via [data-preset] pour
         // ne pas capturer « X sélection » ci-dessous, qui a son propre câblage.
@@ -6352,6 +6910,8 @@ class HarmoHubApp {
             this.seqLoopPlay = !this.seqLoopPlay;
             e.currentTarget.classList.toggle('active', this.seqLoopPlay);
         };
+        const addNoteBtn = document.getElementById('seq-add-note');
+        if (addNoteBtn) addNoteBtn.onclick = () => this.addSequencerNote();
 
         // Navigation par page : saut direct d'une mesure (ou groupe de mesures) à l'autre, jamais de
         // scroll continu (voir le commentaire plus haut sur le conflit avec l'étirement tactile).
@@ -6359,6 +6919,98 @@ class HarmoHubApp {
         if (prevBtn) prevBtn.onclick = () => { this.seqPage--; this.renderSequencer(); };
         const nextBtn = document.getElementById('seq-page-next');
         if (nextBtn) nextBtn.onclick = () => { this.seqPage++; this.renderSequencer(); };
+    }
+
+    // Ajoute une voix "libre" au séquenceur (bouton dédié, voir #seq-add-note) : hauteur de départ
+    // arbitraire (une tierce mineure au-dessus de la voix la plus aiguë actuelle, ou La3 à défaut de
+    // voix) — l'essentiel est de faire apparaître aussitôt le champ éditable (voir renderSequencer)
+    // pour que la vraie hauteur voulue soit tapée dans la foulée. Toujours ajoutée à la fin de
+    // extraNotes : sa position d'AFFICHAGE dans le séquenceur (triée par hauteur) se corrige d'elle-
+    // même dès que sa vraie hauteur est validée (voir commitExtraNoteLabel).
+    addSequencerNote() {
+        const chord = this.readChord();
+        const midis = chord.getSeqMidiNotes();
+        const highestMidi = midis.length ? Math.max(...midis) : 57; // La3 à défaut de tout accord jouable
+        const defaultMidi = highestMidi + 3;
+        const pc = ((defaultMidi % 12) + 12) % 12;
+        const octave = Math.floor(defaultMidi / 12) - 1;
+        this.extraNotes.push({ note: NOTES[pc], octave });
+        this.seqTouched = true; // le motif doit garder cette voix (voir syncSeqPatternForCurrentChord)
+        this.renderSequencer();
+        this.refreshPreview();
+        // Focus + sélection immédiate du champ fraîchement créé : la valeur par défaut n'a aucun sens
+        // musical, autant la remplacer tout de suite sans avoir à cliquer.
+        const input = document.querySelector(`.seq-label-input[data-extra-index="${this.extraNotes.length - 1}"]`);
+        if (input) { input.focus(); input.select(); }
+    }
+
+    // Valide (ou annule) la saisie d'une note libre (voir addSequencerNote) : texte vide -> supprime
+    // cette voix ; hauteur reconnue (ex. "E3") -> mémorisée telle quelle. La hauteur seule ne décide
+    // JAMAIS de renommer l'accord (une note fraîchement tapée n'a encore aucun rythme peint, donc
+    // aucune durée) — c'est reevaluateExtraNoteUpgrades, appelé à chaque rendu du séquenceur, qui
+    // tranche une fois qu'on l'a réellement jouée (voir les seuils SEQ_HELD_MIN_STEPS/
+    // SEQ_STACCATO_MIN_COVERAGE plus haut).
+    commitExtraNoteLabel(extraIndex, text) {
+        const trimmed = text.trim();
+        if (!trimmed) {
+            this.extraNotes.splice(extraIndex, 1);
+            this.renderSequencer();
+            this.refreshPreview();
+            return;
+        }
+        const parsed = parseNoteNameOctave(trimmed);
+        if (!parsed) {
+            this.flashHint('Note non reconnue (ex. E3, F#4, Bb2)');
+            this.renderSequencer(); // revient à l'ancienne valeur (le rendu relit this.extraNotes)
+            return;
+        }
+        this.extraNotes[extraIndex] = { note: parsed.note, octave: parsed.octave };
+        this.seqTouched = true;
+        this.renderSequencer();
+        this.refreshPreview();
+    }
+
+    // Réévalue, à CHAQUE rendu du séquenceur (peindre/étirer/effacer une case, pas seulement taper le
+    // nom de la note), si une note libre est désormais jouée assez longtemps pour compléter l'accord
+    // (voir seqCoverageQualifies) : si oui, absorbée dans la qualité de l'accord comme
+    // commitExtraNoteLabel le faisait autrefois sur la seule hauteur ; sinon reste une note
+    // "étrangère" (de passage), même si sa hauteur complèterait pile une qualité reconnue — SEULE la
+    // durée réellement jouée décide désormais, jamais la hauteur seule (retour utilisateur).
+    // Rappelée en boucle tant qu'une note se qualifie : en fusionner une décale les index des
+    // suivantes (voir _computeVoices), plus sûr de tout recalculer depuis le début à chaque fois.
+    reevaluateExtraNoteUpgrades() {
+        let again = this.extraNotes.length > 0;
+        while (again) {
+            again = false;
+            const chord = this.readChord();
+            const { pattern, tie } = this.getLiveSeqPattern(chord);
+            const extraStart = chord.getIntervals().length;
+
+            for (let i = 0; i < this.extraNotes.length; i++) {
+                const cov = seqVoiceCoverage(pattern, tie, extraStart + i);
+                if (!seqCoverageQualifies(cov)) continue;
+
+                const qualitySelect = document.getElementById('quality');
+                const rootPc = NOTES.indexOf(document.getElementById('root').value);
+                const relPc = ((NOTES.indexOf(this.extraNotes[i].note) - rootPc) % 12 + 12) % 12;
+                const currentSet = pitchClassSetForQuality(qualitySelect.value);
+                const unionSet = new Set([...currentSet, relPc]);
+                const matched = findQualityMatchingPitchClasses(unionSet);
+                if (!matched || matched === qualitySelect.value) continue; // jouée assez longtemps, mais ne complète rien de reconnu
+
+                // Révéler d'ABORD (peut reconstruire la liste d'options du <select>, voir
+                // activateMoreOptions/toggleSelectOptions) : régler la valeur avant l'effacerait, la
+                // qualité visée n'existant pas encore dans les options tant que le mode courant reste
+                // masqué (même ordre qu'editChord, qui a le même piège avec la basse différente).
+                this.revealComplexQualityIfNeeded(matched);
+                qualitySelect.value = matched;
+                this.extraNotes.splice(i, 1);
+                const label = QUALITY_LABEL[matched] || '';
+                this.flashHint(`Accord complété : ${document.getElementById('root').value}${label}`);
+                again = this.extraNotes.length > 0;
+                break; // état changé (qualité + extraNotes) : on recommence le for depuis le début
+            }
+        }
     }
 
     // Déplace le curseur de lecture (petite ligne verticale) du séquenceur au pas `step` en cours ;
@@ -6396,7 +7048,7 @@ class HarmoHubApp {
         const data = sections[section] && sections[section].chords[index];
         if (!data) return;
 
-        const chord = new Chord(data.root, data.quality, beatsFromData(data), data.inversion, data.drop, octaveFromData(data), data.bass);
+        const chord = new Chord(data.root, data.quality, beatsFromData(data), data.inversion, data.drop, octaveFromData(data), data.bass, null, data.extraNotes);
         const notes = chord.getSeqNotes();
         const midis = chord.getSeqMidiNotes();
         const roleMap = chord.getRoleMap();
@@ -6617,6 +7269,7 @@ class HarmoHubApp {
             if (e.key === 'Escape' && !document.getElementById('playstyle-dd-menu').hidden) { this.closePlayStyleMenu(); return; }
             if (e.key === 'Escape' && this.settingsOpen) { this.closeSettings(); return; }
             if (e.key === 'Escape' && this.seqZoomOpen) { this.closeSeqZoom(); return; }
+            if (e.key === 'Escape' && this.gridZoomOpen) { this.closeGridZoom(); return; }
 
             // Barre d'espace : joue/stoppe l'accord courant si le séquenceur est ouvert (pour
             // itérer vite dessus sans la souris), sinon la progression entière. Volontairement PAS
@@ -6760,6 +7413,12 @@ class HarmoHubApp {
         }
         this.pushUndo(sections);
         data.octave = next;
+        // Un doigté verrouillé (voir toggleGuitarLock) peut dépendre de l'octave (voicing personnalisé
+        // envoyé au solveur exact) ou pas du tout (forme communément enseignée, indépendante de
+        // l'octave) — impossible de savoir laquelle sans refaire tout le calcul ici. Plus sûr de
+        // relâcher le verrou : le choix automatique retombera de toute façon sur la même forme pour un
+        // accord standard, et sur une forme cohérente avec la nouvelle octave sinon.
+        data.guitarLock = null;
         saveProgressionSections(sections);
         hasUnsavedChanges = true;
         if (this.editingIndex === index && this.activeSection === section) this.editChord(section, index);
