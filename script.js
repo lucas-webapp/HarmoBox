@@ -5776,9 +5776,9 @@ class HarmoHubApp {
         const hasSelection = this.seqSelections.length > 0;
         const countSuffix = this.seqSelections.length > 1 ? ` (${this.seqSelections.length})` : '';
         html += `<div class="seq-presets">
-            <button type="button" id="seq-play" class="btn-prog">${svgIcon('play')} Lecture</button>
-            <button type="button" id="seq-loop-play" class="icon-btn${this.seqLoopPlay ? ' active' : ''}" title="Rejouer en boucle" aria-label="Rejouer en boucle">${svgIcon('loop')}</button>
-            <button type="button" id="seq-stop" class="btn-stop">${svgIcon('stop')} Stop</button>
+            <button type="button" id="seq-play" class="btn-prog seq-icon-btn" title="Lecture" aria-label="Lecture">${svgIcon('play')}</button>
+            <button type="button" id="seq-stop" class="btn-stop seq-icon-btn" title="Stop" aria-label="Stop">${svgIcon('stop')}</button>
+            <button type="button" id="seq-loop-play" class="icon-btn seq-icon-btn${this.seqLoopPlay ? ' active' : ''}" title="Rejouer en boucle" aria-label="Rejouer en boucle">${svgIcon('loop')}</button>
             <button type="button" data-preset="clear" class="seq-delete-btn">${svgIcon('trash')} tout</button>
             <button type="button" id="seq-delete-selection" class="seq-delete-btn" ${hasSelection ? '' : 'disabled'}>${svgIcon('trash')}
                 <span class="lbl-full">sélection${countSuffix}</span><span class="lbl-short">Sélect.${countSuffix}</span>

@@ -1876,9 +1876,21 @@ button:active { transform: translateY(1px); }
     font-size: var(--fs-sm);
 }
 
-/* Bouton Boucle : reste un icon-btn carré (comme dans les autres en-têtes), pas étiré à égalité avec
-   les gros boutons texte de cette rangée. */
-.seq-presets .icon-btn { flex: none; padding: 0; }
+/* Lecture/Stop/Boucle : icône seule (déjà identifiés par leur couleur/forme une fois dans le
+   séquenceur), groupés à gauche — le texte "Lecture"/"Stop" prenait trop de place à côté des
+   boutons Supprimer sur mobile. Hauteur ÉTIRÉE (align-self:stretch, l'alignement par défaut de
+   .seq-presets) plutôt que la hauteur fixe 28px d'un .icon-btn ordinaire, pour rester alignés sur
+   les boutons Supprimer juste à côté. */
+.seq-presets .seq-icon-btn {
+    flex: none;
+    width: 44px;
+    height: auto;
+    align-self: stretch;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
 
 /* Bouton dédié : supprime uniquement les notes sélectionnées, sans toucher au reste du motif */
 .seq-delete-btn:not(:disabled) {
