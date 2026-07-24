@@ -214,6 +214,20 @@ button, .icon-btn, .prog-section-del, .seq-presets button, .seq-delete-btn {
     overflow: hidden;
 }
 
+/* Boîte de dialogue « modifications non enregistrées » (voir confirmDiscardUnsavedIfNeeded dans
+   script.js) : bien plus compacte que .settings-modal (pas de liste de réglages à faire défiler),
+   juste un message et 4 actions empilées — plus facile à viser au doigt qu'une rangée de boutons. */
+.unsaved-modal { max-width: 380px; }
+.unsaved-modal-body { padding-top: 4px; }
+.unsaved-modal-body p { margin: 0 0 16px; color: var(--text-muted); }
+.unsaved-modal-actions { display: flex; flex-direction: column; gap: 8px; }
+.unsaved-modal-actions button { width: 100%; }
+.unsaved-modal-nameprompt label { display: block; margin-bottom: 6px; color: var(--text-muted); font-size: var(--fs-sm); }
+.unsaved-modal-nameprompt input { width: 100%; box-sizing: border-box; margin-bottom: 14px; }
+/* Doit passer devant .settings-overlay (z-index 100) : peut s'ouvrir PAR-DESSUS la fenêtre Paramètres
+   elle-même (voir openSongFromFiles dans script.js, appelée depuis l'onglet Fichiers). */
+#unsaved-modal { z-index: 200; }
+
 /* Fenêtre agrandie du séquenceur (voir #seq-zoom-overlay/openSeqZoom) : même habillage que
    .settings-modal, mais bien plus large/haute — tout l'intérêt est de donner beaucoup plus de place
    à chaque case pour modifier vite, y compris avec de nombreuses mesures à parcourir. */
@@ -290,6 +304,19 @@ button, .icon-btn, .prog-section-del, .seq-presets button, .seq-delete-btn {
 
 /* ---- Panneau Fichiers ---- */
 .files-empty { color: var(--text-muted); font-size: var(--fs-sm); text-align: center; padding: 30px 10px; }
+
+/* Explique où atterrissent les exports (voir renderFilesPanel) : une page web ne peut ni choisir ni
+   retenir un dossier de destination par défaut, seul le réglage du navigateur en décide. */
+.files-location-info {
+    margin: 0 0 14px;
+    padding: 10px 12px;
+    background: var(--bg-soft, rgba(255,255,255,0.04));
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
+    line-height: 1.5;
+}
 
 /* Barre d'outils : créer un dossier à gauche, export/import de la bibliothèque puis annuler/rétablir à droite */
 .files-toolbar {
@@ -467,12 +494,15 @@ main {
     font-size: var(--fs-base);
 }
 
-/* Ordre : réglages → grille → indicateur (accord/notes) → piano → (pied ancré : édition + lecture) */
+/* Ordre : réglages → grille → bascule piano/guitare → indicateur (accord/notes) → piano →
+   (pied ancré : édition + lecture). La bascule est un enfant DIRECT de .col-right (pas de .viz-wrap)
+   pour pouvoir s'intercaler ici, juste sous "Ajouter une partie" — voir index.html. */
 .panel-controls { order: 1; }
 .history-section { order: 2; }
-#current-chord-display { order: 3; }
-.viz-wrap { order: 4; }
-.dock { order: 5; }
+.viz-toggle { order: 3; }
+#current-chord-display { order: 4; }
+.viz-wrap { order: 5; }
+.dock { order: 6; }
 
 /* Pied de colonne collant : contient la barre de lecture, et .edit-actions quand on édite un accord
    (voir commentaire ci-dessus). Colonne verticale pour empiler les deux rangées de boutons. */
@@ -1119,33 +1149,31 @@ button:active { transform: translateY(1px); }
 .dot-seventh { background: linear-gradient(180deg, #ffc247, #cc8f00); }
 .dot-ext     { background: linear-gradient(180deg, #dba8ee, #c48ce6); }
 
-/* Ligne diagrammes + bascule piano/guitare (icônes empilées à droite) */
-.viz-row {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 14px;
-}
 .viz-diagrams {
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
     align-items: flex-start;
     gap: 24px;
-    flex: 1 1 auto;
     min-width: 0;
 }
 .viz-diagrams .piano-container { flex: 1 1 auto; }
 
-/* Boutons de bascule piano/guitare : empilés verticalement, à droite des schémas (icon-btn pour le
-   style visuel, .active = même surbrillance verte que les autres boutons à bascule de l'appli) */
+/* Boutons de bascule piano/guitare : en ligne, juste sous "Ajouter une partie" — très utilisés, donc
+   volontairement plus grands que les icon-btn habituels (icon-btn pour le style visuel, .active =
+   même surbrillance verte que les autres boutons à bascule de l'appli). */
 .viz-toggle {
     display: flex;
-    flex-direction: column;
-    gap: 6px;
-    flex: none;
+    flex-direction: row;
+    gap: 8px;
+    margin-bottom: 14px;
 }
-.viz-toggle-btn svg { width: 16px; height: 16px; }
+.viz-toggle-btn {
+    flex: 1 1 0;
+    width: auto;
+    height: 44px;
+}
+.viz-toggle-btn svg { width: 20px; height: 20px; }
 
 /* ---------- Guitare ---------- */
 .guitar-viz-wrap {
@@ -1220,20 +1248,29 @@ button:active { transform: translateY(1px); }
      margin-bottom: 15px;
 }
 /* Saisie rapide : ajoute un accord tapé (ex. "Cm7") directement en fin de partie, sans passer par
-   les menus déroulants (voir parseChordSymbol/addQuickChord). */
+   les menus déroulants (voir parseChordSymbol/addQuickChord). C'est un <textarea> (pas un <input>) :
+   Entrée y saute juste une ligne (voir autoResizeQuickAdd/setupQuickAdd dans script.js) — plusieurs
+   lignes remplissent plusieurs parties d'un coup, d'où align-items:flex-start ci-dessous : le bouton
+   "+" doit rester ancré en haut, pas s'étirer sur toute la hauteur au fil des lignes tapées. */
 .quick-add-row {
     display: flex;
+    align-items: flex-start;
     gap: 8px;
     margin-bottom: 16px;
 }
 .quick-add-input {
     flex: 1;
     min-width: 0;
+    min-height: 44px;
+    max-height: 220px;
+    resize: none;
+    overflow-y: auto;
     background: #1c1e24;
     border: 1px solid var(--border);
     border-radius: 8px;
     color: var(--text-main);
     font: inherit;
+    line-height: 1.4;
     /* >= 16px : sous ce seuil, Safari iOS zoome toute la page au focus (voir .cell-sym-input) */
     font-size: max(16px, var(--fs-sm));
     padding: 10px 12px;
@@ -1241,13 +1278,12 @@ button:active { transform: translateY(1px); }
 .quick-add-input:focus { outline: none; border-color: var(--accent); }
 .quick-add-input::placeholder { color: var(--text-muted); }
 
-/* Bouton d'ajout rapide : même hauteur que le champ juste à côté (étirement flex, .quick-add-row
-   n'impose pas align-items donc s'étire par défaut) et bleu comme le bouton "Ajouter" classique
-   (voir .btn-blue) — pour qu'il se voie comme LE bouton d'action de cette rangée, pas une simple
-   icône secondaire parmi d'autres. */
+/* Bouton d'ajout rapide : hauteur fixe ancrée en haut de la rangée (voir .quick-add-row), et bleu
+   comme le bouton "Ajouter" classique (voir .btn-blue) — pour qu'il se voie comme LE bouton d'action
+   de cette rangée, pas une simple icône secondaire parmi d'autres. */
 #quick-add-btn {
-    height: auto;
-    align-self: stretch;
+    height: 44px;
+    align-self: flex-start;
     width: 44px;
     background-image: radial-gradient(120% 160% at 20% 0%, rgba(255,255,255,0.10), transparent 55%), linear-gradient(160deg, var(--btn-blue-1), var(--btn-blue-2) 70%);
     color: var(--btn-text);
@@ -1256,6 +1292,22 @@ button:active { transform: translateY(1px); }
 #quick-add-btn:hover {
     background-image: radial-gradient(120% 160% at 20% 0%, rgba(255,255,255,0.16), transparent 55%), linear-gradient(160deg, #2d4570, #1e304e 70%);
     border-color: var(--btn-blue-border-hover);
+}
+
+/* Popover d'aide de l'ajout rapide (voir #quick-add-help-btn) : même habillage que .context-menu,
+   liste très courte plutôt que des phrases — au plus court, pas une notice à lire. */
+.quick-add-help {
+    max-width: 250px;
+    cursor: default;
+}
+.quick-add-help ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 7px; }
+.quick-add-help li { font-size: var(--fs-sm); font-weight: 400; line-height: 1.4; color: var(--text-main); }
+.quick-add-help code {
+    background: #1c1e24;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-size: 0.9em;
 }
 
 /* Une partie de la chanson (couplet, refrain, ...) : titre éditable + sa propre grille. */
@@ -1644,6 +1696,7 @@ button:active { transform: translateY(1px); }
     border-radius: 5px;
     background-image: radial-gradient(120% 160% at 25% 20%, rgba(255,255,255,0.4), transparent 60%), linear-gradient(160deg, #ffd54f, #ffb300 75%);
     box-shadow: 0 1px 0 rgba(255,255,255,0.3) inset, 0 0 6px rgba(255, 179, 0, 0.4), 0 2px 4px rgba(0,0,0,0.3);
+    opacity: 0.7; /* un peu plus transparente : reste bien visible mais laisse deviner la grille dessous */
     z-index: 1;
     cursor: pointer;
     pointer-events: auto;
@@ -2099,6 +2152,7 @@ select.song-select-narrow {
         min-height: 0;
         gap: 16px;
     }
+    .viz-toggle { flex: none; }
     #current-chord-display { flex: none; }
     .viz-wrap { flex: none; }
     .history-section {

@@ -1454,7 +1454,8 @@ class HarmoHubApp {
         this.selectedIndex = null; // accord sélectionné dans la grille (au sein de la partie active)
         this.editingIndex = null;  // accord en cours de modification (au sein de la partie active)
         this.drag = null;          // état de glisser-déposer
-        this.loopRange = null;     // {section, start, end} : boucle sur une PLAGE d'accords voisins
+        this.loopRange = null;     // {startSection, startIndex, endSection, endIndex} : boucle sur une
+                                    // PLAGE d'accords voisins, qui peut traverser plusieurs parties
                                     // (glisser sur la ligne des numéros de mesure, voir
                                     // setupLoopRangeInteractions/playProgression) — comme la barre de
                                     // cycle jaune de GarageBand. Distinct de loopActiveSection (boucle
@@ -1506,8 +1507,13 @@ class HarmoHubApp {
         this.setupEventListeners();
         this.setupDurationPicker();
         this.setupPlayStylePicker();
-        this.setupGridInteractions();
+        // La plage à boucler d'ABORD : les deux écoutent 'pointerdown' sur le même conteneur, et
+        // onLoopRangeStart doit pouvoir couper court (stopImmediatePropagation) avant qu'onGridPointerDown
+        // ne change la partie active et ne re-rende la grille — sinon l'élément qu'il vient de capturer
+        // (pour mesurer sa position) se retrouve détaché en plein milieu du même événement, faussant
+        // tout calcul de coordonnées qui suit (repéré en étendant la plage vers une partie inactive).
         this.setupLoopRangeInteractions();
+        this.setupGridInteractions();
         this.setupSequencerInteractions();
         this.setupKeyboardShortcuts();
         // Avertissement natif du navigateur si on ferme/recharge la page avec des modifications non
@@ -1544,9 +1550,21 @@ class HarmoHubApp {
         document.getElementById('save').onclick = () => this.saveCurrent();
         document.getElementById('save-insert').onclick = () => this.saveCurrent(this.selectedIndex);
         document.getElementById('quick-add-btn').onclick = () => this.addQuickChord();
+        // Entrée = saut de ligne normal (comportement par défaut du <textarea>, donc pas de
+        // preventDefault) : les lignes d'un même bloc rejoignent une seule partie, il faut sauter
+        // une ligne pour en démarrer une nouvelle (voir splitQuickAddBlocks/addQuickChord).
+        // Ctrl/Cmd+Entrée valide tout de suite, comme le bouton "+".
         document.getElementById('quick-add-input').addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') { e.preventDefault(); this.addQuickChord(); }
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); this.addQuickChord(); }
         });
+        document.getElementById('quick-add-input').addEventListener('input', () => this.autoResizeQuickAdd());
+
+        // Ampoule d'aide (voir #quick-add-help) : même logique ouverture/fermeture que les autres
+        // popovers (openBackupScopeMenu...) — clic sur le bouton bascule, clic ailleurs ou Échap ferme.
+        document.getElementById('quick-add-help-btn').onclick = (e) => {
+            const help = document.getElementById('quick-add-help');
+            if (help.hidden) this.openQuickAddHelp(e.currentTarget); else this.closeQuickAddHelp();
+        };
         document.getElementById('play-prog').onclick = () => this.playProgression();
         document.getElementById('stop').onclick = () => this.stopAll();
 
@@ -1738,6 +1756,12 @@ class HarmoHubApp {
             if (e.target.id === 'settings-overlay') this.closeSettings(); // clic sur le fond, pas la fenêtre
         });
 
+        // Boîte "modifications non enregistrées" (voir confirmDiscardUnsavedIfNeeded) : clic sur le
+        // fond = comme Annuler, jamais une perte de données silencieuse.
+        document.getElementById('unsaved-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'unsaved-modal' && this._unsavedModalCancel) this._unsavedModalCancel();
+        });
+
         // Vue agrandie du séquenceur (voir openSeqZoom/closeSeqZoom) : ne fait que déplacer
         // #arp-sequencer dans une fenêtre plus grande, jamais le dupliquer.
         document.getElementById('seq-zoom').onclick = () => this.openSeqZoom();
@@ -1802,6 +1826,13 @@ class HarmoHubApp {
         document.addEventListener('pointerdown', (e) => {
             const menu = document.getElementById('backup-scope-menu');
             if (!menu.hidden && !menu.contains(e.target)) this.closeBackupScopeMenu();
+        });
+        // Clic en dehors du popover d'aide de l'ajout rapide (voir openQuickAddHelp) — sauf sur le
+        // bouton ampoule lui-même, qui gère déjà son propre bascule ouverture/fermeture.
+        document.addEventListener('pointerdown', (e) => {
+            const help = document.getElementById('quick-add-help');
+            const btn = document.getElementById('quick-add-help-btn');
+            if (!help.hidden && !help.contains(e.target) && !btn.contains(e.target)) this.closeQuickAddHelp();
         });
 
         // Désélectionne l'accord de la grille dès qu'on clique en dehors de la grille et du menu
@@ -2121,11 +2152,15 @@ class HarmoHubApp {
         const pianoEl = document.getElementById('piano-viz');
         const guitarWrap = document.getElementById('guitar-viz-wrap');
         const legend = document.querySelector('.piano-legend');
+        const disp = document.getElementById('current-chord-display');
         const tPiano = document.getElementById('toggle-viz-piano');
         const tGuitar = document.getElementById('toggle-viz-guitar');
         if (pianoEl) pianoEl.style.display = showPiano ? '' : 'none';
         if (guitarWrap) guitarWrap.style.display = showGuitar ? 'flex' : 'none';
         if (legend) legend.style.display = (showPiano || showGuitar) ? '' : 'none';
+        // Sans aucun diagramme affiché, le nom d'accord + ses notes n'ont plus rien à accompagner —
+        // les masquer plutôt que les laisser flotter seuls au-dessus d'un bloc vide.
+        if (disp) disp.style.display = (showPiano || showGuitar) ? '' : 'none';
         if (tPiano) { tPiano.classList.toggle('active', showPiano); tPiano.setAttribute('aria-pressed', showPiano); }
         if (tGuitar) { tGuitar.classList.toggle('active', showGuitar); tGuitar.setAttribute('aria-pressed', showGuitar); }
     }
@@ -2280,10 +2315,15 @@ class HarmoHubApp {
         const loop = !!range || this.loopActiveSection;
         const flat = []; // { section, index, data } à plat, dans l'ordre de lecture
         if (range) {
-            const sec = sections[range.section];
-            if (sec) {
-                for (let ci = range.start; ci <= range.end && ci < sec.chords.length; ci++) {
-                    flat.push({ section: range.section, index: ci, data: sec.chords[ci] });
+            // La plage peut traverser plusieurs parties : entière pour celles du milieu, bornée aux
+            // deux extrémités seulement pour la première et la dernière (voir loopRangeForSection).
+            for (let si = range.startSection; si <= range.endSection; si++) {
+                const sec = sections[si];
+                if (!sec) continue;
+                const from = (si === range.startSection) ? range.startIndex : 0;
+                const to = (si === range.endSection) ? range.endIndex : sec.chords.length - 1;
+                for (let ci = from; ci <= to && ci < sec.chords.length; ci++) {
+                    flat.push({ section: si, index: ci, data: sec.chords[ci] });
                 }
             }
         } else if (this.loopActiveSection) {
@@ -2637,32 +2677,198 @@ class HarmoHubApp {
             : this.addChordFromSymbol(section, value);
     }
 
-    // Ajout rapide (barre au-dessus de la grille) : un symbole seul ajoute directement à la partie
-    // ACTIVE, comme avant. Plusieurs séparés par "/" : s'il y a plusieurs parties, demande d'abord où
-    // les insérer (openSectionPicker) — ambigu sinon, contrairement à la case "+" qui vise déjà sans
-    // équivoque la partie où elle apparaît.
+    // Découpe la saisie en blocs séparés par une ligne VIDE (voir #quick-add-help) : une simple
+    // Entrée garde les lignes dans le MÊME bloc (donc la même partie, voir addQuickChord) — il faut
+    // sauter une ligne pour en démarrer une nouvelle, plus délibéré qu'une simple Entrée (qui sert
+    // surtout à lister plusieurs accords l'un sous l'autre pour UNE même partie).
+    splitQuickAddBlocks(text) {
+        const blocks = [];
+        let current = [];
+        text.split('\n').forEach(line => {
+            if (line.trim() === '') { if (current.length) { blocks.push(current); current = []; } }
+            else current.push(line.trim());
+        });
+        if (current.length) blocks.push(current);
+        return blocks;
+    }
+
+    // Parse toutes les lignes d'un bloc (voir splitQuickAddBlocks) en une liste plate d'accords,
+    // chacun gardant si sa ligne d'origine était une liste "/" (un accord par mesure) ou un accord
+    // seul (durée réglée dans le panneau) — voir commitBlockItems/commitMultilineQuickAdd. Tout ou
+    // rien : la première ligne invalide annule tout le bloc (déjà signalée via flashHint).
+    parseBlockLines(blockLines) {
+        const items = [];
+        for (const line of blockLines) {
+            if (line.includes('/')) {
+                const list = this.parseChordSymbolList(line);
+                if (!list) return null;
+                list.forEach(p => items.push({ parsed: p, isBatch: true }));
+            } else {
+                const parsed = parseChordSymbol(line);
+                if (!parsed) { this.flashHint(`Accord non reconnu : « ${line} »`); return null; }
+                items.push({ parsed, isBatch: false });
+            }
+        }
+        return items;
+    }
+
+    // Insère une liste d'accords déjà validée (voir parseBlockLines) dans UNE section — plusieurs
+    // lignes d'un même bloc rejoignent ainsi la même partie, chacune gardant sa propre durée (accord
+    // seul : durée réglée dans le panneau ; ligne "/" : un accord par mesure). `section` peut valoir
+    // 'new' pour en créer une à la volée (voir openSectionPicker).
+    commitBlockItems(section, items) {
+        const sections = loadProgressionSections();
+        this.pushUndo(sections);
+        if (section === 'new') { sections.push({ title: '', chords: [] }); section = sections.length - 1; }
+        const barBeats = this.beatsPerBar();
+        const singleBeats = parseInt(document.getElementById('duration').value) || 4;
+        const playStyle = document.getElementById('playStyle').value;
+        const instrument = document.getElementById('instrument').value;
+        items.forEach(({ parsed, isBatch }) => {
+            sections[section].chords.push(this.buildChordData(parsed, isBatch ? barBeats : singleBeats, playStyle, instrument));
+        });
+        saveProgressionSections(sections);
+        this.activeSection = section;
+        this.loadProgression();
+        this.flashHint(`${items.length} accord${items.length > 1 ? 's' : ''} ajoutés`);
+    }
+
+    // Ajout rapide (barre au-dessus de la grille), un <textarea> multi-lignes (voir
+    // autoResizeQuickAdd) découpé en blocs séparés par une ligne vide (voir splitQuickAddBlocks) :
+    // - un seul bloc d'une seule ligne : comportement historique inchangé (ajout direct, ou choix de
+    //   la partie s'il y en a plusieurs) ;
+    // - un seul bloc de plusieurs lignes : toutes ces lignes rejoignent la MÊME partie (active, ou
+    //   choisie s'il y en a plusieurs) ;
+    // - plusieurs blocs : ajout en lot, CHAQUE bloc devient une partie TOUTE NEUVE, jamais une partie
+    //   existante même vide (voir commitMultilineQuickAdd) — pour ne jamais se greffer sur ce qui est
+    //   déjà écrit dans la grille.
     addQuickChord() {
         const input = document.getElementById('quick-add-input');
-        const value = input.value;
-        if (!value.includes('/')) {
-            if (this.addChordFromSymbol(this.activeSection, value)) { input.value = ''; input.focus(); }
+        const blocks = this.splitQuickAddBlocks(input.value);
+        if (blocks.length === 0) return;
+
+        if (blocks.length > 1) { this.commitMultilineQuickAdd(blocks); return; }
+
+        const block = blocks[0];
+        const sections = loadProgressionSections();
+
+        if (block.length === 1) {
+            const value = block[0];
+            if (!value.includes('/')) {
+                if (!parseChordSymbol(value)) { this.flashHint('Accord non reconnu (ex. Cm7, F#dim, Bbadd9)'); return; }
+                if (sections.length <= 1) {
+                    if (this.addChordFromSymbol(0, value)) this.resetQuickAddInput();
+                    return;
+                }
+                this.openSectionPicker(input, (section) => {
+                    this.activeSection = section;
+                    if (this.addChordFromSymbol(section, value)) this.resetQuickAddInput();
+                });
+                return;
+            }
+
+            const parsedList = this.parseChordSymbolList(value);
+            if (!parsedList) return;
+            if (sections.length <= 1) {
+                this.commitChordList(0, parsedList);
+                this.resetQuickAddInput();
+                return;
+            }
+            this.openSectionPicker(input, (section) => {
+                this.commitChordList(section, parsedList);
+                this.resetQuickAddInput();
+            });
             return;
         }
-        const parsedList = this.parseChordSymbolList(value);
-        if (!parsedList) return;
 
-        const sections = loadProgressionSections();
+        const items = this.parseBlockLines(block);
+        if (!items) return;
         if (sections.length <= 1) {
-            this.commitChordList(0, parsedList);
-            input.value = '';
-            input.focus();
+            this.commitBlockItems(0, items);
+            this.resetQuickAddInput();
             return;
         }
         this.openSectionPicker(input, (section) => {
-            this.commitChordList(section, parsedList);
-            input.value = '';
-            input.focus();
+            this.commitBlockItems(section, items);
+            this.resetQuickAddInput();
         });
+    }
+
+    // Ajout en lot depuis l'ajout rapide agrandi (au moins une ligne vide sépare deux blocs, voir
+    // splitQuickAddBlocks) : CHAQUE bloc devient une partie TOUTE NEUVE, ajoutée à la fin — jamais
+    // une partie existante, même vide (retour utilisateur : l'ajout doit se faire dans de nouvelles
+    // parties si la grille contient déjà quelque chose). Tout ou rien : si une seule ligne contient
+    // un symbole invalide, RIEN n'est ajouté — un ajout partiel serait déroutant à corriger après
+    // coup, surtout sur plusieurs parties d'un coup.
+    commitMultilineQuickAdd(blocks) {
+        const parsedBlocks = [];
+        for (const block of blocks) {
+            const items = this.parseBlockLines(block);
+            if (!items) return;
+            parsedBlocks.push(items);
+        }
+
+        const sections = loadProgressionSections();
+        this.pushUndo(sections);
+        const barBeats = this.beatsPerBar();
+        const singleBeats = parseInt(document.getElementById('duration').value) || 4;
+        const playStyle = document.getElementById('playStyle').value;
+        const instrument = document.getElementById('instrument').value;
+
+        let totalChords = 0;
+        parsedBlocks.forEach(items => {
+            const sec = { title: '', chords: [] };
+            items.forEach(({ parsed, isBatch }) => {
+                sec.chords.push(this.buildChordData(parsed, isBatch ? barBeats : singleBeats, playStyle, instrument));
+            });
+            sections.push(sec);
+            totalChords += items.length;
+        });
+
+        saveProgressionSections(sections);
+        this.activeSection = sections.length - 1;
+        this.loadProgression();
+        this.flashHint(`${totalChords} accord${totalChords > 1 ? 's' : ''} ajoutés sur ${parsedBlocks.length} nouvelle${parsedBlocks.length > 1 ? 's' : ''} partie${parsedBlocks.length > 1 ? 's' : ''}`);
+        this.resetQuickAddInput();
+    }
+
+    // Vide et rétrécit le champ d'ajout rapide après un ajout réussi (voir addQuickChord).
+    resetQuickAddInput() {
+        const input = document.getElementById('quick-add-input');
+        input.value = '';
+        this.autoResizeQuickAdd();
+        input.focus();
+    }
+
+    // Agrandit le <textarea> d'ajout rapide pour qu'il épouse son contenu (jusqu'à la limite CSS
+    // max-height, au-delà de laquelle il défile en interne — voir .quick-add-input) : permet de
+    // taper plusieurs lignes (une par partie, voir commitMultilineQuickAdd) sans perdre de vue ce
+    // qu'on a déjà tapé plus haut.
+    autoResizeQuickAdd() {
+        const input = document.getElementById('quick-add-input');
+        input.style.height = 'auto';
+        input.style.height = `${input.scrollHeight}px`;
+    }
+
+    // Ampoule d'aide de l'ajout rapide (voir #quick-add-help dans index.html) : popover explicatif,
+    // même positionnement que les autres popovers (openBackupScopeMenu...).
+    openQuickAddHelp(anchorEl) {
+        const help = document.getElementById('quick-add-help');
+        help.hidden = false;
+        anchorEl.setAttribute('aria-expanded', 'true');
+        const rect = anchorEl.getBoundingClientRect();
+        const pad = 8;
+        const left = Math.min(rect.left, window.innerWidth - help.offsetWidth - pad);
+        const top = Math.min(rect.bottom + 4, window.innerHeight - help.offsetHeight - pad);
+        help.style.left = `${Math.max(pad, left)}px`;
+        help.style.top = `${Math.max(pad, top)}px`;
+    }
+
+    closeQuickAddHelp() {
+        const help = document.getElementById('quick-add-help');
+        if (help.hidden) return;
+        help.hidden = true;
+        document.getElementById('quick-add-help-btn').setAttribute('aria-expanded', 'false');
     }
 
     // Popup léger (même style que le menu contextuel) demandant dans quelle partie insérer un ajout
@@ -2896,7 +3102,7 @@ class HarmoHubApp {
                     ? 'var(--roman-row-h) var(--row-h) var(--measure-row-h)'
                     : 'var(--row-h) var(--measure-row-h)';
                 gridStyle = `grid-template-rows: repeat(${rows}, ${rowTemplate}); grid-template-columns: repeat(${beatsPerRow}, 1fr);`;
-                const loopRange = (this.loopRange && this.loopRange.section === si) ? this.loopRange : null;
+                const loopRange = this.loopRangeForSection(si, history.length);
                 gridInner = cells.map(s => {
                     const h = history[s.index];
                     const chordUseFlats = useFlatsForChordRoot(NOTES.indexOf(h.root), NOTES.indexOf(gRoot), gMode, useFlats);
@@ -2937,11 +3143,17 @@ class HarmoHubApp {
                         ? s.innerBars.map(ib => `<span class="cell-tick" style="left: ${(ib.offset / s.span) * 100}%;"></span>`).join('')
                         : '';
                     // Poignées d'étirement (durée) : bord droit sur le DERNIER segment (change la fin
-                    // de l'accord), bord gauche sur le PREMIER segment s'il existe un accord précédent
-                    // dans la même partie (change son début, en empruntant/rendant des temps à ce
-                    // précédent — voir onResizeStart) ; absentes pendant un glisser-déposer.
+                    // de l'accord) — mais AUSSI sur tout segment coupé de ligne qui n'est pas le
+                    // dernier (s.split && !s.isLast) : son bord droit tombe alors pile en fin de ligne
+                    // (voir layoutProgression, qui étale chaque segment intermédiaire jusqu'à
+                    // beatsPerRow), un bord tout aussi réel de CE MÊME accord (même s.index) — sans ça,
+                    // un accord qui déborde sur la ligne suivante ne peut plus être raccourci depuis la
+                    // ligne où il commence, seulement depuis celle où il se termine. Bord gauche sur le
+                    // PREMIER segment s'il existe un accord précédent dans la même partie (change son
+                    // début, en empruntant/rendant des temps à ce précédent — voir onResizeStart) ;
+                    // ni l'un ni l'autre pendant un glisser-déposer.
                     const notDragging = !cls.includes('drag-placeholder');
-                    const resizeRightEl = (s.isLast && notDragging)
+                    const resizeRightEl = ((s.isLast || s.split) && notDragging)
                         ? `<div class="cell-resize cell-resize-right" data-section="${si}" data-index="${s.index}" data-edge="right" title="Glisser pour changer la durée"></div>` : '';
                     const resizeLeftEl = (s.isFirst && s.index > 0 && notDragging)
                         ? `<div class="cell-resize cell-resize-left" data-section="${si}" data-index="${s.index}" data-edge="left" title="Glisser pour changer la durée"></div>` : '';
@@ -3082,6 +3294,9 @@ class HarmoHubApp {
         if (this.activeSection >= sections.length) this.activeSection = sections.length - 1;
         else if (this.activeSection > s) this.activeSection--;
         this.selectedIndex = null;
+        // Une partie supprimée décale les index des suivantes : plus sûr de redéfinir la plage à
+        // boucler (si elle existe) que de tenter de la remapper.
+        if (this.loopRange) this.loopRange = null;
 
         this.loadProgression();
     }
@@ -3099,6 +3314,9 @@ class HarmoHubApp {
         saveProgressionSections(sections);
         this.activeSection = s + 1;
         this.selectedIndex = null;
+        // Une partie insérée décale les index des suivantes : plus sûr de redéfinir la plage à boucler
+        // (si elle existe) que de tenter de la remapper.
+        if (this.loopRange) this.loopRange = null;
         this.loadProgression();
     }
 
@@ -3127,10 +3345,98 @@ class HarmoHubApp {
     // si des modifications ne sont pas enregistrées (voir hasUnsavedChanges/saveCurrentSong), prévient
     // qu'elles seront perdues — que le morceau ait déjà un nom ou non, contrairement à l'ancien
     // comportement (qui ne prévenait que pour un morceau jamais enregistré, puisque tout le reste
-    // s'auto-sauvegardait aussitôt).
+    // s'auto-sauvegardait aussitôt). Désormais async (voir openUnsavedModal) pour laisser le temps
+    // de choisir Enregistrer/Exporter/Continuer/Annuler au lieu d'un simple confirm() natif —
+    // tous les appelants attendent donc sa réponse (voir onSongSelectChange/newSong/openSongFromFiles).
+    // Le beforeunload natif (fermeture RÉELLE de l'onglet/page) reste inchangé à côté : les
+    // navigateurs n'autorisent aucun bouton personnalisé sur cette boîte-là.
     confirmDiscardUnsavedIfNeeded() {
-        if (!hasUnsavedChanges) return true;
-        return confirm('Des modifications ne sont pas enregistrées et seront perdues. Continuer ?');
+        if (!hasUnsavedChanges) return Promise.resolve(true);
+        return this.openUnsavedModal();
+    }
+
+    // Enregistre l'état actuel du tampon comme un NOUVEAU morceau nommé `name` et le rend actif —
+    // cœur commun à saveCurrentAsSong (champ inline dans le panneau Morceau) et à l'enregistrement
+    // direct depuis la boîte "modifications non enregistrées" (voir openUnsavedModal), qui ne peut
+    // pas réutiliser ce champ-là : il peut se trouver masqué derrière Paramètres au moment où la
+    // boîte s'ouvre (voir openSongFromFiles).
+    createNewSongFromCurrentState(name) {
+        const song = {
+            id: 'song_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+            name,
+            savedAt: Date.now(),
+            root: document.getElementById('global-root').value,
+            mode: document.getElementById('global-mode').value,
+            timeSig: document.getElementById('time-sig').value,
+            groove: document.getElementById('groove').value,
+            bpm: parseInt(document.getElementById('bpm').value),
+            sections: loadProgressionSections()
+        };
+        const songs = loadSongs();
+        songs.push(song);
+        saveSongs(songs);
+        setCurrentSongId(song.id);
+        hasUnsavedChanges = false;
+        this.refreshSongList();
+        return song;
+    }
+
+    // Boîte "modifications non enregistrées" : Enregistrer / Exporter en JSON / Continuer sans
+    // enregistrer / Annuler (voir #unsaved-modal dans index.html). Si le morceau n'a encore jamais
+    // été nommé, Enregistrer/Exporter basculent la boîte sur un petit champ de saisie du nom
+    // (.unsaved-modal-nameprompt) au lieu du champ inline habituel du panneau Morceau, potentiellement
+    // invisible si cette boîte s'ouvre par-dessus Paramètres. Résout à true (continuer) ou false
+    // (annuler, rien n'a changé).
+    openUnsavedModal() {
+        const overlay = document.getElementById('unsaved-modal');
+        const actions = overlay.querySelector('.unsaved-modal-actions');
+        const namePrompt = overlay.querySelector('.unsaved-modal-nameprompt');
+        const nameInput = namePrompt.querySelector('input');
+        overlay.hidden = false;
+        actions.hidden = false;
+        namePrompt.hidden = true;
+
+        return new Promise((resolve) => {
+            const close = (result) => {
+                overlay.hidden = true;
+                this._unsavedModalCancel = null;
+                resolve(result);
+            };
+            this._unsavedModalCancel = () => close(false);
+
+            const askNameThen = (after) => {
+                actions.hidden = true;
+                namePrompt.hidden = false;
+                nameInput.value = '';
+                nameInput.focus();
+                const confirmName = () => {
+                    const name = nameInput.value.trim() || 'Sans titre';
+                    const song = this.createNewSongFromCurrentState(name);
+                    this.flashHint(`« ${song.name} » enregistré`);
+                    after();
+                };
+                const cancelName = () => { actions.hidden = false; namePrompt.hidden = true; };
+                const onKey = (e) => {
+                    e.stopPropagation();
+                    if (e.key === 'Enter') { e.preventDefault(); confirmName(); }
+                    else if (e.key === 'Escape') { e.preventDefault(); cancelName(); }
+                };
+                nameInput.addEventListener('keydown', onKey, { once: true });
+                namePrompt.querySelector('[data-nameprompt-ok]').onclick = confirmName;
+                namePrompt.querySelector('[data-nameprompt-cancel]').onclick = cancelName;
+            };
+
+            document.getElementById('unsaved-save-continue').onclick = () => {
+                if (getCurrentSongId()) { this.saveCurrentSong(); close(true); }
+                else askNameThen(() => close(true));
+            };
+            document.getElementById('unsaved-export-continue').onclick = () => {
+                if (getCurrentSongId()) { this.exportCurrentSong(); close(true); }
+                else askNameThen(() => { this.exportCurrentSong(); close(true); });
+            };
+            document.getElementById('unsaved-discard').onclick = () => close(true);
+            document.getElementById('unsaved-cancel').onclick = () => close(false);
+        });
     }
 
     refreshSongList() {
@@ -3144,16 +3450,16 @@ class HarmoHubApp {
         document.getElementById('song-save').title = 'Enregistrer (Ctrl+S)';
     }
 
-    onSongSelectChange(id) {
+    async onSongSelectChange(id) {
         if (id === (getCurrentSongId() || '')) return;
-        if (!this.confirmDiscardUnsavedIfNeeded()) { this.refreshSongList(); return; }
+        if (!(await this.confirmDiscardUnsavedIfNeeded())) { this.refreshSongList(); return; }
         if (!id) this.newSong(true);
         else this.loadSong(id);
     }
 
     // Repart d'un morceau vierge (tonalité C majeur, 120 BPM, une partie sans titre)
-    newSong(skipConfirm) {
-        if (!skipConfirm && !this.confirmDiscardUnsavedIfNeeded()) return;
+    async newSong(skipConfirm) {
+        if (!skipConfirm && !(await this.confirmDiscardUnsavedIfNeeded())) return;
         setCurrentSongId(null);
         document.getElementById('global-root').value = 'C';
         document.getElementById('global-mode').value = 'maj';
@@ -3246,24 +3552,7 @@ class HarmoHubApp {
 
         const finish = () => { input.remove(); select.hidden = false; };
         const commit = () => {
-            const name = input.value.trim() || 'Sans titre';
-            const song = {
-                id: 'song_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-                name,
-                savedAt: Date.now(),
-                root: document.getElementById('global-root').value,
-                mode: document.getElementById('global-mode').value,
-                timeSig: document.getElementById('time-sig').value,
-                groove: document.getElementById('groove').value,
-                bpm: parseInt(document.getElementById('bpm').value),
-                sections: loadProgressionSections()
-            };
-            const songs = loadSongs();
-            songs.push(song);
-            saveSongs(songs);
-            setCurrentSongId(song.id);
-            hasUnsavedChanges = false;
-            this.refreshSongList();
+            const song = this.createNewSongFromCurrentState(input.value.trim() || 'Sans titre');
             this.flashHint(`« ${song.name} » enregistré`);
             finish();
         };
@@ -3560,7 +3849,20 @@ class HarmoHubApp {
 
         const currentId = getCurrentSongId();
 
-        const toolbar = `
+        // Emplacement des exports locaux (JSON, PDF, MIDI, MP3) : un navigateur ne laisse pas une
+        // page web choisir ni retenir un dossier de destination par défaut (en dehors d'un vrai
+        // sélecteur de dossier à chaque export, jugé trop lourd ici) — seul le réglage du
+        // navigateur lui-même (dossier de téléchargement / « toujours demander où enregistrer »)
+        // en décide. On l'explique plutôt que de proposer un choix qui n'aurait aucun effet réel.
+        const locationInfo = `
+            <p class="files-location-info">
+                Les fichiers exportés (sauvegarde JSON, PDF, MIDI, MP3) sont enregistrés dans le
+                dossier de téléchargement par défaut de ton navigateur. Pour changer cet
+                emplacement (ou choisir à chaque fois), règle-le dans les préférences de
+                téléchargement de ton navigateur.
+            </p>`;
+
+        const toolbar = locationInfo + `
             <div class="files-toolbar">
                 <button type="button" id="new-folder-btn" class="btn-sec">
                     <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M12 11v4M10 13h4"/></svg>
@@ -3678,9 +3980,9 @@ class HarmoHubApp {
         }
     }
 
-    openSongFromFiles(id) {
+    async openSongFromFiles(id) {
         if (id === (getCurrentSongId() || '')) { this.closeSettings(); return; }
-        if (!this.confirmDiscardUnsavedIfNeeded()) return;
+        if (!(await this.confirmDiscardUnsavedIfNeeded())) return;
         this.loadSong(id);
         this.closeSettings();
     }
@@ -5039,13 +5341,48 @@ class HarmoHubApp {
         const cs = getComputedStyle(gridEl);
         const rowH = parseFloat(cs.getPropertyValue('--row-h')) || 64;
         const measureRowH = parseFloat(cs.getPropertyValue('--measure-row-h')) || 15;
+        // Chaque ligne d'ACCORDS occupe 2 ou 3 lignes CSS selon que le chiffrage romain est affiché
+        // au-dessus (voir loadProgression/rowsPerGroup) — sans ce décalage, la ligne des numéros de
+        // mesure d'UNE ligne d'accords tombait dans le calcul de la ligne SUIVANTE dès que le
+        // chiffrage romain (actif par défaut) ajoutait sa propre sous-ligne au-dessus.
+        const romanRowH = this.showRomanNumerals ? (parseFloat(cs.getPropertyValue('--roman-row-h')) || 0) : 0;
         const col = Math.max(0, Math.min(beatsPerRow - 1, Math.floor((clientX - rect.left) / (rect.width / beatsPerRow))));
-        const row = Math.max(0, Math.floor((clientY - rect.top) / (rowH + measureRowH)));
+        const row = Math.max(0, Math.floor((clientY - rect.top) / (romanRowH + rowH + measureRowH)));
         const history = loadProgressionSections()[section]?.chords;
         if (!history || history.length === 0) return null;
         const { cells } = this.layoutProgression(history, this.beatsPerBar());
         const seg = cells.find(s => s.row === row && col >= s.col && col < s.col + s.span);
         return seg ? seg.index : null;
+    }
+
+    // Compare deux positions {section, index} dans l'ORDRE DE LECTURE (une partie puis l'autre) :
+    // <0 si a vient avant b, >0 si après, 0 si identique. Sert à normaliser une plage qui peut
+    // maintenant traverser plusieurs parties (voir setLoopRange).
+    compareChordPos(a, b) {
+        return a.section !== b.section ? a.section - b.section : a.index - b.index;
+    }
+
+    // La plage à boucler est-elle définie ET couvre-t-elle (au moins en partie) cette partie ?
+    sectionInLoopRange(si) {
+        const r = this.loopRange;
+        return !!r && si >= r.startSection && si <= r.endSection;
+    }
+
+    // Portion de la plage à boucler qui retombe dans CETTE partie (indices locaux), ou null si la
+    // plage ne la touche pas — une partie entièrement comprise entre les deux extrémités de la plage
+    // est couverte en entier ; les parties de départ/arrivée ne le sont qu'à partir/jusqu'à leur bord
+    // réel. isTrueStart/isTrueEnd distinguent un bord réel de la plage (poignée déplaçable) d'une
+    // simple coupure de partie (voir buildLoopRangeBars).
+    loopRangeForSection(si, len) {
+        const r = this.loopRange;
+        if (!r || si < r.startSection || si > r.endSection) return null;
+        const isTrueStart = si === r.startSection;
+        const isTrueEnd = si === r.endSection;
+        return {
+            start: isTrueStart ? r.startIndex : 0,
+            end: isTrueEnd ? r.endIndex : Math.max(0, len - 1),
+            isTrueStart, isTrueEnd
+        };
     }
 
     // Trois façons de commencer un geste sur la plage à boucler, selon l'élément visé :
@@ -5054,6 +5391,8 @@ class HarmoHubApp {
     //    onLoopRangeEnd) la SUPPRIME ; un glisser la redéfinit depuis ce point, comme ci-dessous ;
     //  - la ligne des numéros de mesure ailleurs (.row-measure) : définit une nouvelle plage depuis
     //    ce point (comportement historique, inchangé).
+    // La plage peut maintenant traverser plusieurs parties : l'ancre/le bord fixe sont des positions
+    // {section, index} (plus de simples index dans UNE section, voir compareChordPos/setLoopRange).
     onLoopRangeStart(e) {
         if (e.button != null && e.button !== 0) return; // clic gauche / toucher uniquement
         const handle = e.target.closest('.loop-range-handle');
@@ -5062,31 +5401,36 @@ class HarmoHubApp {
         const gridEl = e.target.closest('.chord-grid');
         if (!gridEl) return;
         e.preventDefault();
-        e.stopPropagation(); // n'ouvre pas aussi le glisser-déposer (réordonner) de la grille
+        // stopIMMEDIATEPropagation (pas juste stopPropagation) : onGridPointerDown écoute le MÊME
+        // événement sur le MÊME conteneur (voir l'ordre d'attachement dans le constructeur) — sans
+        // ça, il tournerait quand même juste après, changerait la partie active et re-rendrait la
+        // grille AVANT la fin de ce gestionnaire, détachant `gridEl` en plein calcul.
+        e.stopImmediatePropagation();
         const section = +gridEl.dataset.section;
         const range = this.loopRange;
 
-        // Ne PAS garder `gridEl` : setLoopRange() re-rend la grille (loadProgression), ce qui
-        // remplace tout le sous-arbre DOM — l'élément capturé ici deviendrait détaché dès le premier
-        // appel, faussant tout calcul de géométrie basé dessus par la suite (voir chordIndexAtPoint).
-        // On re-cherche la grille VIVANTE (par data-section) à chaque déplacement à la place.
         if (handle) {
-            if (!range || range.section !== section) return;
+            // Une poignée n'apparaît que sur le VRAI bord de la plage (voir buildLoopRangeBars) : pas
+            // besoin de re-vérifier laquelle, sa seule présence ici suffit à identifier la section.
+            if (!range) return;
             const edge = handle.dataset.edge;
-            this.loopRangeDrag = { section, mode: edge === 'left' ? 'edge-left' : 'edge-right', fixed: edge === 'left' ? range.end : range.start, moved: false };
+            const fixed = edge === 'left'
+                ? { section: range.endSection, index: range.endIndex }
+                : { section: range.startSection, index: range.startIndex };
+            this.loopRangeDrag = { mode: edge === 'left' ? 'edge-left' : 'edge-right', fixed, moved: false };
         } else if (bar) {
             // Tap sans bouger = supprime (voir onLoopRangeEnd) ; glisser = redéfinit depuis ce point,
             // exactement comme un glisser démarré ailleurs sur la ligne — seul le tap immobile change
             // de sens ici, d'où un mode distinct ('bar-tap') malgré une logique de glisser identique.
-            if (!range || range.section !== section) return;
-            const anchor = this.chordIndexAtPoint(gridEl, section, e.clientX, e.clientY);
-            if (anchor == null) return;
-            this.loopRangeDrag = { section, mode: 'bar-tap', anchor, moved: false };
+            if (!this.sectionInLoopRange(section)) return;
+            const anchorIndex = this.chordIndexAtPoint(gridEl, section, e.clientX, e.clientY);
+            if (anchorIndex == null) return;
+            this.loopRangeDrag = { mode: 'bar-tap', anchor: { section, index: anchorIndex }, moved: false };
         } else {
             const index = this.chordIndexAtPoint(gridEl, section, e.clientX, e.clientY);
             if (index == null) return;
-            this.loopRangeDrag = { section, mode: 'new', anchor: index, moved: false };
-            this.setLoopRange(section, index, index);
+            this.loopRangeDrag = { mode: 'new', anchor: { section, index }, moved: false };
+            this.setLoopRange(section, index, section, index);
         }
 
         this.loopRangeDragStart = { x: e.clientX, y: e.clientY };
@@ -5104,22 +5448,28 @@ class HarmoHubApp {
         if (!d.moved && Math.hypot(e.clientX - start.x, e.clientY - start.y) < 6) return; // seuil : distingue un tap d'un glisser
         d.moved = true;
 
-        const gridEl = document.querySelector(`.chord-grid[data-section="${d.section}"]`);
+        // Le pointeur peut maintenant survoler N'IMPORTE QUELLE grille (glisser d'une partie à une
+        // autre) : on retrouve celle du point courant par hit-test plutôt que de rester bloqué sur la
+        // section de départ. Hors de toute grille (espace entre deux cartes...) : on ignore ce
+        // déplacement, la plage reste comme avant plutôt que de sauter n'importe où.
+        const hit = document.elementFromPoint(e.clientX, e.clientY);
+        const gridEl = hit && hit.closest('.chord-grid');
         if (!gridEl) return;
-        const index = this.chordIndexAtPoint(gridEl, d.section, e.clientX, e.clientY);
+        const section = +gridEl.dataset.section;
+        const index = this.chordIndexAtPoint(gridEl, section, e.clientX, e.clientY);
         if (index == null) return;
+        const cur = { section, index };
 
         if (d.mode === 'edge-left') {
-            // Bloquée au bord fixe (pas au-delà) : sinon la poignée gauche glissée au-delà de la
-            // droite inverserait silencieusement leurs rôles (voir setLoopRange, qui réordonne start/end).
-            this.setLoopRange(d.section, Math.min(index, d.fixed), d.fixed);
+            // Bloquée au bord fixe (pas au-delà) : sinon le bord gauche glissé au-delà du droit
+            // inverserait silencieusement leurs rôles (voir setLoopRange, qui réordonne les deux bords).
+            const clamped = this.compareChordPos(cur, d.fixed) <= 0 ? cur : d.fixed;
+            this.setLoopRange(clamped.section, clamped.index, d.fixed.section, d.fixed.index);
         } else if (d.mode === 'edge-right') {
-            this.setLoopRange(d.section, d.fixed, Math.max(index, d.fixed));
+            const clamped = this.compareChordPos(cur, d.fixed) >= 0 ? cur : d.fixed;
+            this.setLoopRange(d.fixed.section, d.fixed.index, clamped.section, clamped.index);
         } else {
-            const lo = Math.min(d.anchor, index), hi = Math.max(d.anchor, index);
-            if (!this.loopRange || this.loopRange.start !== lo || this.loopRange.end !== hi) {
-                this.setLoopRange(d.section, lo, hi);
-            }
+            this.setLoopRange(d.anchor.section, d.anchor.index, cur.section, cur.index);
         }
     }
 
@@ -5132,14 +5482,23 @@ class HarmoHubApp {
         this.loopRangeDragStart = null;
         // Tap (sans glisser) pile sur une bande déjà là, pas sur une poignée : la supprime — sans ça,
         // aucun moyen tactile d'annuler une plage à boucler une fois posée.
-        if (d && d.mode === 'bar-tap' && !d.moved && this.loopRange && this.loopRange.section === d.section) {
+        if (d && d.mode === 'bar-tap' && !d.moved && this.sectionInLoopRange(d.anchor.section)) {
             this.loopRange = null;
             this.loadProgression();
         }
     }
 
-    setLoopRange(section, start, end) {
-        this.loopRange = { section, start: Math.min(start, end), end: Math.max(start, end) };
+    // sectionA/indexA et sectionB/indexB sont les deux bords de la plage, dans n'importe quel ordre
+    // (normalisés ici selon compareChordPos) — peuvent désigner deux parties différentes.
+    setLoopRange(sectionA, indexA, sectionB, indexB) {
+        const a = { section: sectionA, index: indexA }, b = { section: sectionB, index: indexB };
+        const [lo, hi] = this.compareChordPos(a, b) <= 0 ? [a, b] : [b, a];
+        const r = this.loopRange;
+        // Rien de changé -> pas de re-rendu (évite de re-déclencher loadProgression à chaque micro-
+        // mouvement du pointeur quand l'accord visé n'a pas bougé).
+        if (r && r.startSection === lo.section && r.startIndex === lo.index
+            && r.endSection === hi.section && r.endIndex === hi.index) return;
+        this.loopRange = { startSection: lo.section, startIndex: lo.index, endSection: hi.section, endIndex: hi.index };
         this.loadProgression();
     }
 
@@ -5157,6 +5516,10 @@ class HarmoHubApp {
     // `rowsPerGroup` (2 ou 3 lignes CSS par ligne d'ACCORDS, selon que le chiffrage romain est affiché
     // au-dessus — voir loadProgression) traduit this.row en ligne CSS : la plage/ses poignées occupent
     // toujours la DERNIÈRE sous-ligne du groupe (celle des numéros de mesure), quel que soit ce nombre.
+    // `loopRange` est déjà borné aux indices LOCAUX de cette partie (voir loopRangeForSection) :
+    // isTrueStart/isTrueEnd indiquent si son bord ici est un vrai bord de la plage globale (poignée
+    // déplaçable) ou juste la coupure d'une plage qui continue dans la partie précédente/suivante
+    // (pas de poignée là — rien à en déplacer, elle n'a de sens que d'un seul tenant).
     buildLoopRangeBars(cells, loopRange, rowsPerGroup) {
         if (!loopRange) return '';
         const byRow = new Map();
@@ -5167,8 +5530,8 @@ class HarmoHubApp {
             r.maxCol = Math.max(r.maxCol, s.col + s.span);
             byRow.set(s.row, r);
         });
-        const startCell = cells.find(s => s.index === loopRange.start && s.isFirst);
-        const endCell = cells.find(s => s.index === loopRange.end && s.isLast);
+        const startCell = loopRange.isTrueStart ? cells.find(s => s.index === loopRange.start && s.isFirst) : null;
+        const endCell = loopRange.isTrueEnd ? cells.find(s => s.index === loopRange.end && s.isLast) : null;
         const bars = Array.from(byRow.entries()).map(([row, r]) => `
                     <div class="loop-range-bar" style="grid-column: ${r.minCol + 1} / ${r.maxCol + 1}; grid-row: ${row * rowsPerGroup + rowsPerGroup};"></div>`
         ).join('');
@@ -6248,6 +6611,8 @@ class HarmoHubApp {
             if (e.key === 'Escape' && !document.getElementById('context-menu').hidden) { this.closeContextMenu(); return; }
             if (e.key === 'Escape' && !document.getElementById('section-picker-menu').hidden) { this.closeSectionPicker(); return; }
             if (e.key === 'Escape' && !document.getElementById('backup-scope-menu').hidden) { this.closeBackupScopeMenu(); return; }
+            if (e.key === 'Escape' && !document.getElementById('quick-add-help').hidden) { this.closeQuickAddHelp(); return; }
+            if (e.key === 'Escape' && !document.getElementById('unsaved-modal').hidden) { if (this._unsavedModalCancel) this._unsavedModalCancel(); return; }
             if (e.key === 'Escape' && !document.getElementById('duration-dd-menu').hidden) { this.closeDurationMenu(); return; }
             if (e.key === 'Escape' && !document.getElementById('playstyle-dd-menu').hidden) { this.closePlayStyleMenu(); return; }
             if (e.key === 'Escape' && this.settingsOpen) { this.closeSettings(); return; }
