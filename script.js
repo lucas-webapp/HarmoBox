@@ -1798,6 +1798,11 @@ class HarmoHubApp {
             const picker = document.getElementById('section-picker-menu');
             if (!picker.hidden && !picker.contains(e.target)) this.closeSectionPicker();
         });
+        // Clic en dehors du popup « ce morceau / toute la bibliothèque ? » (voir openBackupScopeMenu)
+        document.addEventListener('pointerdown', (e) => {
+            const menu = document.getElementById('backup-scope-menu');
+            if (!menu.hidden && !menu.contains(e.target)) this.closeBackupScopeMenu();
+        });
 
         // Désélectionne l'accord de la grille dès qu'on clique en dehors de la grille et du menu
         // contextuel — évite l'ambiguïté entre l'accord SÉLECTIONNÉ (voir bouton « Accord » ci-
@@ -1822,6 +1827,7 @@ class HarmoHubApp {
         document.getElementById('export-pdf').onclick = () => this.exportPdf();
         document.getElementById('export-midi').onclick = () => this.exportMidi();
         document.getElementById('export-audio').onclick = () => this.exportAudio();
+        document.getElementById('export-backup').onclick = (e) => this.openBackupScopeMenu(e.currentTarget);
 
         // Bascule piano/guitare : indépendantes, les deux peuvent s'afficher côte à côte ou aucune.
         document.getElementById('toggle-viz-piano').onclick = () => {
@@ -4561,6 +4567,64 @@ class HarmoHubApp {
         }
     }
 
+    // Popup léger (même style que openSectionPicker) : demande si la sauvegarde locale porte sur le
+    // morceau ouvert ou toute la bibliothèque, avant de déclencher le téléchargement correspondant.
+    openBackupScopeMenu(anchorEl) {
+        const menu = document.getElementById('backup-scope-menu');
+        menu.innerHTML =
+            `<button type="button" data-backup-scope="song">Ce morceau</button>` +
+            `<button type="button" data-backup-scope="library">Toute la bibliothèque</button>`;
+        menu.querySelectorAll('button').forEach(btn => {
+            btn.onclick = () => {
+                this.closeBackupScopeMenu();
+                if (btn.dataset.backupScope === 'song') this.exportCurrentSong();
+                else this.exportLibrary();
+            };
+        });
+
+        const rect = anchorEl.getBoundingClientRect();
+        menu.hidden = false;
+        const pad = 8;
+        const left = Math.min(rect.left, window.innerWidth - menu.offsetWidth - pad);
+        const top = Math.min(rect.bottom + 4, window.innerHeight - menu.offsetHeight - pad);
+        menu.style.left = `${Math.max(pad, left)}px`;
+        menu.style.top = `${Math.max(pad, top)}px`;
+    }
+
+    closeBackupScopeMenu() {
+        const menu = document.getElementById('backup-scope-menu');
+        if (menu) menu.hidden = true;
+    }
+
+    // Sauvegarde locale d'UN SEUL morceau (voir exportLibrary pour toute la bibliothèque) — même
+    // enveloppe JSON {app, kind, version, songs, ...}, réimportable par le même bouton "Importer une
+    // bibliothèque" (voir importLibraryFile, qui fusionne par id sans jamais rien écraser).
+    exportCurrentSong() {
+        if (!getCurrentSongId()) {
+            this.saveCurrentAsSong('Nomme d\'abord ton morceau pour le sauvegarder');
+            if (!getCurrentSongId()) return; // enregistrement annulé -> pas de sauvegarde
+        }
+        const song = loadSongs().find(s => s.id === getCurrentSongId());
+        if (!song) return;
+        const payload = {
+            app: 'HarmoHub',
+            kind: 'library-backup',
+            version: 1,
+            exportedAt: Date.now(),
+            songs: [song]
+        };
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `harmohub-${song.name.replace(/[\\/:*?"<>|]+/g, '_')}-${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        this.flashHint(`« ${song.name} » sauvegardé en local`);
+    }
+
     // ---------- Durée de l'accord : bouton fermé + menu déroulant d'icônes ----------
     // Pilote le <select id="duration"> resté dans le DOM mais masqué (voir index.html) : il reste la
     // seule source de vérité, lue partout ailleurs (addChordFromSymbol, onResizeStart...) via
@@ -6183,6 +6247,7 @@ class HarmoHubApp {
 
             if (e.key === 'Escape' && !document.getElementById('context-menu').hidden) { this.closeContextMenu(); return; }
             if (e.key === 'Escape' && !document.getElementById('section-picker-menu').hidden) { this.closeSectionPicker(); return; }
+            if (e.key === 'Escape' && !document.getElementById('backup-scope-menu').hidden) { this.closeBackupScopeMenu(); return; }
             if (e.key === 'Escape' && !document.getElementById('duration-dd-menu').hidden) { this.closeDurationMenu(); return; }
             if (e.key === 'Escape' && !document.getElementById('playstyle-dd-menu').hidden) { this.closePlayStyleMenu(); return; }
             if (e.key === 'Escape' && this.settingsOpen) { this.closeSettings(); return; }

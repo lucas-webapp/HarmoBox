@@ -6,13 +6,13 @@
     <title>HarmoHub</title>
     <!-- Logo « grille en dégradé » (4 barres, une seule teinte, intensité croissante) : voir aussi
          .logo-mark dans style.css (même dessin, en ligne) et /icons/ pour les sources. -->
-    <link rel="icon" type="image/svg+xml" href="icons/favicon.svg?v=202607254000">
-    <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=202607254000">
-    <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png?v=202607254000">
-    <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?v=202607254000">
-    <link rel="manifest" href="manifest.json?v=202607254000">
+    <link rel="icon" type="image/svg+xml" href="icons/favicon.svg?v=202607255000">
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=202607255000">
+    <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png?v=202607255000">
+    <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?v=202607255000">
+    <link rel="manifest" href="manifest.json?v=202607255000">
     <meta name="theme-color" content="#0a0a0a">
-    <link rel="stylesheet" href="style.css?v=202607254000">
+    <link rel="stylesheet" href="style.css?v=202607255000">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
 </head>
@@ -76,6 +76,10 @@
     <!-- Rempli dynamiquement (voir openSectionPicker) : demande dans quelle partie insérer un ajout
          en lot ("/", ajout rapide) quand il y en a plusieurs — même style que #context-menu. -->
     <div id="section-picker-menu" class="context-menu" hidden></div>
+
+    <!-- Rempli dynamiquement (voir openBackupScopeMenu) : demande si la sauvegarde locale porte sur
+         le morceau ouvert ou toute la bibliothèque — même style que #section-picker-menu. -->
+    <div id="backup-scope-menu" class="context-menu" hidden></div>
 
     <div id="settings-overlay" class="settings-overlay" hidden>
         <div class="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
@@ -433,6 +437,9 @@
                     <span class="lg"><span class="dot dot-seventh"></span>7</span>
                     <span class="lg"><span class="dot dot-ext"></span>Autres</span>
                 </div>
+                <button type="button" id="export-backup" class="icon-btn export-backup-btn" title="Sauvegarder en local (ce morceau ou toute la bibliothèque)" aria-label="Sauvegarder en local">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M5 21h14"/></svg>
+                </button>
                 <button type="button" id="export-audio" class="icon-btn export-audio-btn" title="Exporter en MP3" aria-label="Exporter en MP3">
                     <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>
                 </button>
@@ -455,6 +462,6 @@
          script.js) — vendu en local plutôt qu'hébergé sur un CDN. Projet LAME (lame.sourceforge.net),
          licence LGPL. -->
     <script src="lame.min.js"></script>
-    <script src="script.js?v=202607254000"></script>
+    <script src="script.js?v=202607255000"></script>
 </body>
 </html>
