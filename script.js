@@ -122,16 +122,35 @@ function parseChordSymbol(input) {
     pc = ((pc % 12) + 12) % 12;
     const root = NOTES[pc];
 
-    const rest = rawRest.trim();
+    let rest = rawRest.trim();
+
+    // Note à la basse, notée avec "_" (ex. "C_E" = do majeur avec mi à la basse) : extraite avant
+    // d'analyser la qualité, pour que "C_E" et "C" partagent le même chemin de reconnaissance.
+    // Volontairement pas "/" (déjà pris par la saisie rapide pour séparer plusieurs accords).
+    let bass = null;
+    const bassIdx = rest.indexOf('_');
+    if (bassIdx !== -1) {
+        const bassStr = rest.slice(bassIdx + 1).trim();
+        rest = rest.slice(0, bassIdx).trim();
+        const bm = bassStr.match(/^([A-Ga-g])(#|b)?$/);
+        if (!bm) return null;
+        const [, bLetter, bAccidental] = bm;
+        let bPc = BASE_PC[bLetter.toUpperCase()];
+        if (bAccidental === '#') bPc += 1;
+        else if (bAccidental === 'b') bPc -= 1;
+        bPc = ((bPc % 12) + 12) % 12;
+        bass = NOTES[bPc];
+    }
+
     // Convention jazz répandue : M/M7/M9 en MAJUSCULE = majeur — vérifié avant la normalisation en
     // minuscules (sinon "M7" serait confondu avec "m7", mineur 7e).
-    if (rest === 'M') return { root, quality: 'maj' };
-    if (rest === 'M7') return { root, quality: 'maj7' };
-    if (rest === 'M9') return { root, quality: 'maj9' };
+    if (rest === 'M') return { root, quality: 'maj', bass };
+    if (rest === 'M7') return { root, quality: 'maj7', bass };
+    if (rest === 'M9') return { root, quality: 'maj9', bass };
 
     const suffix = rest.replace(/\s+/g, '').toLowerCase();
     const quality = QUALITY_ALIASES[suffix];
-    return quality ? { root, quality } : null;
+    return quality ? { root, quality, bass } : null;
 }
 
 // Tonalités majeures qui s'écrivent conventionnellement avec des bémols (Db, Eb, F, Ab, Bb) :
@@ -643,11 +662,13 @@ function seqPreset(kind, voices, steps) {
 // sous-tonique) sont des degrés DIATONIQUES et ne prennent donc pas de bémol — contrairement à un
 // ton majeur, où ces mêmes intervalles sont chromatiques (empruntés à la mineure parallèle). Seuls
 // bII (napolitain) et bV restent chromatiques dans les deux modes. #III et #VI (médiante et
-// sus-dominante haussées, très rares) complètent la table par cohérence.
+// sus-dominante haussées, très rares) complètent la table par cohérence — de même pour #VII (sensible
+// haussée du mineur harmonique/mélodique), à ne pas confondre avec la sous-tonique diatonique (VII,
+// demi-ton 10) : sans ce préfixe, les deux degrés se retrouveraient chiffrés à l'identique.
 const MAJOR_ROMAN_MAP = { 0: 'I', 1: 'bII', 2: 'II', 3: 'bIII', 4: 'III', 5: 'IV', 6: 'bV', 7: 'V', 8: 'bVI', 9: 'VI', 10: 'bVII', 11: 'VII' };
-const MINOR_ROMAN_MAP = { 0: 'I', 1: 'bII', 2: 'II', 3: 'III', 4: '#III', 5: 'IV', 6: 'bV', 7: 'V', 8: 'VI', 9: '#VI', 10: 'VII', 11: 'VII' };
+const MINOR_ROMAN_MAP = { 0: 'I', 1: 'bII', 2: 'II', 3: 'III', 4: '#III', 5: 'IV', 6: 'bV', 7: 'V', 8: 'VI', 9: '#VI', 10: 'VII', 11: '#VII' };
 const MAJOR_DEGREE_QUALITY = { 0: 'maj', 2: 'min', 4: 'min', 5: 'maj', 7: 'maj', 9: 'min', 11: 'dim' };
-const MINOR_DEGREE_QUALITY = { 0: 'min', 2: 'dim', 3: 'maj', 5: 'min', 7: 'min', 8: 'maj', 10: 'maj' };
+const MINOR_DEGREE_QUALITY = { 0: 'min', 2: 'dim', 3: 'maj', 5: 'min', 7: 'min', 8: 'maj', 10: 'maj', 11: 'dim' };
 
 // Pour les 5 autres modes, table/qualité par degré dérivées automatiquement de MODE_SCALES (tierces
 // empilées À L'INTÉRIEUR de la gamme du mode) plutôt que recopiées à la main comme majeur/mineur
@@ -2502,11 +2523,12 @@ class HarmoHubApp {
         this.loadProgression();
     }
 
-    // Construit les données d'un accord (fondamentale, sans renversement/drop/basse) à partir d'un
-    // symbole déjà reconnu (voir parseChordSymbol) — partagé par addChordFromSymbol (un accord) et
-    // addChordsFromSymbolList (plusieurs, séparés par "/").
+    // Construit les données d'un accord (fondamentale, sans renversement ni drop — seule la basse
+    // peut être précisée via "_", voir parseChordSymbol) à partir d'un symbole déjà reconnu — partagé
+    // par addChordFromSymbol (un accord) et addChordsFromSymbolList (plusieurs, séparés par "/").
     buildChordData(parsed, beats, playStyle, instrument) {
-        const chord = new Chord(parsed.root, parsed.quality, beats, 0, 'none', 3, null);
+        const bass = parsed.bass || null;
+        const chord = new Chord(parsed.root, parsed.quality, beats, 0, 'none', 3, bass);
         const voices = chord.getMidiNotes().length;
         const { pattern, tie } = seqPreset(playStyle, voices, beats * SEQ_STEPS_PER_BEAT);
         return {
@@ -2516,7 +2538,7 @@ class HarmoHubApp {
             octave: 3,
             inversion: 0,
             drop: 'none',
-            bass: null,
+            bass,
             playStyle,
             instrument,
             arpPattern: serializeSeqPattern(pattern, tie),
@@ -2570,9 +2592,9 @@ class HarmoHubApp {
     }
 
     // Insère une liste déjà validée (voir parseChordSymbolList) dans une partie, un accord PAR
-    // MESURE (beatsPerBar), toujours en fondamentale, sans renversement/drop/basse — `section` peut
-    // valoir 'new' pour en créer une à la volée en même temps, dans le MÊME geste d'annulation (une
-    // seule action pour l'utilisateur, voir openSectionPicker).
+    // MESURE (beatsPerBar), sans renversement ni drop (basse "_" éventuelle conservée) — `section`
+    // peut valoir 'new' pour en créer une à la volée en même temps, dans le MÊME geste d'annulation
+    // (une seule action pour l'utilisateur, voir openSectionPicker).
     commitChordList(section, parsedList) {
         const sections = loadProgressionSections();
         this.pushUndo(sections);
@@ -3198,7 +3220,11 @@ class HarmoHubApp {
     // encore ouvert — voir saveCurrentSong et les export PDF/MIDI/MP3, qui en ont besoin pour nommer
     // le fichier). Le select se cache et un champ de saisie apparaît à sa place, plutôt qu'un prompt()
     // natif pour choisir le nom du morceau à enregistrer.
-    saveCurrentAsSong() {
+    // `reason` (optionnel) : affiché en indice quand l'appel vient d'ailleurs que du bouton
+    // Enregistrer (ex. export PDF/MIDI/MP3 bloqué tant que le morceau n'a pas de nom) — sans lui,
+    // le champ de renommage peut apparaître hors du cadre visible sans que rien n'explique pourquoi
+    // l'action d'origine n'a eu aucun effet apparent.
+    saveCurrentAsSong(reason) {
         const select = document.getElementById('song-select');
         if (!select || select.hidden) return; // déjà en cours de saisie
 
@@ -3208,7 +3234,9 @@ class HarmoHubApp {
         input.className = 'compact song-select-full inline-rename-input';
         input.placeholder = 'Nom du morceau…';
         select.insertAdjacentElement('afterend', input);
+        input.scrollIntoView({ behavior: 'smooth', block: 'center' });
         input.focus();
+        if (reason) this.flashHint(reason);
 
         const finish = () => { input.remove(); select.hidden = false; };
         const commit = () => {
@@ -4264,7 +4292,7 @@ class HarmoHubApp {
     exportPdf() {
         // Le morceau doit être enregistré (avec un nom) pour pouvoir nommer le PDF en conséquence
         if (!getCurrentSongId()) {
-            this.saveCurrentAsSong();
+            this.saveCurrentAsSong('Nomme d\'abord ton morceau pour exporter le PDF');
             if (!getCurrentSongId()) return; // enregistrement annulé -> pas d'export
         }
 
@@ -4364,7 +4392,7 @@ class HarmoHubApp {
     // dans un DAW (GarageBand...) pour en changer les sons ou retravailler le séquenceur.
     exportMidi() {
         if (!getCurrentSongId()) {
-            this.saveCurrentAsSong();
+            this.saveCurrentAsSong('Nomme d\'abord ton morceau pour exporter le MIDI');
             if (!getCurrentSongId()) return; // enregistrement annulé -> pas d'export
         }
         const bytes = this.buildMidiFile();
@@ -4482,7 +4510,7 @@ class HarmoHubApp {
     // prêt à écouter ou partager sans DAW ni lecteur MIDI.
     async exportAudio() {
         if (!getCurrentSongId()) {
-            this.saveCurrentAsSong();
+            this.saveCurrentAsSong('Nomme d\'abord ton morceau pour exporter le MP3');
             if (!getCurrentSongId()) return; // enregistrement annulé -> pas d'export
         }
         const btn = document.getElementById('export-audio');
@@ -5071,7 +5099,7 @@ class HarmoHubApp {
     buildAddCellHtml(section, gridRow, col, span) {
         return `
                     <div class="grid-cell grid-cell-add" style="grid-column: ${col + 1} / span ${span}; grid-row: ${gridRow};">
-                        <input type="text" class="cell-add-input" data-section="${section}" placeholder="+" autocomplete="off" autocapitalize="off" spellcheck="false">
+                        <input type="text" class="cell-add-input" data-section="${section}" placeholder="+" autocomplete="off" autocapitalize="off" spellcheck="false" title="Un accord seul (ex. Cm7), avec une basse via « _ » (ex. C_E = do avec mi à la basse), ou plusieurs accords séparés par « / » : un par mesure, sans renversement ni drop">
                     </div>`;
     }
 
@@ -5151,6 +5179,25 @@ class HarmoHubApp {
         window.removeEventListener('pointerup', this._onResizeEnd);
         window.removeEventListener('pointercancel', this._onResizeEnd);
         this.resize = null;
+    }
+
+    // Équivalent clavier de la poignée d'étirement (voir onResizeStart/onResizeMove ci-dessus) pour
+    // l'accord sélectionné dans la grille (Maj+←/→, voir setupEventListeners) : même pas d'un temps
+    // entier que la souris, borné à 1 temps minimum. Pas de lecture audio ni de déplacement du
+    // playhead ici (contrairement à selectChord) — seule la durée change, l'accord reste sélectionné.
+    resizeSelectedChord(delta) {
+        if (this.selectedIndex == null) return;
+        const sections = loadProgressionSections();
+        const history = sections[this.activeSection] && sections[this.activeSection].chords;
+        const data = history && history[this.selectedIndex];
+        if (!data) return;
+        const beats = beatsFromData(data);
+        const next = Math.max(1, beats + delta);
+        if (next === beats) return;
+        this.pushUndo(sections);
+        data.beats = next;
+        saveProgressionSections(sections);
+        this.loadProgression();
     }
 
     // Crée un clone flottant de la case en cours de déplacement
@@ -6167,6 +6214,17 @@ class HarmoHubApp {
                 if (e.key === 'Delete' || e.key === 'Backspace') { this.deleteSelectedSeqNote(); e.preventDefault(); return; }
                 if (e.key === 'ArrowRight') { this.resizeSelectedSeqNote(1); e.preventDefault(); return; }
                 if (e.key === 'ArrowLeft') { this.resizeSelectedSeqNote(-1); e.preventDefault(); return; }
+            }
+
+            // Accord sélectionné dans la grille : Maj+← / Maj+→ raccourcit/rallonge sa case d'un
+            // temps entier — équivalent clavier de la poignée d'étirement à la souris (voir
+            // onResizeMove/resizeSelectedChord), même pas, même borne à 1 temps minimum. Maj pour ne
+            // pas entrer en conflit avec ← → seuls, qui naviguent déjà d'un accord à l'autre juste
+            // en dessous.
+            if (!typing && this.selectedIndex != null && e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+                this.resizeSelectedChord(e.key === 'ArrowRight' ? 1 : -1);
+                e.preventDefault();
+                return;
             }
 
             // Accord sélectionné dans la grille : ← → passe au précédent/suivant DANS LA MÊME PARTIE
