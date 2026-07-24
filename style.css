@@ -467,12 +467,15 @@ main {
     font-size: var(--fs-base);
 }
 
-/* Ordre : réglages → grille → indicateur (accord/notes) → piano → (pied ancré : édition + lecture) */
+/* Ordre : réglages → grille → bascule piano/guitare → indicateur (accord/notes) → piano →
+   (pied ancré : édition + lecture). La bascule est un enfant DIRECT de .col-right (pas de .viz-wrap)
+   pour pouvoir s'intercaler ici, juste sous "Ajouter une partie" — voir index.html. */
 .panel-controls { order: 1; }
 .history-section { order: 2; }
-#current-chord-display { order: 3; }
-.viz-wrap { order: 4; }
-.dock { order: 5; }
+.viz-toggle { order: 3; }
+#current-chord-display { order: 4; }
+.viz-wrap { order: 5; }
+.dock { order: 6; }
 
 /* Pied de colonne collant : contient la barre de lecture, et .edit-actions quand on édite un accord
    (voir commentaire ci-dessus). Colonne verticale pour empiler les deux rangées de boutons. */
@@ -1119,33 +1122,31 @@ button:active { transform: translateY(1px); }
 .dot-seventh { background: linear-gradient(180deg, #ffc247, #cc8f00); }
 .dot-ext     { background: linear-gradient(180deg, #dba8ee, #c48ce6); }
 
-/* Ligne diagrammes + bascule piano/guitare (icônes empilées à droite) */
-.viz-row {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 14px;
-}
 .viz-diagrams {
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
     align-items: flex-start;
     gap: 24px;
-    flex: 1 1 auto;
     min-width: 0;
 }
 .viz-diagrams .piano-container { flex: 1 1 auto; }
 
-/* Boutons de bascule piano/guitare : empilés verticalement, à droite des schémas (icon-btn pour le
-   style visuel, .active = même surbrillance verte que les autres boutons à bascule de l'appli) */
+/* Boutons de bascule piano/guitare : en ligne, juste sous "Ajouter une partie" — très utilisés, donc
+   volontairement plus grands que les icon-btn habituels (icon-btn pour le style visuel, .active =
+   même surbrillance verte que les autres boutons à bascule de l'appli). */
 .viz-toggle {
     display: flex;
-    flex-direction: column;
-    gap: 6px;
-    flex: none;
+    flex-direction: row;
+    gap: 8px;
+    margin-bottom: 14px;
 }
-.viz-toggle-btn svg { width: 16px; height: 16px; }
+.viz-toggle-btn {
+    flex: 1 1 0;
+    width: auto;
+    height: 44px;
+}
+.viz-toggle-btn svg { width: 20px; height: 20px; }
 
 /* ---------- Guitare ---------- */
 .guitar-viz-wrap {
@@ -1644,6 +1645,7 @@ button:active { transform: translateY(1px); }
     border-radius: 5px;
     background-image: radial-gradient(120% 160% at 25% 20%, rgba(255,255,255,0.4), transparent 60%), linear-gradient(160deg, #ffd54f, #ffb300 75%);
     box-shadow: 0 1px 0 rgba(255,255,255,0.3) inset, 0 0 6px rgba(255, 179, 0, 0.4), 0 2px 4px rgba(0,0,0,0.3);
+    opacity: 0.7; /* un peu plus transparente : reste bien visible mais laisse deviner la grille dessous */
     z-index: 1;
     cursor: pointer;
     pointer-events: auto;
@@ -2099,6 +2101,7 @@ select.song-select-narrow {
         min-height: 0;
         gap: 16px;
     }
+    .viz-toggle { flex: none; }
     #current-chord-display { flex: none; }
     .viz-wrap { flex: none; }
     .history-section {

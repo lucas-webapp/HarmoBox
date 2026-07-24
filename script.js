@@ -1454,7 +1454,8 @@ class HarmoHubApp {
         this.selectedIndex = null; // accord sélectionné dans la grille (au sein de la partie active)
         this.editingIndex = null;  // accord en cours de modification (au sein de la partie active)
         this.drag = null;          // état de glisser-déposer
-        this.loopRange = null;     // {section, start, end} : boucle sur une PLAGE d'accords voisins
+        this.loopRange = null;     // {startSection, startIndex, endSection, endIndex} : boucle sur une
+                                    // PLAGE d'accords voisins, qui peut traverser plusieurs parties
                                     // (glisser sur la ligne des numéros de mesure, voir
                                     // setupLoopRangeInteractions/playProgression) — comme la barre de
                                     // cycle jaune de GarageBand. Distinct de loopActiveSection (boucle
@@ -1506,8 +1507,13 @@ class HarmoHubApp {
         this.setupEventListeners();
         this.setupDurationPicker();
         this.setupPlayStylePicker();
-        this.setupGridInteractions();
+        // La plage à boucler d'ABORD : les deux écoutent 'pointerdown' sur le même conteneur, et
+        // onLoopRangeStart doit pouvoir couper court (stopImmediatePropagation) avant qu'onGridPointerDown
+        // ne change la partie active et ne re-rende la grille — sinon l'élément qu'il vient de capturer
+        // (pour mesurer sa position) se retrouve détaché en plein milieu du même événement, faussant
+        // tout calcul de coordonnées qui suit (repéré en étendant la plage vers une partie inactive).
         this.setupLoopRangeInteractions();
+        this.setupGridInteractions();
         this.setupSequencerInteractions();
         this.setupKeyboardShortcuts();
         // Avertissement natif du navigateur si on ferme/recharge la page avec des modifications non
@@ -2121,11 +2127,15 @@ class HarmoHubApp {
         const pianoEl = document.getElementById('piano-viz');
         const guitarWrap = document.getElementById('guitar-viz-wrap');
         const legend = document.querySelector('.piano-legend');
+        const disp = document.getElementById('current-chord-display');
         const tPiano = document.getElementById('toggle-viz-piano');
         const tGuitar = document.getElementById('toggle-viz-guitar');
         if (pianoEl) pianoEl.style.display = showPiano ? '' : 'none';
         if (guitarWrap) guitarWrap.style.display = showGuitar ? 'flex' : 'none';
         if (legend) legend.style.display = (showPiano || showGuitar) ? '' : 'none';
+        // Sans aucun diagramme affiché, le nom d'accord + ses notes n'ont plus rien à accompagner —
+        // les masquer plutôt que les laisser flotter seuls au-dessus d'un bloc vide.
+        if (disp) disp.style.display = (showPiano || showGuitar) ? '' : 'none';
         if (tPiano) { tPiano.classList.toggle('active', showPiano); tPiano.setAttribute('aria-pressed', showPiano); }
         if (tGuitar) { tGuitar.classList.toggle('active', showGuitar); tGuitar.setAttribute('aria-pressed', showGuitar); }
     }
@@ -2280,10 +2290,15 @@ class HarmoHubApp {
         const loop = !!range || this.loopActiveSection;
         const flat = []; // { section, index, data } à plat, dans l'ordre de lecture
         if (range) {
-            const sec = sections[range.section];
-            if (sec) {
-                for (let ci = range.start; ci <= range.end && ci < sec.chords.length; ci++) {
-                    flat.push({ section: range.section, index: ci, data: sec.chords[ci] });
+            // La plage peut traverser plusieurs parties : entière pour celles du milieu, bornée aux
+            // deux extrémités seulement pour la première et la dernière (voir loopRangeForSection).
+            for (let si = range.startSection; si <= range.endSection; si++) {
+                const sec = sections[si];
+                if (!sec) continue;
+                const from = (si === range.startSection) ? range.startIndex : 0;
+                const to = (si === range.endSection) ? range.endIndex : sec.chords.length - 1;
+                for (let ci = from; ci <= to && ci < sec.chords.length; ci++) {
+                    flat.push({ section: si, index: ci, data: sec.chords[ci] });
                 }
             }
         } else if (this.loopActiveSection) {
@@ -2637,21 +2652,31 @@ class HarmoHubApp {
             : this.addChordFromSymbol(section, value);
     }
 
-    // Ajout rapide (barre au-dessus de la grille) : un symbole seul ajoute directement à la partie
-    // ACTIVE, comme avant. Plusieurs séparés par "/" : s'il y a plusieurs parties, demande d'abord où
-    // les insérer (openSectionPicker) — ambigu sinon, contrairement à la case "+" qui vise déjà sans
-    // équivoque la partie où elle apparaît.
+    // Ajout rapide (barre au-dessus de la grille) : s'il n'y a qu'une seule partie, ajoute directement
+    // dedans. Dès qu'il y en a plusieurs — un symbole seul ou plusieurs séparés par "/" — demande
+    // d'abord où insérer (openSectionPicker) : ambigu sinon, contrairement à la case "+" qui vise déjà
+    // sans équivoque la partie où elle apparaît.
     addQuickChord() {
         const input = document.getElementById('quick-add-input');
         const value = input.value;
+        const sections = loadProgressionSections();
+
         if (!value.includes('/')) {
-            if (this.addChordFromSymbol(this.activeSection, value)) { input.value = ''; input.focus(); }
+            if (!parseChordSymbol(value)) { this.flashHint('Accord non reconnu (ex. Cm7, F#dim, Bbadd9)'); return; }
+            if (sections.length <= 1) {
+                if (this.addChordFromSymbol(0, value)) { input.value = ''; input.focus(); }
+                return;
+            }
+            this.openSectionPicker(input, (section) => {
+                this.activeSection = section;
+                if (this.addChordFromSymbol(section, value)) { input.value = ''; input.focus(); }
+            });
             return;
         }
+
         const parsedList = this.parseChordSymbolList(value);
         if (!parsedList) return;
 
-        const sections = loadProgressionSections();
         if (sections.length <= 1) {
             this.commitChordList(0, parsedList);
             input.value = '';
@@ -2896,7 +2921,7 @@ class HarmoHubApp {
                     ? 'var(--roman-row-h) var(--row-h) var(--measure-row-h)'
                     : 'var(--row-h) var(--measure-row-h)';
                 gridStyle = `grid-template-rows: repeat(${rows}, ${rowTemplate}); grid-template-columns: repeat(${beatsPerRow}, 1fr);`;
-                const loopRange = (this.loopRange && this.loopRange.section === si) ? this.loopRange : null;
+                const loopRange = this.loopRangeForSection(si, history.length);
                 gridInner = cells.map(s => {
                     const h = history[s.index];
                     const chordUseFlats = useFlatsForChordRoot(NOTES.indexOf(h.root), NOTES.indexOf(gRoot), gMode, useFlats);
@@ -3082,6 +3107,9 @@ class HarmoHubApp {
         if (this.activeSection >= sections.length) this.activeSection = sections.length - 1;
         else if (this.activeSection > s) this.activeSection--;
         this.selectedIndex = null;
+        // Une partie supprimée décale les index des suivantes : plus sûr de redéfinir la plage à
+        // boucler (si elle existe) que de tenter de la remapper.
+        if (this.loopRange) this.loopRange = null;
 
         this.loadProgression();
     }
@@ -3099,6 +3127,9 @@ class HarmoHubApp {
         saveProgressionSections(sections);
         this.activeSection = s + 1;
         this.selectedIndex = null;
+        // Une partie insérée décale les index des suivantes : plus sûr de redéfinir la plage à boucler
+        // (si elle existe) que de tenter de la remapper.
+        if (this.loopRange) this.loopRange = null;
         this.loadProgression();
     }
 
@@ -5039,13 +5070,48 @@ class HarmoHubApp {
         const cs = getComputedStyle(gridEl);
         const rowH = parseFloat(cs.getPropertyValue('--row-h')) || 64;
         const measureRowH = parseFloat(cs.getPropertyValue('--measure-row-h')) || 15;
+        // Chaque ligne d'ACCORDS occupe 2 ou 3 lignes CSS selon que le chiffrage romain est affiché
+        // au-dessus (voir loadProgression/rowsPerGroup) — sans ce décalage, la ligne des numéros de
+        // mesure d'UNE ligne d'accords tombait dans le calcul de la ligne SUIVANTE dès que le
+        // chiffrage romain (actif par défaut) ajoutait sa propre sous-ligne au-dessus.
+        const romanRowH = this.showRomanNumerals ? (parseFloat(cs.getPropertyValue('--roman-row-h')) || 0) : 0;
         const col = Math.max(0, Math.min(beatsPerRow - 1, Math.floor((clientX - rect.left) / (rect.width / beatsPerRow))));
-        const row = Math.max(0, Math.floor((clientY - rect.top) / (rowH + measureRowH)));
+        const row = Math.max(0, Math.floor((clientY - rect.top) / (romanRowH + rowH + measureRowH)));
         const history = loadProgressionSections()[section]?.chords;
         if (!history || history.length === 0) return null;
         const { cells } = this.layoutProgression(history, this.beatsPerBar());
         const seg = cells.find(s => s.row === row && col >= s.col && col < s.col + s.span);
         return seg ? seg.index : null;
+    }
+
+    // Compare deux positions {section, index} dans l'ORDRE DE LECTURE (une partie puis l'autre) :
+    // <0 si a vient avant b, >0 si après, 0 si identique. Sert à normaliser une plage qui peut
+    // maintenant traverser plusieurs parties (voir setLoopRange).
+    compareChordPos(a, b) {
+        return a.section !== b.section ? a.section - b.section : a.index - b.index;
+    }
+
+    // La plage à boucler est-elle définie ET couvre-t-elle (au moins en partie) cette partie ?
+    sectionInLoopRange(si) {
+        const r = this.loopRange;
+        return !!r && si >= r.startSection && si <= r.endSection;
+    }
+
+    // Portion de la plage à boucler qui retombe dans CETTE partie (indices locaux), ou null si la
+    // plage ne la touche pas — une partie entièrement comprise entre les deux extrémités de la plage
+    // est couverte en entier ; les parties de départ/arrivée ne le sont qu'à partir/jusqu'à leur bord
+    // réel. isTrueStart/isTrueEnd distinguent un bord réel de la plage (poignée déplaçable) d'une
+    // simple coupure de partie (voir buildLoopRangeBars).
+    loopRangeForSection(si, len) {
+        const r = this.loopRange;
+        if (!r || si < r.startSection || si > r.endSection) return null;
+        const isTrueStart = si === r.startSection;
+        const isTrueEnd = si === r.endSection;
+        return {
+            start: isTrueStart ? r.startIndex : 0,
+            end: isTrueEnd ? r.endIndex : Math.max(0, len - 1),
+            isTrueStart, isTrueEnd
+        };
     }
 
     // Trois façons de commencer un geste sur la plage à boucler, selon l'élément visé :
@@ -5054,6 +5120,8 @@ class HarmoHubApp {
     //    onLoopRangeEnd) la SUPPRIME ; un glisser la redéfinit depuis ce point, comme ci-dessous ;
     //  - la ligne des numéros de mesure ailleurs (.row-measure) : définit une nouvelle plage depuis
     //    ce point (comportement historique, inchangé).
+    // La plage peut maintenant traverser plusieurs parties : l'ancre/le bord fixe sont des positions
+    // {section, index} (plus de simples index dans UNE section, voir compareChordPos/setLoopRange).
     onLoopRangeStart(e) {
         if (e.button != null && e.button !== 0) return; // clic gauche / toucher uniquement
         const handle = e.target.closest('.loop-range-handle');
@@ -5062,31 +5130,36 @@ class HarmoHubApp {
         const gridEl = e.target.closest('.chord-grid');
         if (!gridEl) return;
         e.preventDefault();
-        e.stopPropagation(); // n'ouvre pas aussi le glisser-déposer (réordonner) de la grille
+        // stopIMMEDIATEPropagation (pas juste stopPropagation) : onGridPointerDown écoute le MÊME
+        // événement sur le MÊME conteneur (voir l'ordre d'attachement dans le constructeur) — sans
+        // ça, il tournerait quand même juste après, changerait la partie active et re-rendrait la
+        // grille AVANT la fin de ce gestionnaire, détachant `gridEl` en plein calcul.
+        e.stopImmediatePropagation();
         const section = +gridEl.dataset.section;
         const range = this.loopRange;
 
-        // Ne PAS garder `gridEl` : setLoopRange() re-rend la grille (loadProgression), ce qui
-        // remplace tout le sous-arbre DOM — l'élément capturé ici deviendrait détaché dès le premier
-        // appel, faussant tout calcul de géométrie basé dessus par la suite (voir chordIndexAtPoint).
-        // On re-cherche la grille VIVANTE (par data-section) à chaque déplacement à la place.
         if (handle) {
-            if (!range || range.section !== section) return;
+            // Une poignée n'apparaît que sur le VRAI bord de la plage (voir buildLoopRangeBars) : pas
+            // besoin de re-vérifier laquelle, sa seule présence ici suffit à identifier la section.
+            if (!range) return;
             const edge = handle.dataset.edge;
-            this.loopRangeDrag = { section, mode: edge === 'left' ? 'edge-left' : 'edge-right', fixed: edge === 'left' ? range.end : range.start, moved: false };
+            const fixed = edge === 'left'
+                ? { section: range.endSection, index: range.endIndex }
+                : { section: range.startSection, index: range.startIndex };
+            this.loopRangeDrag = { mode: edge === 'left' ? 'edge-left' : 'edge-right', fixed, moved: false };
         } else if (bar) {
             // Tap sans bouger = supprime (voir onLoopRangeEnd) ; glisser = redéfinit depuis ce point,
             // exactement comme un glisser démarré ailleurs sur la ligne — seul le tap immobile change
             // de sens ici, d'où un mode distinct ('bar-tap') malgré une logique de glisser identique.
-            if (!range || range.section !== section) return;
-            const anchor = this.chordIndexAtPoint(gridEl, section, e.clientX, e.clientY);
-            if (anchor == null) return;
-            this.loopRangeDrag = { section, mode: 'bar-tap', anchor, moved: false };
+            if (!this.sectionInLoopRange(section)) return;
+            const anchorIndex = this.chordIndexAtPoint(gridEl, section, e.clientX, e.clientY);
+            if (anchorIndex == null) return;
+            this.loopRangeDrag = { mode: 'bar-tap', anchor: { section, index: anchorIndex }, moved: false };
         } else {
             const index = this.chordIndexAtPoint(gridEl, section, e.clientX, e.clientY);
             if (index == null) return;
-            this.loopRangeDrag = { section, mode: 'new', anchor: index, moved: false };
-            this.setLoopRange(section, index, index);
+            this.loopRangeDrag = { mode: 'new', anchor: { section, index }, moved: false };
+            this.setLoopRange(section, index, section, index);
         }
 
         this.loopRangeDragStart = { x: e.clientX, y: e.clientY };
@@ -5104,22 +5177,28 @@ class HarmoHubApp {
         if (!d.moved && Math.hypot(e.clientX - start.x, e.clientY - start.y) < 6) return; // seuil : distingue un tap d'un glisser
         d.moved = true;
 
-        const gridEl = document.querySelector(`.chord-grid[data-section="${d.section}"]`);
+        // Le pointeur peut maintenant survoler N'IMPORTE QUELLE grille (glisser d'une partie à une
+        // autre) : on retrouve celle du point courant par hit-test plutôt que de rester bloqué sur la
+        // section de départ. Hors de toute grille (espace entre deux cartes...) : on ignore ce
+        // déplacement, la plage reste comme avant plutôt que de sauter n'importe où.
+        const hit = document.elementFromPoint(e.clientX, e.clientY);
+        const gridEl = hit && hit.closest('.chord-grid');
         if (!gridEl) return;
-        const index = this.chordIndexAtPoint(gridEl, d.section, e.clientX, e.clientY);
+        const section = +gridEl.dataset.section;
+        const index = this.chordIndexAtPoint(gridEl, section, e.clientX, e.clientY);
         if (index == null) return;
+        const cur = { section, index };
 
         if (d.mode === 'edge-left') {
-            // Bloquée au bord fixe (pas au-delà) : sinon la poignée gauche glissée au-delà de la
-            // droite inverserait silencieusement leurs rôles (voir setLoopRange, qui réordonne start/end).
-            this.setLoopRange(d.section, Math.min(index, d.fixed), d.fixed);
+            // Bloquée au bord fixe (pas au-delà) : sinon le bord gauche glissé au-delà du droit
+            // inverserait silencieusement leurs rôles (voir setLoopRange, qui réordonne les deux bords).
+            const clamped = this.compareChordPos(cur, d.fixed) <= 0 ? cur : d.fixed;
+            this.setLoopRange(clamped.section, clamped.index, d.fixed.section, d.fixed.index);
         } else if (d.mode === 'edge-right') {
-            this.setLoopRange(d.section, d.fixed, Math.max(index, d.fixed));
+            const clamped = this.compareChordPos(cur, d.fixed) >= 0 ? cur : d.fixed;
+            this.setLoopRange(d.fixed.section, d.fixed.index, clamped.section, clamped.index);
         } else {
-            const lo = Math.min(d.anchor, index), hi = Math.max(d.anchor, index);
-            if (!this.loopRange || this.loopRange.start !== lo || this.loopRange.end !== hi) {
-                this.setLoopRange(d.section, lo, hi);
-            }
+            this.setLoopRange(d.anchor.section, d.anchor.index, cur.section, cur.index);
         }
     }
 
@@ -5132,14 +5211,23 @@ class HarmoHubApp {
         this.loopRangeDragStart = null;
         // Tap (sans glisser) pile sur une bande déjà là, pas sur une poignée : la supprime — sans ça,
         // aucun moyen tactile d'annuler une plage à boucler une fois posée.
-        if (d && d.mode === 'bar-tap' && !d.moved && this.loopRange && this.loopRange.section === d.section) {
+        if (d && d.mode === 'bar-tap' && !d.moved && this.sectionInLoopRange(d.anchor.section)) {
             this.loopRange = null;
             this.loadProgression();
         }
     }
 
-    setLoopRange(section, start, end) {
-        this.loopRange = { section, start: Math.min(start, end), end: Math.max(start, end) };
+    // sectionA/indexA et sectionB/indexB sont les deux bords de la plage, dans n'importe quel ordre
+    // (normalisés ici selon compareChordPos) — peuvent désigner deux parties différentes.
+    setLoopRange(sectionA, indexA, sectionB, indexB) {
+        const a = { section: sectionA, index: indexA }, b = { section: sectionB, index: indexB };
+        const [lo, hi] = this.compareChordPos(a, b) <= 0 ? [a, b] : [b, a];
+        const r = this.loopRange;
+        // Rien de changé -> pas de re-rendu (évite de re-déclencher loadProgression à chaque micro-
+        // mouvement du pointeur quand l'accord visé n'a pas bougé).
+        if (r && r.startSection === lo.section && r.startIndex === lo.index
+            && r.endSection === hi.section && r.endIndex === hi.index) return;
+        this.loopRange = { startSection: lo.section, startIndex: lo.index, endSection: hi.section, endIndex: hi.index };
         this.loadProgression();
     }
 
@@ -5157,6 +5245,10 @@ class HarmoHubApp {
     // `rowsPerGroup` (2 ou 3 lignes CSS par ligne d'ACCORDS, selon que le chiffrage romain est affiché
     // au-dessus — voir loadProgression) traduit this.row en ligne CSS : la plage/ses poignées occupent
     // toujours la DERNIÈRE sous-ligne du groupe (celle des numéros de mesure), quel que soit ce nombre.
+    // `loopRange` est déjà borné aux indices LOCAUX de cette partie (voir loopRangeForSection) :
+    // isTrueStart/isTrueEnd indiquent si son bord ici est un vrai bord de la plage globale (poignée
+    // déplaçable) ou juste la coupure d'une plage qui continue dans la partie précédente/suivante
+    // (pas de poignée là — rien à en déplacer, elle n'a de sens que d'un seul tenant).
     buildLoopRangeBars(cells, loopRange, rowsPerGroup) {
         if (!loopRange) return '';
         const byRow = new Map();
@@ -5167,8 +5259,8 @@ class HarmoHubApp {
             r.maxCol = Math.max(r.maxCol, s.col + s.span);
             byRow.set(s.row, r);
         });
-        const startCell = cells.find(s => s.index === loopRange.start && s.isFirst);
-        const endCell = cells.find(s => s.index === loopRange.end && s.isLast);
+        const startCell = loopRange.isTrueStart ? cells.find(s => s.index === loopRange.start && s.isFirst) : null;
+        const endCell = loopRange.isTrueEnd ? cells.find(s => s.index === loopRange.end && s.isLast) : null;
         const bars = Array.from(byRow.entries()).map(([row, r]) => `
                     <div class="loop-range-bar" style="grid-column: ${r.minCol + 1} / ${r.maxCol + 1}; grid-row: ${row * rowsPerGroup + rowsPerGroup};"></div>`
         ).join('');
